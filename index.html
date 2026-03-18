@@ -2,73 +2,382 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-    <title>CPT208 Web App 测试</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A1-6</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <style>
+        /*
+           1. 基础排版
+           */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 0;
-
-            background: linear-gradient(135deg, #6e8efb, #a777e3);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            text-align: center;
+            /* 无衬线粗体字 */
+            font-family: 'Arial Black', Impact, sans-serif;
+            /*隐藏滚动*/
+            overflow: hidden;
+            background-color: #000;
+            color: #000;
         }
 
-        .card {
-            /* 现代流行的“毛玻璃”卡片效果 */
-            background: rgba(255, 255, 255, 0.1);
-            padding: 40px 20px;
-            border-radius: 20px;
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            width: 80%;
-            max-width: 350px;
+        /* 通用屏幕容器*/
+        .screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden; /* 确保子层不能滚动 */
         }
 
-        h1 { margin-top: 0; font-size: 26px; }
-        p { font-size: 16px; line-height: 1.6; opacity: 0.9; }
+        /*
+            初始主页
+         */
+        #home-screen {
+            z-index: 20; /* 层级最高，一开始盖在最上面 */
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none; /* 让容器本身不拦截鼠标点击，防止遮挡 */
+        }
 
-        .btn {
-            display: inline-block;
-            margin-top: 25px;
-            padding: 14px 28px;
-            background-color: #ff7eb3;
-            color: white;
+        #home-nav {
+            pointer-events: auto; /* 恢复菜单列表的点击能力 */
+            transform: rotate(-5deg); /* set倾斜 */
+            list-style: none;
+        }
+
+        #home-nav li { margin: 2rem 0; text-align: center; }
+
+        #home-nav a {
+            font-size: 5rem;
+            text-transform: uppercase;
             text-decoration: none;
-            border-radius: 30px;
-            font-weight: bold;
-            font-size: 16px;
-            transition: transform 0.2s;
-            border: none;
+            color: #000;
+            display: inline-block;
+            position: relative;
+            transition: all 0.1s; /* 过度时间 */
             cursor: pointer;
+            -webkit-text-stroke: 2px #000; /* 文字镂空描边效果 */
         }
 
-        .btn:active {
-
-            transform: scale(0.92);
+        /* 菜单悬停效果personaaaaaaaaaa */
+        #home-nav a:hover {
+            color: #FFF;
+            background-color: #000;
+            transform: translate(-5px, -5px) skewX(-10deg);
+            box-shadow: 10px 10px 0px #FF0033;
         }
+
+        /* 菜单底部的下划线动画 */
+        #home-nav a::after {
+            content: '';
+            position: absolute; bottom: -10px; left: -5%; width: 110%; height: 8px;
+            background: #000;
+            transform: rotate(2deg);
+            opacity: 0;
+        }
+        #home-nav a:hover::after { opacity: 1; }
+
+        /*
+          撕裂遮罩层
+            */
+        .tear-half {
+            position: absolute;
+            left: 0; width: 100vw; height: 100vh;
+            background-color: #FFF; /* 白色撕裂层*/
+            z-index: 10; /* 层级在首页之下，团队页之上 */
+        }
+
+        /* 裁切出多边形 */
+        .tear-top {
+            clip-path: polygon(0 0, 100% 0, 100% 45%, 85% 58%, 70% 40%, 55% 60%, 40% 42%, 25% 65%, 10% 48%, 0 55%);
+            top: 0;
+        }
+        .tear-bottom {
+            clip-path: polygon(0 55%, 10% 48%, 25% 65%, 40% 42%, 55% 60%, 70% 40%, 85% 58%, 100% 45%, 100% 100%, 0 100%);
+            top: 0;
+        }
+
+        /*
+          团队介绍页
+         */
+        #team-screen {
+            z-index: 5; /* 层级最低，在最底下 */
+            background-color: #FF0033; /* 红 */
+            overflow: hidden;
+        }
+
+        /* 背景 */
+        .speed-lines {
+            position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: repeating-conic-gradient(from 0deg, #FF0033 0deg 3deg, #D40026 3deg 6deg);
+            animation: spin 20s linear infinite; /* team背景旋转效果 */
+            z-index: 0;
+            opacity: 0.8;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /*
+           返回按钮 & 团队卡片
+            */
+
+        #btn-back {
+            position: fixed;
+            top: 30px; left: -10px;
+            z-index: 100; /* 永远在最顶层 */
+            background: #000; color: #FFF;
+            font-family: 'Arial Black', Impact, sans-serif;
+            font-size: 2rem; font-style: italic;
+            padding: 10px 30px 10px 40px;
+            border: 4px solid #FFF;
+            cursor: pointer; text-transform: uppercase;
+            box-shadow: 8px 8px 0px #000;
+            transform: rotate(-3deg);
+            transition: all 0.1s;
+            opacity: 0; visibility: hidden; /* 初始状态隐藏 */
+        }
+        #btn-back:hover {
+            background: #FFF; color: #000; border-color: #000;
+            transform: rotate(0deg) translate(5px, -5px);
+            box-shadow: 12px 12px 0px #000;
+        }
+
+        /* 卡片容器：利用视口单位 (vh/vw) 确保卡片刚好塞满当前屏幕 */
+        .roster-container {
+            position: absolute; z-index: 1;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%); /* 绝对居中 */
+            width: 100%; max-width: 900px;
+            height: 90vh; /* 限制总高度，防止溢出屏幕 */
+            display: flex; flex-direction: column;
+            justify-content: space-evenly; /* 垂直方向均匀分布 */
+            gap: 2vh; padding: 2vh 2vw;
+        }
+
+        /* 单个团队成员卡片 */
+        .team-card {
+            background: #FFF; border: 4px solid #000;
+            padding: 1.5vh 20px;
+            display: flex; gap: 20px;
+            box-shadow: 10px 10px 0px #000;
+            transform: rotate(-2deg); /* 默认左倾 */
+            opacity: 0; /* 初始透明，等 GSAP 动画触发 */
+            flex: 1;
+            max-height: 22vh; overflow: hidden;
+        }
+        /* 偶数行的卡片：向右倾斜，并且头像换到右边，形成错落感 */
+        .team-card:nth-child(even) {
+            transform: rotate(3deg);
+            flex-direction: row-reverse;
+        }
+
+        /* 卡片内部元素：头像和文字排版 */
+        .portrait {
+            width: 15vh; height: 15vh;
+            max-width: 120px; max-height: 120px;
+            flex-shrink: 0;
+            /* 用一个简单的黑色圆点 SVG 作为占位图背景 */
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="4" fill="%23000"/></svg>');
+            border: 3px solid #000; position: relative; align-self: center;
+        }
+        .portrait::after {
+            content: 'NO PHOTO'; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            color: #FFF; background: #000; padding: 5px;
+            font-size: clamp(0.8rem, 2vh, 1.2rem); /* 响应式字体大小 */
+        }
+        /* 当带有 .has-photo 类名时，调整背景图的显示方式 */
+        .portrait.has-photo {
+            background-size: cover; /* 让图片填满整个方块 */
+            background-position: center; /* 图片居中对齐 */
+        }
+
+        /* 当有真实照片时，隐藏掉 "NO PHOTO" 的斜体文字 */
+        .portrait.has-photo::after {
+            display: none;
+        }
+
+        .info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+        .name { font-size: clamp(1.5rem, 4vh, 3rem); font-style: italic; line-height: 1; text-transform: uppercase; margin-bottom: 0.5vh; }
+        .student-id { font-family: monospace; font-size: clamp(0.8rem, 1.5vh, 1.2rem); background: #000; color: #FFF; display: inline-block; padding: 2px 10px; margin-bottom: 1vh; letter-spacing: 2px; align-self: flex-start; }
+        .intro { font-family: 'Courier New', Courier, monospace; font-size: clamp(0.8rem, 1.8vh, 1.1rem); line-height: 1.4; font-weight: bold; }
+        .intro span { background-color: #000; color: #FFF; padding: 2px 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h1>test</h1>
+<div class="tear-half tear-top" id="tear-top"></div>
+<div class="tear-half tear-bottom" id="tear-bottom"></div>
+
+<nav class="screen" id="home-screen">
+    <ul id="home-nav">
+        <li><a href="#">[APP]</a></li>
+        <li><a href="#" id="btn-team">[TEAM]</a></li>
+        <li><a href="#">[PERSONA!]</a></li>
+    </ul>
+</nav>
+
+<button id="btn-back">◄ RETURN</button>
+
+<main class="screen" id="team-screen">
+    <div class="speed-lines"></div>
+    <div class="roster-container">
+<!--    一号-->
+        <div class="team-card">
+            <div class="portrait has-photo" style="background-image: url('images/pjy-profilepicture.jpg');"></div>
+
+            <div class="info">
+                <div class="name">Pang Jiayang</div>
+                <div class="student-id">2360711</div>
+                <div class="intro"><span class="typewriter" data-text="Sephiroth."></span></div>
+            </div>
+        </div>
+<!--      二号  -->
+        <div class="team-card">
+            <div class="portrait has-photo" style="background-image: url('images/dwb-pp.jpg');"></div>
+            <div class="info">
+                <div class="name">Ding Wenbin</div>
+                <div class="student-id">2362270</div>
+
+                <div class="intro"><span class="typewriter" data-text="Hello, I am a student majoring in DMT. I'm now working on a user-centered interactive tour project for Chang Gate. I aim to make historical sightseeing clear, approachable, and enjoyable for all kinds of visitors."></span></div>
+            </div>
+        </div>
+<!--        三号-->
+        <div class="team-card">
+            <div class="portrait has-photo" style="background-image: url('images/gjm-pp.jpg');"></div>
+            <div class="info">
+                <div class="name">Jiaming Gong</div>
+                <div class="student-id">2361315</div>
+                <div class="intro"><span class="typewriter" data-text="Digital Media Tech undergrad. Hardware enthusiast & visual designer.  Into embedded systems, sensor interaction, UI design, and motion graphics.  Telling stories through visuals."></span></div>
+            </div>
+        </div>
+<!--        四号-->
+        <div class="team-card">
+            <div class="portrait has-photo" style="background-image: url('images/fjq-pp.jpg');"></div>
+            <div class="info">
+                <div class="name">Fu Jiaqi</div>
+                <div class="student-id">2360733</div>
+                <div class="intro"><span class="typewriter" data-text="Digital Media Technology student. Currently studying embedded system development. Feel free to communicate."></span></div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // 1. 获取所有需要操作的 DOM 节点
+        const btnTeam = document.getElementById("btn-team");
+        const btnBack = document.getElementById("btn-back");
+        const homeScreen = document.getElementById("home-screen");
+        const tearTop = document.getElementById("tear-top");
+        const tearBottom = document.getElementById("tear-bottom");
+        const typewriters = document.querySelectorAll(".typewriter");
+
+        // 2. 自定义打字机效果逻辑
+        let typingTimeouts = []; // 存储所有的定时器，方便随时打断
+
+        const typeText = (element, text, speed = 30) => {
+            let i = 0;
+            element.textContent = ""; // 每次开始打字前，清空旧文本
+
+            const type = () => {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                    // 模拟打字节奏感
+                    typingTimeouts.push(setTimeout(type, speed + Math.random() * 20));
+                }
+            };
+            type();
+        };
+
+        // 清除打字机动画（用于页面切换时强行停止正在打字的动画）
+        const clearTypewriters = () => {
+            typingTimeouts.forEach(clearTimeout);
+            typingTimeouts = [];
+            typewriters.forEach(tw => tw.textContent = "");
+        };
 
 
-    <button class="btn" onclick="alert('test')">
-        test
-    </button>
-</div>
+        // 进场动画TEAM
 
+        btnTeam.addEventListener("click", (e) => {
+            e.preventDefault();
+            clearTypewriters(); // 进场前清理可能存在的打字动画
+
+            // 创建 GSAP 时间轴安排动画顺序
+            const tl = gsap.timeline();
+
+            tl.to("#home-nav", { opacity: 0, duration: 0.1, scale: 1.2, ease: "power4.out" }) // 1 菜单瞬间放大并消失
+
+                // 2：上下两块白色遮罩撕开
+                // yPercent: -120 表示向上移动 120% 的高度；rotation 控制旋转
+                // "+=0.1" 表示比上一个动画晚 0.1 秒执行
+                .to(tearTop, { yPercent: -120, rotation: -2, duration: 0.8, ease: "power4.inOut" }, "+=0.1")
+
+                // "<" 表示和上一个动画（撕开上半张）完全同步执行
+                .to(tearBottom, { yPercent: 120, rotation: 2, duration: 0.8, ease: "power4.inOut" }, "<")
+
+                // 3：撕开后，利用回调函数隐藏不需要的 DOM 节点，减轻浏览器渲染压力
+                .call(() => {
+                    homeScreen.style.display = "none";
+                    tearTop.style.display = "none";
+                    tearBottom.style.display = "none";
+                })
+
+                // 镜头4：团队卡片从底部飞入
+                // fromTo 定义了 起始状态 和 目标状态
+                .fromTo(".team-card",
+                    { y: 800, rotation: () => Math.random() * 40 - 20, opacity: 0, scale: 0.5 }, // 初始：在很下方、角度随机、透明、缩小
+                    {
+                        y: 0,
+                        rotation: (index) => index % 2 === 0 ? -2 : 3, // 恢复成一左一右的倾斜
+                        opacity: 1,
+                        scale: 1,
+                        duration: 1.2,
+                        stagger: 0.15, // 交错效果
+                        ease: "elastic.out(1, 0.4)" // 弹性缓动
+                    },
+                    "-=0.2" // 提前 0.2 秒开始执行，让衔接更紧凑
+                )
+
+                // 镜头5：返回按钮从左侧弹出
+                .to(btnBack, { autoAlpha: 1, x: 10, duration: 0.3, ease: "back.out(1.7)" }, "-=1")
+
+                // 镜头6：所有元素就位后，触发卡片内的文字打字动画
+                .call(() => {
+                    typewriters.forEach(tw => {
+                        const text = tw.getAttribute("data-text"); // 获取预存在 data-text 里的文案
+                        typeText(tw, text);
+                    });
+                });
+        });
+
+        //
+        // 华丽退场
+        //
+        btnBack.addEventListener("click", () => {
+            clearTypewriters();
+
+            const backTl = gsap.timeline();
+
+            backTl.to(btnBack, { autoAlpha: 0, x: -20, duration: 0.2 }) // 返回按钮缩回
+
+                // 卡片掉落动画 (stagger 为负数表示从最后一张卡片开始掉落)
+                .to(".team-card", { y: 800, opacity: 0, duration: 0.4, stagger: -0.05, ease: "power2.in" })
+
+                // 恢复首页和遮罩层的 display 属性准备动画
+                .call(() => {
+                    homeScreen.style.display = "flex";
+                    tearTop.style.display = "block";
+                    tearBottom.style.display = "block";
+                })
+
+                // 白纸合拢
+                .to(tearTop, { yPercent: 0, rotation: 0, duration: 0.5, ease: "power4.out" })
+                .to(tearBottom, { yPercent: 0, rotation: 0, duration: 0.5, ease: "power4.out" }, "<")
+
+                // 首页菜单重新浮现
+                .to("#home-nav", { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.5)" }, "-=0.2");
+        });
+    });
+</script>
 </body>
 </html>
