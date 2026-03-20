@@ -92,7 +92,10 @@
         }
         .tear-bottom {
             clip-path: polygon(0 55%, 10% 48%, 25% 65%, 40% 42%, 55% 60%, 70% 40%, 85% 58%, 100% 45%, 100% 100%, 0 100%);
-            top: 0;
+            /* 使用 vh 替代 px，确保在手机高分屏上有足够的覆盖量 */
+            top: -1.5vh;
+            /* 对应加上 1.5vh，防止底部漏空 */
+            height: 101.5vh;
         }
 
         /*
@@ -105,14 +108,27 @@
         }
 
         /* 背景 */
+        /* 修改后的背景 */
         .speed-lines {
-            position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+            position: fixed;
+            /* 1. 把它变成一个巨大的正方形，边长为屏幕最长边的 200% */
+            width: 200vmax;
+            height: 200vmax;
+
+            /* 2. 精确居中对齐：用屏幕的中心点 (50vh/vw) 减去特效层自身一半的长度 (100vmax) */
+            top: calc(50vh - 100vmax);
+            left: calc(50vw - 100vmax);
+
             background: repeating-conic-gradient(from 0deg, #FF0033 0deg 3deg, #D40026 3deg 6deg);
-            animation: spin 20s linear infinite; /* team背景旋转效果 */
+            animation: spin 20s linear infinite;
             z-index: 0;
             opacity: 0.8;
         }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* 动画保持不变 */
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
 
         /*
            返回按钮 & 团队卡片
@@ -194,11 +210,73 @@
             display: none;
         }
 
-        .info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+        .info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start; /* 关键：置顶对齐名字/学号 */
+
+            min-height: 0; /* 允许子元素在 flex 内正确裁剪/滚动 */
+        }
         .name { font-size: clamp(1.5rem, 4vh, 3rem); font-style: italic; line-height: 1; text-transform: uppercase; margin-bottom: 0.5vh; }
         .student-id { font-family: monospace; font-size: clamp(0.8rem, 1.5vh, 1.2rem); background: #000; color: #FFF; display: inline-block; padding: 2px 10px; margin-bottom: 1vh; letter-spacing: 2px; align-self: flex-start; }
-        .intro { font-family: 'Courier New', Courier, monospace; font-size: clamp(0.8rem, 1.8vh, 1.1rem); line-height: 1.4; font-weight: bold; }
+        .intro {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: clamp(0.8rem, 1.8vh, 1.1rem);
+            line-height: 1.4;
+            font-weight: bold;
+
+            /* 内部隐藏滚动（避免长文挤压名字/学号） */
+            max-height: 9vh;
+            overflow-y: auto;
+            padding-right: 5px;
+            margin-top: 0; /* 让介绍区紧贴学号下方 */
+
+            /* 隐藏滚动条（Chrome/Safari/Opera/Firefox/IE） */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .intro::-webkit-scrollbar {
+            display: none;
+        }
         .intro span { background-color: #000; color: #FFF; padding: 2px 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+        /*
+          移动端适配：PC端保持不变
+          - home 按钮：缩小到原来的 2/3
+          - team 人物卡片整体：缩小到原来的 4/5
+          - 返回按钮：缩小到原来的 1/2
+        */
+        @media (max-width: 768px) {
+            /* home：按钮文字/间距按 2/3 缩小 */
+            #home-nav li { margin: calc(2rem * 2 / 3) 0; }
+            #home-nav a {
+                font-size: calc(5rem * 2 / 3);
+                -webkit-text-stroke: calc(2px * 2 / 3) #000;
+            }
+            #home-nav a:hover {
+                transform: translate(-3.333px, -3.333px) skewX(-10deg);
+                box-shadow: 6.666px 6.666px 0px #FF0033;
+            }
+
+            /* team：缩放人物卡片整体（缩放容器，避免与 GSAP 单卡 scale 冲突） */
+            .roster-container {
+                transform: translate(-50%, -50%) scale(0.8);
+                transform-origin: center;
+            }
+
+            /* 返回按钮：按 1/2 缩小（通过尺寸参数缩小，避免 GSAP transform 覆盖导致失效） */
+            #btn-back {
+                font-size: 1rem;
+                padding: 5px 15px 5px 20px;
+                border: 2px solid #FFF;
+                box-shadow: 4px 4px 0px #000;
+            }
+            #btn-back:hover {
+                transform: rotate(0deg) translate(2.5px, -2.5px);
+                box-shadow: 6px 6px 0px #000;
+            }
+        }
     </style>
 </head>
 <body>
@@ -219,7 +297,7 @@
 <main class="screen" id="team-screen">
     <div class="speed-lines"></div>
     <div class="roster-container">
-<!--    一号-->
+        <!--    一号-->
         <div class="team-card">
             <div class="portrait has-photo" style="background-image: url('images/pjy-profilepicture.jpg');"></div>
 
@@ -229,7 +307,7 @@
                 <div class="intro"><span class="typewriter" data-text="Sephiroth."></span></div>
             </div>
         </div>
-<!--      二号  -->
+        <!--      二号  -->
         <div class="team-card">
             <div class="portrait has-photo" style="background-image: url('images/dwb-pp.jpg');"></div>
             <div class="info">
@@ -239,7 +317,7 @@
                 <div class="intro"><span class="typewriter" data-text="Hello, I am a student majoring in DMT. I'm now working on a user-centered interactive tour project for Chang Gate. I aim to make historical sightseeing clear, approachable, and enjoyable for all kinds of visitors."></span></div>
             </div>
         </div>
-<!--        三号-->
+        <!--        三号-->
         <div class="team-card">
             <div class="portrait has-photo" style="background-image: url('images/gjm-pp.jpg');"></div>
             <div class="info">
@@ -248,7 +326,7 @@
                 <div class="intro"><span class="typewriter" data-text="Digital Media Tech undergrad. Hardware enthusiast & visual designer.  Into embedded systems, sensor interaction, UI design, and motion graphics.  Telling stories through visuals."></span></div>
             </div>
         </div>
-<!--        四号-->
+        <!--        四号-->
         <div class="team-card">
             <div class="portrait has-photo" style="background-image: url('images/fjq-pp.jpg');"></div>
             <div class="info">
@@ -305,7 +383,7 @@
             // 创建 GSAP 时间轴安排动画顺序
             const tl = gsap.timeline();
 
-            tl.to("#home-nav", { opacity: 0, duration: 0.1, scale: 1.2, ease: "power4.out" }) // 1 菜单瞬间放大并消失
+            tl.to("#home-nav", { opacity: 0, duration: 0.04, scale: 1.2, ease: "power4.out" }) // 1 菜单瞬间放大并消失
 
                 // 2：上下两块白色遮罩撕开
                 // yPercent: -120 表示向上移动 120% 的高度；rotation 控制旋转
