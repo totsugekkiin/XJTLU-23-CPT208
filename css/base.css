@@ -1,0 +1,38 @@
+/* =========================================
+   Base: reset + global layout + shared UI
+========================================= */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Arial Black', Impact, sans-serif;
+  overflow: hidden;
+  background-color: #000;
+  color: #000;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 通用返回按钮（不同页面用 id 覆盖具体皮肤） */
+.btn-return {
+  position: fixed;
+  top: 30px;
+  left: -10px;
+  z-index: 100;
+  font-family: 'Arial Black', Impact, sans-serif;
+  font-size: 2rem;
+  font-style: italic;
+  padding: 10px 30px 10px 40px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.1s;
+  opacity: 0;
+  visibility: hidden;
+}
+
