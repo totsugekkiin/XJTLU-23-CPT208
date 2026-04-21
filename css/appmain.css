@@ -67,6 +67,61 @@ body > * {
   overflow: hidden;
 }
 
+/* =========================================================
+ * 背景云朵装饰层（随机分布 + 轻微漂浮）
+ * --------------------------------------------------------- */
+.cloud-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.cloud {
+  --cloud-w: 180px;
+  position: absolute;
+  left: var(--cx, 10%);
+  top: var(--cy, 10%);
+  width: calc(var(--cloud-w) * var(--cs, 1));
+  aspect-ratio: 2 / 1;
+  opacity: var(--co, 0.9);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 10px 18px rgba(17, 50, 79, 0.08));
+  animation: cloudDrift 16s ease-in-out infinite;
+  animation-delay: var(--cd, 0s);
+  will-change: transform;
+}
+
+.cloud--a {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'><g fill='%23ffffff'><circle cx='50' cy='62' r='28'/><circle cx='88' cy='44' r='34'/><circle cx='128' cy='54' r='30'/><circle cx='160' cy='66' r='24'/><ellipse cx='102' cy='78' rx='62' ry='18'/></g></svg>");
+}
+
+.cloud--b {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'><g fill='%23ffffff'><circle cx='42' cy='58' r='24'/><circle cx='74' cy='42' r='30'/><circle cx='112' cy='38' r='32'/><circle cx='150' cy='52' r='26'/><circle cx='176' cy='62' r='20'/><ellipse cx='104' cy='74' rx='70' ry='16'/></g></svg>");
+}
+
+.cloud--c {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 100'><g fill='%23ffffff'><circle cx='58' cy='56' r='30'/><circle cx='100' cy='42' r='28'/><circle cx='138' cy='58' r='26'/><ellipse cx='96' cy='72' rx='54' ry='16'/></g></svg>");
+}
+
+@keyframes cloudDrift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(14px, -6px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud {
+    animation: none;
+  }
+}
+
 /* 顶部悬浮文案 */
 .hero-topbar {
   position: fixed;
@@ -473,6 +528,91 @@ body > * {
   stroke: #f3ae4e;
   stroke-width: 6;
   stroke-linecap: round;
+}
+
+/* =========================================================
+ * 莲花绽放（stack-card--green 使用）
+ * --------------------------------------------------------- */
+.svg-motif--lotus .lotus-water {
+  fill: #b9d9ff;
+}
+
+.svg-motif--lotus .lotus-water--1 {
+  opacity: 0.55;
+  animation: lotusRipple 3.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.svg-motif--lotus .lotus-water--2 {
+  opacity: 0.4;
+  animation: lotusRipple 3.6s ease-in-out infinite 0.6s;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.svg-motif--lotus .lotus-pad {
+  fill: #3ea778;
+  opacity: 0.9;
+}
+
+.svg-motif--lotus .petal {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: lotusBloom 3.2s ease-in-out infinite;
+}
+
+.svg-motif--lotus .petal--outer {
+  fill: #ff9fc4;
+}
+
+.svg-motif--lotus .petal--mid {
+  fill: #ffcde0;
+}
+
+.svg-motif--lotus .petal--inner {
+  fill: #fff1c8;
+}
+
+.svg-motif--lotus .petal--o1 { animation-delay: 0s; }
+.svg-motif--lotus .petal--o2 { animation-delay: 0.12s; }
+.svg-motif--lotus .petal--o3 { animation-delay: 0.24s; }
+.svg-motif--lotus .petal--m1 { animation-delay: 0.4s; }
+.svg-motif--lotus .petal--m2 { animation-delay: 0.52s; }
+.svg-motif--lotus .petal--i1 { animation-delay: 0.68s; }
+.svg-motif--lotus .petal--i2 { animation-delay: 0.82s; }
+
+.svg-motif--lotus .lotus-core {
+  fill: #ffb347;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lotusGlow 3.2s ease-in-out infinite 0.6s;
+}
+
+@keyframes lotusBloom {
+  0%   { transform: translateY(4%) scale(0.5);  opacity: 0.55; }
+  42%  { transform: translateY(0)  scale(1);    opacity: 1; }
+  68%  { transform: translateY(0)  scale(1.04); opacity: 1; }
+  100% { transform: translateY(4%) scale(0.5);  opacity: 0.55; }
+}
+
+@keyframes lotusGlow {
+  0%, 100% { transform: scale(0.55); opacity: 0.35; }
+  55%      { transform: scale(1.25); opacity: 1;   }
+}
+
+@keyframes lotusRipple {
+  0%, 100% { transform: scaleX(0.9); opacity: 0.3; }
+  50%      { transform: scaleX(1.08); opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svg-motif--lotus .petal,
+  .svg-motif--lotus .lotus-core,
+  .svg-motif--lotus .lotus-water {
+    animation: none !important;
+    transform: none !important;
+  }
 }
 
 .svg-motif--gear .motif-gear-ring {
@@ -894,7 +1034,6 @@ body {
     transition: none;
   }
 }
-
 /* =========================================================
  * target-zone 感应区（IntersectionObserver 驱动）
  * --------------------------------------------------------- */
@@ -949,4 +1088,80 @@ body {
   opacity: 0.9;
   line-height: 1.6;
   letter-spacing: 0.02em;
+}
+
+/* =========================================================
+ * 转场：红色遮盖挖洞 + 滚动缩放
+ * --------------------------------------------------------- */
+
+.cm-mask-transition {
+  position: relative;
+  width: 100%;
+  background: #050505;
+  z-index: 3;
+}
+
+.cm-mask-transition__scroll {
+  height: 400vh;
+}
+
+.cm-mask-transition__sticky {
+  position: sticky;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.cm-mask-bottom {
+  position: absolute;
+  inset: 0;
+  background-color: #050505;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+  background-image: radial-gradient(circle, #262626 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.cm-mask-bottom__title {
+  color: #e31221;
+  margin: 0;
+  font-size: clamp(4.4rem, 12vw, 8.6rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
+
+.cm-mask-top {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform-origin: center center;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.cm-mask-top svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 560px) {
+  .cm-mask-transition__scroll {
+    height: 320vh;
+  }
+
+  .cm-mask-bottom {
+    background-size: 18px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-mask-top {
+    transform: none !important;
+  }
 }

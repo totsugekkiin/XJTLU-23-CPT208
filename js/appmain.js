@@ -7,6 +7,7 @@ import { setupHeroCardSvgLoop } from "./appmain/heroCardSvgLoop.js";
 import { setupHeroTopbar } from "./appmain/heroTopbar.js";
 import { applyPerCardCssVariables, applyRootCssVariables } from "./appmain/styleVars.js";
 import { createDesktopPet } from "./appmain/pet/index.js";
+import { setupScrollMaskZoom } from "./appmain/scrollMaskZoom.js";
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const context = createDomContext();
@@ -77,6 +78,8 @@ window.addEventListener("resize", onViewportResize, { passive: true });
 observeSections();
 document.body.classList.toggle("is-scrolled", window.scrollY > 24);
 cardStackController.updateByScroll();
+
+setupScrollMaskZoom({ prefersReducedMotion });
 
 const petHost = document.getElementById("pet-layer");
 const petHitzone = document.getElementById("pet-hitzone");
