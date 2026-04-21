@@ -245,6 +245,37 @@
   <div id="pet-hitzone" class="pet-hitzone" role="button" aria-label="可拖拽的桌面宠物" tabindex="-1"></div>
 </div>
 
+<nav class="guide-menu" id="guide-menu" aria-label="互动导览选项">
+  <div class="guide-menu__panel" id="guide-menu-panel" role="menu" aria-hidden="true">
+    <button class="guide-menu__item" type="button" role="menuitem" data-action="overview">导览概览</button>
+    <button class="guide-menu__item" type="button" role="menuitem" data-action="route">推荐路线</button>
+    <button class="guide-menu__item" type="button" role="menuitem" data-action="spots">景点列表</button>
+    <button class="guide-menu__item guide-menu__item--ai" type="button" role="menuitem" data-action="ai">AI 对话</button>
+  </div>
+</nav>
+
+<section class="ai-chat is-hidden" id="ai-chat" aria-label="AI 对话" aria-hidden="true">
+  <header class="ai-chat__header">
+    <span class="ai-chat__title">AI 对话</span>
+    <div class="ai-chat__header-actions">
+      <span class="ai-chat__hint">/api/chat</span>
+      <button class="ai-chat__close" id="ai-chat-close" type="button" aria-label="关闭">✕</button>
+    </div>
+  </header>
+  <div class="ai-chat__messages" id="ai-chat-messages" aria-live="polite"></div>
+  <form class="ai-chat__composer" id="ai-chat-form" autocomplete="off">
+    <input
+      class="ai-chat__input"
+      id="ai-chat-input"
+      type="text"
+      inputmode="text"
+      placeholder="输入一句话，回车发送…"
+      aria-label="输入消息"
+    />
+    <button class="ai-chat__send" id="ai-chat-send" type="submit">发送</button>
+  </form>
+</section>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
