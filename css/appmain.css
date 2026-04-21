@@ -1117,30 +1117,247 @@ body {
   position: absolute;
   inset: 0;
   background-color: #050505;
-  display: grid;
-  place-items: center;
   z-index: 1;
   background-image: radial-gradient(circle, #262626 1px, transparent 1px);
   background-size: 24px 24px;
+  overflow: hidden;
+  perspective: 1200px;
 }
 
-.cm-mask-bottom__title {
+/* =========================================================
+ * 底层界面：双星公转（日/月）
+ * --------------------------------------------------------- */
+
+.cm-celestial-sun,
+.cm-celestial-moon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform;
+  transform: translate(-50%, -50%);
+}
+
+.cm-celestial-sun {
+  width: 35vw;
+  max-width: 300px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #e31221;
+  box-shadow: 0 0 80px rgba(227, 18, 33, 0.5);
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 50%,
+    transparent 50%,
+    transparent 53%,
+    black 53%,
+    black 63%,
+    transparent 63%,
+    transparent 67%,
+    black 67%,
+    black 77%,
+    transparent 77%,
+    transparent 82%,
+    black 82%,
+    black 92%,
+    transparent 92%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 50%,
+    transparent 50%,
+    transparent 53%,
+    black 53%,
+    black 63%,
+    transparent 63%,
+    transparent 67%,
+    black 67%,
+    black 77%,
+    transparent 77%,
+    transparent 82%,
+    black 82%,
+    black 92%,
+    transparent 92%,
+    transparent 100%
+  );
+}
+
+.cm-celestial-moon {
+  width: 25vw;
+  max-width: 200px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset -25px -25px 0 0 #fff;
+  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.2));
+}
+
+.cm-mask-bottom__title-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.cm-mask-bottom__title-half {
   color: #e31221;
-  margin: 0;
-  font-size: clamp(4.4rem, 12vw, 8.6rem);
+  font-size: clamp(5rem, 22vw, 10rem);
   font-weight: 900;
   line-height: 1;
-  letter-spacing: 0.2em;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
+  letter-spacing: 0.05em;
+  display: block;
+  will-change: transform, opacity;
+  text-shadow: 0 0 40px rgba(227, 18, 33, 0.35);
+}
+
+.cm-mask-bottom__title-half--top {
+  transform-origin: center bottom;
+}
+
+.cm-mask-bottom__title-half--bottom {
+  transform-origin: center top;
+  margin-top: -0.05em;
+}
+
+.cm-filmstrip {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  pointer-events: none;
+  transform-style: preserve-3d;
+  opacity: 0;
+}
+
+.cm-filmstrip__track {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  width: max-content;
+  padding: 0 50vw;
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+
+.cm-filmstrip__item {
+  width: 520px;
+  padding: 64px 42px 118px 42px;
+  background-color: #0a0a0a;
+  border-top: 3px solid #2a2a2a;
+  border-bottom: 3px solid #2a2a2a;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  will-change: transform;
+  transform-origin: center center;
+  margin: 0 18px;
+}
+
+.cm-filmstrip__item::before,
+.cm-filmstrip__item::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent, transparent 14px,
+    #151515 14px, #151515 28px
+  );
+}
+
+.cm-filmstrip__item::before { top: 14px; }
+.cm-filmstrip__item::after { bottom: 14px; }
+
+.cm-filmstrip__segment {
+  position: absolute;
+  bottom: 62px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #333;
+}
+
+.cm-filmstrip__dot {
+  position: absolute;
+  bottom: 62px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #e31221;
+  box-shadow: 0 0 14px rgba(227, 18, 33, 0.9);
+  transform: translate(-50%, 50%);
+  z-index: 2;
+}
+
+.cm-filmstrip__year {
+  position: absolute;
+  left: 50%;
+  color: #e31221;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  animation: cmFilmstripFloat 3s ease-in-out infinite;
+}
+
+@keyframes cmFilmstripFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px); }
+}
+
+.cm-filmstrip__item img {
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  border-radius: 4px;
+  filter: grayscale(80%) sepia(20%);
+  transition: filter 0.5s ease, transform 0.5s ease;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+  display: block;
+}
+
+.cm-filmstrip__item:hover img {
+  filter: grayscale(0%) sepia(0%);
+  transform: scale(1.03);
+}
+
+.cm-filmstrip__info {
+  margin-top: 22px;
+}
+
+.cm-filmstrip__info h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.55rem;
+  color: #fff;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+.cm-filmstrip__info p {
+  margin: 0;
+  color: #999;
+  line-height: 1.55;
+  font-size: 1rem;
+  font-family: "Helvetica Neue", Arial, sans-serif;
 }
 
 .cm-mask-top {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 4;
   transform-origin: center center;
-  will-change: transform;
+  will-change: transform, opacity;
   pointer-events: none;
 }
 
@@ -1158,10 +1375,36 @@ body {
   .cm-mask-bottom {
     background-size: 18px 18px;
   }
+
+  .cm-filmstrip__item {
+    width: 340px;
+    padding: 48px 26px 92px 26px;
+    margin: 0 16px;
+  }
+
+  .cm-filmstrip__item img {
+    height: 220px;
+  }
+
+  .cm-filmstrip__info h3 {
+    font-size: 1.25rem;
+  }
+
+  .cm-filmstrip__info p {
+    font-size: 0.9rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cm-mask-top {
+    transform: none !important;
+  }
+
+  .cm-filmstrip__year {
+    animation: none !important;
+  }
+
+  .cm-filmstrip__track {
     transform: none !important;
   }
 }
