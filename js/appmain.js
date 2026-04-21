@@ -101,21 +101,36 @@ if (petHost && petHitzone) {
 
 // ====== AI 聊天测试：/api/chat ======
 async function sendToAI(userText) {
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: userText }),
-    });
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: userText }),
+  });
 
-    const data = await response.json();
-    console.log("AI 回复:", data.reply);
-    // 这里你可以用 DOM 操作把 data.reply 显示在网页上
-    return data.reply;
-  } catch (err) {
-    console.error("发送失败:", err);
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = contentType.includes("application/json");
+  const payload = isJson ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    const message =
+      (isJson && payload && typeof payload === "object" && (payload.message || payload.error) ? `${payload.message ?? payload.error}` : null) ??
+      (typeof payload === "string" && payload.trim() ? payload.trim() : null) ??
+      `请求失败（HTTP ${response.status}）`;
+    const err = new Error(message);
+    err.status = response.status;
+    err.payload = payload;
     throw err;
   }
+
+  const reply = isJson && payload && typeof payload === "object" ? payload.reply : null;
+  if (typeof reply !== "string" || reply.trim() === "") {
+    const err = new Error("后端未返回 reply（空回复）");
+    err.payload = payload;
+    throw err;
+  }
+
+  console.log("AI 回复:", reply);
+  return reply;
 }
 
 const chatEls = {
@@ -199,9 +214,13 @@ if (chatEls.root && chatEls.form && chatEls.input && chatEls.send && chatEls.mes
     chatEls.input.disabled = true;
     try {
       const reply = await sendToAI(userText);
-      appendChatMessage("ai", reply ?? "(空回复)");
+      appendChatMessage("ai", reply);
     } catch (err) {
-      appendChatMessage("sys", "发送失败：请检查控制台或后端 /api/chat 是否可用。");
+      console.error("发送失败:", err);
+      const msg =
+        (err && typeof err === "object" && "message" in err && typeof err.message === "string" && err.message.trim() ? err.message.trim() : null) ??
+        "发送失败：请检查控制台或后端 /api/chat 是否可用。";
+      appendChatMessage("sys", `发送失败：${msg}`);
     } finally {
       chatEls.send.disabled = false;
       chatEls.input.disabled = false;
