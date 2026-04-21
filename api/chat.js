@@ -33,14 +33,15 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const upstreamResponse = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    // Zhipu (BigModel) OpenAI-compatible endpoint
+    const upstreamResponse = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "deepseek-chat",
+        model: "glm-4-flash",
         messages: [
           {
             role: "system",
@@ -49,6 +50,7 @@ module.exports = async function handler(req, res) {
           { role: "user", content: prompt },
         ],
         temperature: 0.7,
+        stream: false,
       }),
     });
 
