@@ -151,6 +151,25 @@ body > * {
   padding: 8px 16px;
   font-weight: 800;
   font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.hero-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+.hero-pill:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.hero-pill:focus-visible {
+  outline: 3px solid rgba(31, 102, 219, 0.35);
+  outline-offset: 3px;
 }
 
 /* 橙色卡片组件 */
@@ -991,7 +1010,8 @@ body {
 .pet-layer {
   position: fixed;
   inset: 0;
-  z-index: 45;
+  /* 幕布转场层是 90；桌宠需要始终在最上层可见 */
+  z-index: 120;
   pointer-events: none;
   overflow: hidden;
 }
@@ -1367,6 +1387,75 @@ body {
   height: 100%;
 }
 
+/* =========================================================
+ * 幕布转场 + 河流第二幕（全屏覆盖层）
+ * --------------------------------------------------------- */
+.curtain-container {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.curtain-container.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* =========================================================
+ * 河流 Canvas 场景（幕布合上后出现）
+ * --------------------------------------------------------- */
+.river-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40; /* 低于幕布(90)，高于底层内容 */
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.river-stage.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+#river-scroll-spacer {
+  height: 0;
+}
+
+#river-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#boat-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate3d(50vw, 50vh, 0);
+  opacity: 0;
+  will-change: transform, opacity;
+  transform-origin: 50% 50%;
+}
+
+#boat {
+  width: 29px;
+  height: 116px;
+  display: block;
+  filter: drop-shadow(10px 14px 18px rgba(0, 0, 0, 0.28));
+  opacity: 0.98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+}
+
 @media (max-width: 560px) {
   .cm-mask-transition__scroll {
     height: 320vh;
@@ -1642,5 +1731,319 @@ body {
     bottom: 12px;
     height: min(520px, calc(100vh - 96px));
     border-radius: 16px;
+  }
+}
+
+/* =========================================================
+ * 桌宠漫画对话 UI（气泡 + 斜切输入条）
+ * --------------------------------------------------------- */
+
+.pet-comic-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  --comic-ink: #0a0a0a;
+  --comic-paper: #ffffff;
+  --comic-accent-a: #e31221;
+  --comic-accent-b: #1f66db;
+  /* 仍保留 45° 偏移“硬阴影”，但降低重量，叠加一层轻柔阴影 */
+  --comic-shadow-hard: 7px 7px 0 rgba(10, 10, 10, 0.55);
+  --comic-shadow-soft: 0 14px 28px rgba(10, 10, 10, 0.12);
+  --comic-stroke: 3px;
+  --comic-skew: -4deg;
+  --comic-ease-pop: cubic-bezier(0.16, 1.35, 0.22, 1);
+  --pet-kb-offset: 0px;
+}
+
+.pet-comic-ui.is-hidden {
+  display: none;
+}
+
+.pet-bubble {
+  position: absolute;
+  max-width: min(420px, calc(100vw - 28px));
+  pointer-events: none;
+  transform-origin: 30% 100%;
+  will-change: transform, opacity, filter;
+}
+
+.pet-bubble.is-hidden {
+  display: none;
+}
+
+.pet-bubble--agent {
+  width: 256px;
+  max-width: min(256px, calc(100vw - 28px));
+}
+
+.pet-bubble--user {
+  width: 128px;
+  max-width: min(128px, calc(100vw - 28px));
+}
+
+.pet-bubble__agent-shell {
+  position: relative;
+  animation-duration: 200ms;
+}
+
+.pet-bubble__agent-body {
+  position: relative;
+  background: #ffffff;
+  color: #000000;
+  border-radius: 24px;
+  padding: 20px;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+.pet-bubble__agent-tail {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 12px solid #ffffff;
+}
+
+.pet-bubble__agent-text {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  text-align: center;
+  font-style: italic;
+  word-break: break-word;
+}
+
+.pet-bubble__user-shell {
+  position: relative;
+  animation-duration: 400ms;
+}
+
+.pet-bubble__user-dot {
+  position: absolute;
+  left: -16px;
+  top: 24px;
+  display: block;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.pet-bubble__user-dot--a {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+}
+
+.pet-bubble__user-dot--b {
+  left: -28px;
+  top: 40px;
+  width: 8px;
+  height: 8px;
+  opacity: 0.6;
+}
+
+.pet-bubble__user-body {
+  background: #ffffff;
+  color: #6b7280;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.pet-bubble__user-text {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+@keyframes petComicPop {
+  0% {
+    transform: translateY(12px) scale(0.95);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  62% {
+    transform: translateY(-4px) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes petComicShake {
+  0% { transform: translateX(0) translateY(0); }
+  22% { transform: translateX(-2px) translateY(1px); }
+  46% { transform: translateX(2px) translateY(-1px); }
+  72% { transform: translateX(-1px) translateY(-1px); }
+  100% { transform: translateX(0) translateY(0); }
+}
+
+.pet-bubble.is-pop {
+  /* 不要在气泡外层做 transform 动画，否则会覆盖 JS 定位用的 transform */
+  animation: none;
+}
+
+.pet-bubble.is-pop .pet-bubble__agent-shell,
+.pet-bubble.is-pop .pet-bubble__user-shell {
+  animation: petComicPop 220ms ease-out both;
+  will-change: transform, opacity, filter;
+}
+
+.pet-inputbar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 62;
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 0;
+  align-items: center;
+  background: #ffffff;
+  color: #111827;
+  border-radius: 20px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12);
+  transform: translateY(calc(110% - var(--pet-kb-offset)));
+  transition: transform 380ms var(--comic-ease-pop);
+  will-change: transform;
+  overflow: hidden;
+}
+
+.pet-inputbar.is-hidden {
+  display: none;
+}
+
+.pet-inputbar.is-open {
+  transform: translateY(calc(0px - var(--pet-kb-offset)));
+}
+
+.pet-inputbar__input {
+  height: 42px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.pet-inputbar__input:focus {
+  outline: none;
+}
+
+.pet-inputbar__enter {
+  height: 42px;
+  padding: 0 18px;
+  border: 0;
+  background: #0b0b0f;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.pet-inputbar__enter:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.pet-inputbar__enter:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.pet-inputbar__sendIcon {
+  height: 42px;
+  width: 56px;
+  border: 0;
+  background: #d1d5db;
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.pet-inputbar__sendIcon:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+.pet-inputbar__sendIcon:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.pet-inputbar__close {
+  height: 42px;
+  width: 56px;
+  border: 0;
+  background: #ffffff;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: filter 140ms ease, transform 140ms ease;
+}
+
+.pet-inputbar__close:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.pet-inputbar__close:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.pet-inputbar__enter:disabled,
+.pet-inputbar__sendIcon:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 540px) {
+  .pet-bubble {
+    max-width: min(360px, calc(100vw - 18px));
+  }
+  .pet-inputbar {
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-bubble.is-pop {
+    animation: none !important;
+  }
+  .pet-inputbar {
+    transition: none !important;
   }
 }

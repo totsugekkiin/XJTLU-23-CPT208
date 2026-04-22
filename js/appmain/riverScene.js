@@ -1,0 +1,376 @@
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const clamp01 = (v) => clamp(v, 0, 1);
+
+function getAngleDeg(dx, dy) {
+  // 让船“朝向前进方向”，屏幕 y 向下为正，所以 atan2(dy, dx)
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
+function clampAbs(v, maxAbs) {
+  return Math.max(-maxAbs, Math.min(maxAbs, v));
+}
+
+function getRiverCenterX({ centerX, y }) {
+  // 主轨迹固定：只与 y 有关（不随时间扭动）
+  // 增大蜿蜒：更大的振幅 + 更长的波长（主弯道更明显）
+  const amp = Math.max(30, window.innerWidth * 0.18);
+  const a = Math.sin(y * 0.0038) * amp;
+  const b = Math.sin(y * 0.011) * (amp * 0.42);
+  return centerX + a + b;
+}
+
+export function createRiverScene({
+  stageId = "river-stage",
+  canvasId = "river-canvas",
+  boatContainerId = "boat-container",
+  boatId = "boat",
+  spacerId = "river-scroll-spacer",
+  sceneHeight = null,
+} = {}) {
+  const gsap = typeof window !== "undefined" ? window.gsap : null;
+  const stage = document.getElementById(stageId);
+  const canvas = document.getElementById(canvasId);
+  const boatContainer = document.getElementById(boatContainerId);
+  const boatEl = document.getElementById(boatId);
+  const spacer = document.getElementById(spacerId);
+
+  if (!stage || !canvas) {
+    console.warn("[riverScene] 缺少 river-stage 或 river-canvas，跳过初始化");
+    return null;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    console.warn("[riverScene] Canvas 2D context 获取失败");
+    return null;
+  }
+
+  let raf = null;
+  let isActive = false;
+  let riverAnimState = "idle"; // idle | flowing | done
+  let flowTween = null;
+  let hasLoggedBlank = false;
+  let lastFlowLogAt = 0;
+
+  const flow = {
+    riverFlowY: 0,
+  };
+
+  const boat = {
+    angleDeg: 0,
+  };
+
+  const track = {
+    startX: window.innerWidth / 2,
+  };
+
+  const fx = {
+    continuousRippleRadius: 0,
+    particles: [],
+    lastParticleAt: 0,
+  };
+
+  const view = {
+    w: 0,
+    h: 0,
+    dpr: 1,
+    sceneH: 0,
+  };
+
+  const scroll = {
+    startY: 0,
+  };
+
+  function measure() {
+    view.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    view.w = window.innerWidth;
+    view.h = window.innerHeight;
+    view.sceneH = Number.isFinite(sceneHeight) ? sceneHeight : Math.max(view.h * 2.6, view.h + 1800);
+
+    canvas.width = Math.floor(view.w * view.dpr);
+    canvas.height = Math.floor(view.h * view.dpr);
+
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  }
+
+  function getCenterX(worldY) {
+    return getRiverCenterX({ centerX: track.startX, y: worldY });
+  }
+
+  function getRiverHalfWidth(worldY, t) {
+    const base = Math.max(48, view.w * 0.085);
+    const breathe = Math.sin(worldY * 0.012 + t * 0.001) * (base * 0.16);
+    const pulse = Math.sin(worldY * 0.05 - t * 0.0022) * (base * 0.06);
+    return Math.max(34, base + breathe + pulse);
+  }
+
+  function drawRiver({ t }) {
+    const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+    // 关键修正：底部“固定空白”来自把 scrollDelta 从可视长度里扣掉。
+    // 设计目标是：视口内永远有河道（沿着 worldY 前进），而不是滚到末端变成 0。
+    const grownAhead = flow.riverFlowY - scrollDelta;
+    const visibleEndY = riverAnimState === "done" ? view.h : clamp(grownAhead, 0, view.h);
+    if (visibleEndY <= 0.5) {
+      if (!hasLoggedBlank && isActive && (riverAnimState === "flowing" || riverAnimState === "done")) {
+        hasLoggedBlank = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:drawRiver(blank)',message:'visibleEndY<=0.5 while active',data:{riverAnimState,scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),visibleEndY:Math.round(visibleEndY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      }
+      return;
+    }
+
+    const step = 10; // 越小越细腻，越大越省性能
+    const left = [];
+    const right = [];
+
+    for (let screenY = 0; screenY <= visibleEndY; screenY += step) {
+      const worldY = scrollDelta + screenY;
+      const cx = getCenterX(worldY);
+      const hw = getRiverHalfWidth(worldY, t);
+
+      // 只让边缘扭动：wobble 叠加在左右岸上，中心线不动
+      const wobble = Math.sin(worldY * 0.09 + t * 0.003) * 2.0;
+      left.push({ x: cx - hw + wobble, y: screenY });
+      right.push({ x: cx + hw + wobble, y: screenY });
+    }
+
+    ctx.save();
+
+    // 河水主体（偏墨色 + 一点透明，营造“渗出/墨坠”）
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+
+    // 去掉“上方渐变透明”的观感：河水主体改为稳定的纯色填充
+    ctx.fillStyle = "rgba(6, 28, 45, 0.92)";
+    ctx.fill();
+
+    // 两岸高光线（类似水面边缘反光）
+    ctx.globalCompositeOperation = "screen";
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(right[0].x, right[0].y);
+    for (let i = 1; i < right.length; i++) ctx.lineTo(right[i].x, right[i].y);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function spawnParticles(t, rateMultiplier) {
+    const now = t;
+    const interval = Math.max(18, 85 / Math.max(1, rateMultiplier));
+    if (now - fx.lastParticleAt < interval) return;
+    fx.lastParticleAt = now;
+
+    const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+    const screenY = Math.random() * Math.min(view.h, Math.max(1, flow.riverFlowY - scrollDelta));
+    const worldY = scrollDelta + screenY;
+    const x =
+      getCenterX(worldY) + (Math.random() - 0.5) * getRiverHalfWidth(worldY, t) * 1.5;
+    fx.particles.push({
+      x,
+      y: screenY,
+      r: 0.8 + Math.random() * 1.8,
+      a: 0.12 + Math.random() * 0.25,
+      vx: (Math.random() - 0.5) * 0.2,
+      vy: 0.15 + Math.random() * 0.35,
+      life: 1,
+    });
+
+    if (fx.particles.length > 260) fx.particles.splice(0, fx.particles.length - 260);
+  }
+
+  function updateAndDrawParticles(t, rateMultiplier) {
+    spawnParticles(t, rateMultiplier);
+    fx.continuousRippleRadius += 0.35 * rateMultiplier;
+    const ripple = (Math.sin(t * 0.0025) * 0.5 + 0.5) * 0.6 + 0.2;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = fx.particles.length - 1; i >= 0; i--) {
+      const p = fx.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.006 * Math.max(1, rateMultiplier * 0.9);
+      const a = Math.max(0, p.a * p.life);
+      if (p.life <= 0 || p.y > view.h + 40) {
+        fx.particles.splice(i, 1);
+        continue;
+      }
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (0.9 + ripple), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function syncBoat(t) {
+    if (!boatContainer || !boatEl) return;
+
+    // 船在水面上跟随：放在“当前水头”稍上方
+    const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+    const fadeP = clamp01(((flow.riverFlowY - scrollDelta) - view.h * 0.5) / (view.h * 0.25));
+    boatContainer.style.opacity = String(fadeP);
+    if (fadeP <= 0.02) return;
+
+    const visibleEndY = flow.riverFlowY - scrollDelta;
+    // 俯视视角：船固定在屏幕上半部，不要沉到屏幕底部
+    const preferredY = view.h * 0.42;
+    // 但不能超过“水头”太多，否则看起来船漂在未生成的水面上
+    const maxY = Math.max(0, visibleEndY - 90);
+    const screenY = clamp(Math.min(preferredY, maxY), 0, view.h - 140);
+    const worldY = scrollDelta + screenY;
+    const x = getCenterX(worldY);
+    // 船头随时指向流动方向：用河道切线方向决定朝向
+    const sampleDy = 40;
+    const x2 = getCenterX(worldY + sampleDy);
+    const BOAT_HEADING_OFFSET_DEG = 90;
+    const targetAngle = getAngleDeg(x2 - x, sampleDy) + BOAT_HEADING_OFFSET_DEG;
+    // 小平滑，避免高频抖动
+    boat.angleDeg += (targetAngle - boat.angleDeg) * 0.18;
+
+    // 让 (x, screenY) 对齐船的“中心点”，不再用左上角贴合
+    boatContainer.style.transform = `translate3d(${x}px, ${screenY}px, 0) translate(-50%, -50%) rotate(${boat.angleDeg}deg)`;
+  }
+
+  function render(t) {
+    ctx.clearRect(0, 0, view.w, view.h);
+
+    // 防止滚动推进速度大于生长速度导致“追不上”的空白
+    if (riverAnimState === "flowing") {
+      const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+      const minNeeded = scrollDelta + view.h + 80;
+      if (flow.riverFlowY < minNeeded) flow.riverFlowY = minNeeded;
+    }
+
+    drawRiver({ t });
+    syncBoat(t);
+
+    const rate = riverAnimState === "done" ? 2.6 : 1;
+    updateAndDrawParticles(t, rate);
+  }
+
+  function tick(t) {
+    render(t);
+    raf = requestAnimationFrame(tick);
+  }
+
+  function ensureRaf() {
+    if (raf !== null) return;
+    raf = requestAnimationFrame(tick);
+  }
+
+  function stopRaf() {
+    if (raf === null) return;
+    cancelAnimationFrame(raf);
+    raf = null;
+  }
+
+  function setActive(next) {
+    isActive = !!next;
+    stage.classList.toggle("is-active", isActive);
+    stage.setAttribute("aria-hidden", isActive ? "false" : "true");
+    if (boatContainer) boatContainer.style.opacity = isActive ? "1" : "0";
+  }
+
+  function stopAndHide() {
+    if (flowTween) {
+      flowTween.kill();
+      flowTween = null;
+    }
+    riverAnimState = "idle";
+    flow.riverFlowY = 0;
+    fx.continuousRippleRadius = 0;
+    fx.particles = [];
+    fx.lastParticleAt = 0;
+    if (spacer) spacer.style.height = "0px";
+    setActive(false);
+    stopRaf();
+  }
+
+  function startFlow({ duration = 3.0, ease = "power2.inOut" } = {}) {
+    if (!gsap) {
+      console.warn("[riverScene] GSAP 未加载，无法启动 riverFlowY 动画");
+      return;
+    }
+    if (riverAnimState === "flowing") return;
+
+    riverAnimState = "flowing";
+    track.startX = window.innerWidth / 2;
+    flow.riverFlowY = 0;
+    scroll.startY = window.scrollY;
+    hasLoggedBlank = false;
+    // #region agent log
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:startFlow',message:'startFlow called',data:{duration,ease,scrollY:Math.round(window.scrollY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),hasSpacer:!!spacer},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    fx.continuousRippleRadius = 0;
+    fx.particles = [];
+    fx.lastParticleAt = 0;
+
+    setActive(true);
+    ensureRaf();
+    if (spacer) spacer.style.height = `${Math.floor(view.sceneH)}px`;
+    // #region agent log
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:startFlow(spacer)',message:'spacer height set',data:{spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    if (flowTween) flowTween.kill();
+    flowTween = gsap.to(flow, {
+      riverFlowY: view.sceneH,
+      duration,
+      ease,
+      onUpdate: () => {
+        const now = Date.now();
+        if (now - lastFlowLogAt > 700) {
+          lastFlowLogAt = now;
+          const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+          // #region agent log
+          fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:flowTween(onUpdate)',message:'flow progress tick',data:{scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
+      },
+      onComplete: () => {
+        riverAnimState = "done";
+        flowTween = null;
+        // #region agent log
+        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:flowTween(onComplete)',message:'flow complete',data:{scrollY:Math.round(window.scrollY),riverFlowY:Math.round(flow.riverFlowY),sceneH:Math.round(view.sceneH)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+      },
+    });
+  }
+
+  function destroy() {
+    stopRaf();
+    window.removeEventListener("resize", onResize);
+  }
+
+  function onResize() {
+    measure();
+  }
+
+  measure();
+  window.addEventListener("resize", onResize, { passive: true });
+
+  // 初始：不自动进入河流段落（等幕布合上触发）
+  setActive(false);
+  if (boatContainer) boatContainer.style.opacity = "0";
+
+  return {
+    destroy,
+    startFlow,
+    stopAndHide,
+    get state() {
+      return { active: isActive, sceneHeight: view.sceneH, riverFlowY: flow.riverFlowY };
+    },
+  };
+}
+

@@ -113,6 +113,7 @@ export async function createDesktopPet({
   targetEl = null,
   prefersReducedMotion = false,
   scale = 2,
+  onHeadClick = null,
   headTextureUrl = "images/pet/head.png",
   headNeckPivot = { x: 578, y: 553 },
   headScaleMul = 4.6,
@@ -138,6 +139,10 @@ export async function createDesktopPet({
     console.warn("[desktop-pet] 缺少 host 或 hitzone 节点。");
     return null;
   }
+  // #region agent log
+  console.log("[dbg ee6ebc] createDesktopPet entry", { hasPixi: !!PIXI, hasHost: !!host, hasHitzone: !!hitzone, scale, prefersReducedMotion, hasOnHeadClick: typeof onHeadClick === "function" });
+  fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/pet/index.js:entry',message:'createDesktopPet entry',data:{hasPixi:!!PIXI,hasHost:!!host,hasHitzone:!!hitzone,scale,prefersReducedMotion,hasOnHeadClick:typeof onHeadClick==='function'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const app = await createPetApp(PIXI, host);
   const rig = createPetRig(PIXI);
@@ -234,6 +239,12 @@ export async function createDesktopPet({
   let dragOffsetY = 0;
   let targetVisible = false;
 
+  const anchors = {
+    head: { x: pos.x, y: pos.y },
+    user: { x: pos.x, y: pos.y },
+    hitzone: { left: 0, top: 0, width: 0, height: 0 },
+  };
+
   const getAnchorPoint = () => {
     if (!anchorEl) {
       return { x: window.innerWidth / 2, y: window.innerHeight * 0.7 };
@@ -262,8 +273,22 @@ export async function createDesktopPet({
     const h = bounds.height * scale + 18;
     hitzone.style.width = `${w}px`;
     hitzone.style.height = `${h}px`;
-    hitzone.style.left = `${Math.round(pos.x - w / 2)}px`;
-    hitzone.style.top = `${Math.round(pos.y + bounds.top * scale - 8)}px`;
+    const left = Math.round(pos.x - w / 2);
+    const top = Math.round(pos.y + bounds.top * scale - 8);
+    hitzone.style.left = `${left}px`;
+    hitzone.style.top = `${top}px`;
+
+    anchors.hitzone.left = left;
+    anchors.hitzone.top = top;
+    anchors.hitzone.width = w;
+    anchors.hitzone.height = h;
+
+    // 头顶锚点：取头部中心略上方；用户气泡锚点：身体侧边偏上
+    const headCenterY = pos.y + (-RIG_METRICS.legLength - RIG_METRICS.torsoHeight - RIG_METRICS.headRadius) * scale;
+    anchors.head.x = pos.x;
+    anchors.head.y = headCenterY - RIG_METRICS.headRadius * 0.9 * scale;
+    anchors.user.x = pos.x + (bounds.halfWidth * scale + 18) * (pos.x < window.innerWidth * 0.5 ? 1 : -1);
+    anchors.user.y = pos.y + (-RIG_METRICS.legLength - RIG_METRICS.torsoHeight * 0.2) * scale;
   };
 
   const interaction = createPetDragInteraction({
@@ -289,6 +314,60 @@ export async function createDesktopPet({
       }
     },
   });
+
+  // ====== 头部单击：在不影响拖拽的前提下做 click 判定 ======
+  let downAt = 0;
+  let downX = 0;
+  let downY = 0;
+  let downPointerId = null;
+
+  const isPointInHead = (x, y) => {
+    // 以屏幕坐标粗略估算头部区域（足够用于点击触发）
+    const headR = RIG_METRICS.headRadius * scale * 1.25;
+    const hx = anchors.head.x;
+    const hy = anchors.head.y + headR * 0.4;
+    const dx = x - hx;
+    const dy = y - hy;
+    return dx * dx + dy * dy <= headR * headR;
+  };
+
+  const handleClickDown = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    downAt = performance.now();
+    downX = e.clientX;
+    downY = e.clientY;
+    downPointerId = e.pointerId ?? null;
+    // #region agent log
+    console.log("[dbg ee6ebc] hitzone pointerdown", { x: e.clientX, y: e.clientY, pointerId: e.pointerId });
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/pet/index.js:pointerdown',message:'hitzone pointerdown',data:{x:e.clientX,y:e.clientY,pointerId:e.pointerId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  };
+
+  const handleClickUp = (e) => {
+    if (downAt === 0) return;
+    if (downPointerId !== null && e.pointerId !== downPointerId) return;
+    const dt = performance.now() - downAt;
+    const dx = e.clientX - downX;
+    const dy = e.clientY - downY;
+    downAt = 0;
+    downPointerId = null;
+    if (dt > 260) return;
+    if (dx * dx + dy * dy > 64) return; // 8px
+    if (interaction?.isDragging?.()) return;
+    const inHead = isPointInHead(e.clientX, e.clientY);
+    // #region agent log
+    console.log("[dbg ee6ebc] hitzone pointerup click-eval", { x: e.clientX, y: e.clientY, dt: Math.round(dt), move2: Math.round(dx * dx + dy * dy), isDragging: !!interaction?.isDragging?.(), inHead, anchorHead: { x: Math.round(anchors.head.x), y: Math.round(anchors.head.y) }, scale });
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/pet/index.js:pointerup',message:'hitzone pointerup click-eval',data:{x:e.clientX,y:e.clientY,dt:Math.round(dt),move2:Math.round(dx*dx+dy*dy),isDragging:!!interaction?.isDragging?.(),inHead,anchorHead:{x:Math.round(anchors.head.x),y:Math.round(anchors.head.y)},scale},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!inHead) return;
+    onHeadClick?.({ x: e.clientX, y: e.clientY, anchors: { ...anchors } });
+  };
+
+  hitzone.addEventListener("pointerdown", handleClickDown);
+  // 某些环境下 pointerup 可能不会回到 hitzone（例如 capture 失败或事件分发差异），
+  // 因此把结束事件提升到 window，保证 click 判定闭环。
+  window.addEventListener("pointerup", handleClickUp);
+  window.addEventListener("pointercancel", handleClickUp);
 
   const targetHandle = observeTargetZone({
     element: targetEl,
@@ -399,7 +478,13 @@ export async function createDesktopPet({
     rig,
     fsm,
     states: PET_STATES,
+    getAnchors() {
+      return anchors;
+    },
     destroy() {
+      hitzone.removeEventListener("pointerdown", handleClickDown);
+      window.removeEventListener("pointerup", handleClickUp);
+      window.removeEventListener("pointercancel", handleClickUp);
       window.removeEventListener("resize", onWindowResize);
       app.ticker.remove(tick);
       targetHandle.destroy();

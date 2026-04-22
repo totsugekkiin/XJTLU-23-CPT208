@@ -28,7 +28,7 @@
   </div>
   <div class="hero-topbar">
     <span class="hero-logo">changmen</span>
-    <span class="hero-pill">互动导览</span>
+    <button class="hero-pill" id="hero-guide-btn" type="button" aria-label="打开互动导览菜单">互动导览</button>
   </div>
   <article class="hero-copy hero-card" id="hero-card" data-component="hero-card">
     <div class="hero-card-stack" id="hero-card-stack">
@@ -213,6 +213,39 @@
                 <p>持续探索前沿技术与艺术设计的融合点，永远保持好奇与敬畏。</p>
               </div>
             </div>
+
+            <div class="cm-filmstrip__item">
+              <div class="cm-filmstrip__segment"></div>
+              <div class="cm-filmstrip__dot"></div>
+              <div class="cm-filmstrip__year">2026</div>
+              <img src="https://picsum.photos/seed/cm6/600/400" alt="回响">
+              <div class="cm-filmstrip__info">
+                <h3>回响 Echo</h3>
+                <p>把走过的路重新连线，让记忆与当下在同一条时间轴上回声相遇。</p>
+              </div>
+            </div>
+
+            <div class="cm-filmstrip__item">
+              <div class="cm-filmstrip__segment"></div>
+              <div class="cm-filmstrip__dot"></div>
+              <div class="cm-filmstrip__year">2027</div>
+              <img src="https://picsum.photos/seed/cm7/600/400" alt="街巷">
+              <div class="cm-filmstrip__info">
+                <h3>街巷 Lanes</h3>
+                <p>沿着水巷与石桥向前，把“可走的故事”嵌进每一次滑动与停留。</p>
+              </div>
+            </div>
+
+            <div class="cm-filmstrip__item">
+              <div class="cm-filmstrip__segment"></div>
+              <div class="cm-filmstrip__dot"></div>
+              <div class="cm-filmstrip__year">2028</div>
+              <img src="https://picsum.photos/seed/cm8/600/400" alt="再出发">
+              <div class="cm-filmstrip__info">
+                <h3>再出发 Restart</h3>
+                <p>把交互做得更轻、更快、更稳；让每个人都能从这里重新启程。</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -237,12 +270,105 @@
           <rect x="396" y="190" width="208" height="620" rx="104" fill="none" stroke="#000000" stroke-width="1"></rect>
         </svg>
       </div>
+
+      <div class="curtain-container" id="curtainOverlay" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width: 100%; height: 100%;">
+          <path id="leftCurtain" d="M0,0 L0,0 L0,100 L0,100 Z" fill="#f4f1ea" />
+          <path id="rightCurtain" d="M100,0 L100,0 L100,100 L100,100 Z" fill="#f4f1ea" />
+        </svg>
+      </div>
     </div>
   </div>
 </section>
 
+<div id="river-scroll-spacer" aria-hidden="true"></div>
+
+<div class="river-stage" id="river-stage" aria-hidden="true">
+  <canvas id="river-canvas"></canvas>
+
+  <div id="boat-container" aria-hidden="true">
+    <svg id="boat" viewBox="0 0 80 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="乌篷船俯视图">
+      <!-- 船底/外壳（梭形剪影） -->
+      <path fill="#3a2a1f" d="M40,5 C55,40 70,100 70,160 C70,220 55,280 40,315 C25,280 10,220 10,160 C10,100 25,40 40,5 Z" />
+
+      <!-- 船头露出的甲板（前舱） -->
+      <path fill="#5c4434" d="M40,10 C52,40 62,80 62,110 L18,110 C18,80 28,40 40,10 Z" />
+
+      <!-- 船尾露出的甲板（后舱） -->
+      <path fill="#5c4434" d="M18,220 L62,220 C62,250 52,290 40,310 C28,290 18,250 18,220 Z" />
+
+      <!-- 乌篷（瓦片分段） -->
+      <rect fill="#1a1a1a" x="15" y="110" width="50" height="30" rx="4" />
+      <path fill="rgba(255,255,255,0.05)" d="M15,110 H65 V115 Q40,118 15,115 Z" />
+
+      <rect fill="#1a1a1a" x="12" y="138" width="56" height="50" rx="4" />
+      <path fill="rgba(255,255,255,0.05)" d="M12,138 H68 V145 Q40,150 12,145 Z" />
+
+      <rect fill="#1a1a1a" x="15" y="186" width="50" height="36" rx="4" />
+      <path fill="rgba(255,255,255,0.05)" d="M15,186 H65 V191 Q40,195 15,191 Z" />
+
+      <!-- 船头红点装饰 -->
+      <circle fill="#e31221" cx="40" cy="40" r="1.5" />
+
+      <!-- 船尾长橹（打破对称） -->
+      <g transform="rotate(-15, 40, 280)">
+        <rect fill="#2a1a0f" x="38" y="270" width="4" height="60" rx="2" />
+        <path fill="#1a0f08" d="M38,300 H42 L45,330 Q40,335 35,330 Z" opacity="0.8" />
+      </g>
+    </svg>
+  </div>
+</div>
+
 <div id="pet-layer" class="pet-layer" aria-hidden="true">
   <div id="pet-hitzone" class="pet-hitzone" role="button" aria-label="可拖拽的桌面宠物" tabindex="-1"></div>
+
+  <div class="pet-comic-ui is-hidden" id="pet-comic-ui" aria-hidden="true">
+    <div class="pet-bubble pet-bubble--agent is-hidden" id="pet-bubble-agent" aria-live="polite" aria-hidden="true">
+      <div class="pet-bubble__agent-shell">
+        <div class="pet-bubble__agent-body">
+          <p class="pet-bubble__agent-text" id="pet-bubble-agent-text"></p>
+        </div>
+        <div class="pet-bubble__agent-tail" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="pet-bubble pet-bubble--user is-hidden" id="pet-bubble-user" aria-live="polite" aria-hidden="true">
+      <div class="pet-bubble__user-shell">
+        <span class="pet-bubble__user-dot pet-bubble__user-dot--a" aria-hidden="true"></span>
+        <span class="pet-bubble__user-dot pet-bubble__user-dot--b" aria-hidden="true"></span>
+        <div class="pet-bubble__user-body">
+          <p class="pet-bubble__user-text" id="pet-bubble-user-text"></p>
+        </div>
+      </div>
+    </div>
+
+    <form class="pet-inputbar is-hidden" id="pet-inputbar" autocomplete="off">
+      <button class="pet-inputbar__enter" id="pet-inputbar-enter" type="submit" aria-label="发送（ENTER）">
+        ENTER
+      </button>
+
+      <input
+        class="pet-inputbar__input"
+        id="pet-inputbar-input"
+        type="text"
+        inputmode="text"
+        placeholder="说点什么…"
+        aria-label="输入消息"
+      />
+
+      <button class="pet-inputbar__sendIcon" id="pet-inputbar-send" type="submit" aria-label="发送">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+          <path
+            d="M2.1 12.5c0-.3.2-.6.5-.7L21 3.2c.3-.1.7-.1.9.2.2.2.2.6 0 .9l-7.7 16.4c-.2.5-.9.6-1.3.2l-3.6-3.6-5.2-1.8c-.3-.1-.5-.4-.5-.7zm7.6 3.2 3 3 5.8-12.2-8.8 8.8zM4.7 12.5l4.1 1.4 8.2-8.2-12.3 6.8z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+
+      <button class="pet-inputbar__close" id="pet-inputbar-close" type="button" aria-label="关闭对话">
+        ×
+      </button>
+    </form>
+  </div>
 </div>
 
 <nav class="guide-menu" id="guide-menu" aria-label="互动导览选项">
@@ -250,36 +376,13 @@
     <button class="guide-menu__item" type="button" role="menuitem" data-action="overview">导览概览</button>
     <button class="guide-menu__item" type="button" role="menuitem" data-action="route">推荐路线</button>
     <button class="guide-menu__item" type="button" role="menuitem" data-action="spots">景点列表</button>
-    <button class="guide-menu__item guide-menu__item--ai" type="button" role="menuitem" data-action="ai">AI 对话</button>
   </div>
 </nav>
-
-<section class="ai-chat is-hidden" id="ai-chat" aria-label="AI 对话" aria-hidden="true">
-  <header class="ai-chat__header">
-    <span class="ai-chat__title">AI 对话</span>
-    <div class="ai-chat__header-actions">
-      <span class="ai-chat__hint">/api/chat</span>
-      <button class="ai-chat__close" id="ai-chat-close" type="button" aria-label="关闭">✕</button>
-    </div>
-  </header>
-  <div class="ai-chat__messages" id="ai-chat-messages" aria-live="polite"></div>
-  <form class="ai-chat__composer" id="ai-chat-form" autocomplete="off">
-    <input
-      class="ai-chat__input"
-      id="ai-chat-input"
-      type="text"
-      inputmode="text"
-      placeholder="输入一句话，回车发送…"
-      aria-label="输入消息"
-    />
-    <button class="ai-chat__send" id="ai-chat-send" type="submit">发送</button>
-  </form>
-</section>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@8/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@8.6.6/dist/pixi.min.js"></script>
 <script type="module" src="js/appmain.js"></script>
 </body>
 </html>

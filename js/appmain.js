@@ -7,7 +7,22 @@ import { setupHeroCardSvgLoop } from "./appmain/heroCardSvgLoop.js";
 import { setupHeroTopbar } from "./appmain/heroTopbar.js";
 import { applyPerCardCssVariables, applyRootCssVariables } from "./appmain/styleVars.js";
 import { createDesktopPet } from "./appmain/pet/index.js";
+import { createPetComicChat } from "./appmain/pet/petComicChat.js";
 import { setupScrollMaskZoom } from "./appmain/scrollMaskZoom.js";
+import { createCurtainRiverTransition } from "./appmain/curtainRiverTransition.js";
+import { createRiverScene } from "./appmain/riverScene.js";
+
+// 防止在某些开发环境/热更新场景下重复执行入口脚本，导致转场回调触发两次
+if (globalThis.__APPMAIN_BOOTSTRAPPED__) {
+  // #region agent log
+  fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:bootstrapGuard',message:'appmain.js already bootstrapped, aborting duplicate init',data:{},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  throw new Error("[appmain] duplicate bootstrap prevented");
+}
+globalThis.__APPMAIN_BOOTSTRAPPED__ = true;
+// #region agent log
+fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:bootstrapGuard',message:'appmain.js bootstrap start',data:{},timestamp:Date.now()})}).catch(()=>{});
+// #endregion
 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const context = createDomContext();
@@ -79,27 +94,36 @@ observeSections();
 document.body.classList.toggle("is-scrolled", window.scrollY > 24);
 cardStackController.updateByScroll();
 
-setupScrollMaskZoom({ prefersReducedMotion });
+const riverScene = createRiverScene();
+
+const transition = createCurtainRiverTransition({
+  onClosed() {
+    if (!riverScene) return;
+    // 幕布合拢后：幕布本身作为“地面”，河流从幕布上流下（不跳转、不切页面结构）
+    // #region agent log
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:onClosed',message:'curtain closed -> startFlow',data:{scrollY:Math.round(window.scrollY),prefersReducedMotion},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    riverScene.startFlow({
+      duration: prefersReducedMotion ? 0.01 : 3.0,
+      ease: prefersReducedMotion ? "none" : "power2.inOut",
+    });
+  },
+  onBeforeOpen() {
+    // 回退时：先让幕布后内容消失，再开幕布
+    riverScene?.stopAndHide?.();
+  },
+  onOpened() {
+    // 打开完成后无需再做额外处理
+  },
+});
+
+setupScrollMaskZoom({ prefersReducedMotion, onProgress: transition.handleProgress });
 
 const petHost = document.getElementById("pet-layer");
 const petHitzone = document.getElementById("pet-hitzone");
 const petAnchorEl = document.querySelector(".stack-card--primary");
 const petTargetEl = document.getElementById("target-zone");
 
-if (petHost && petHitzone) {
-  createDesktopPet({
-    host: petHost,
-    hitzone: petHitzone,
-    anchorEl: petAnchorEl,
-    targetEl: petTargetEl,
-    prefersReducedMotion,
-    scale: 2,
-  }).catch((err) => {
-    console.error("[desktop-pet] 初始化失败", err);
-  });
-}
-
-// ====== AI 聊天测试：/api/chat ======
 async function sendToAI(userText) {
   const response = await fetch("/api/chat", {
     method: "POST",
@@ -137,27 +161,7 @@ const chatEls = {
   menu: document.getElementById("guide-menu"),
   menuPanel: document.getElementById("guide-menu-panel"),
   menuItems: Array.from(document.querySelectorAll("#guide-menu [data-action]")),
-  root: document.getElementById("ai-chat"),
-  messages: document.getElementById("ai-chat-messages"),
-  form: document.getElementById("ai-chat-form"),
-  input: document.getElementById("ai-chat-input"),
-  send: document.getElementById("ai-chat-send"),
-  close: document.getElementById("ai-chat-close"),
 };
-
-function appendChatMessage(role, text) {
-  if (!chatEls.messages) return;
-  const div = document.createElement("div");
-  div.className =
-    role === "user"
-      ? "ai-chat__msg ai-chat__msg--user"
-      : role === "ai"
-        ? "ai-chat__msg ai-chat__msg--ai"
-        : "ai-chat__msg ai-chat__msg--sys";
-  div.textContent = text;
-  chatEls.messages.appendChild(div);
-  chatEls.messages.scrollTop = chatEls.messages.scrollHeight;
-}
 
 function setMenuOpen(nextOpen) {
   if (!chatEls.menu || !chatEls.menuPanel) return;
@@ -165,29 +169,36 @@ function setMenuOpen(nextOpen) {
   chatEls.menuPanel.setAttribute("aria-hidden", nextOpen ? "false" : "true");
 }
 
-function setChatOpen(nextOpen) {
-  if (!chatEls.root) return;
-  chatEls.root.classList.toggle("is-hidden", !nextOpen);
-  chatEls.root.setAttribute("aria-hidden", nextOpen ? "false" : "true");
-  if (nextOpen) {
-    chatEls.input?.focus();
-  }
-}
-
-// 点击“GO”后，下拉显示导览选项栏
-context.heroGoBtn?.addEventListener("click", () => {
+// 点击“互动导览”后，下拉显示导览选项栏
+context.heroPill?.addEventListener("click", () => {
   setMenuOpen(!(chatEls.menu?.classList.contains("is-open") ?? false));
 });
+
+// 点击空白处自动收起导览菜单
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!chatEls.menu || !chatEls.menuPanel) return;
+    const isOpen = chatEls.menu.classList.contains("is-open");
+    if (!isOpen) return;
+
+    const target = e.target instanceof Node ? e.target : null;
+    if (!target) return;
+
+    // 点在触发按钮或菜单面板内，不收起
+    if (context.heroPill?.contains(target)) return;
+    if (chatEls.menuPanel.contains(target)) return;
+
+    setMenuOpen(false);
+  },
+  { capture: true }
+);
 
 // 菜单项点击
 if (chatEls.menuItems.length > 0) {
   chatEls.menuItems.forEach((btn) => {
     btn.addEventListener("click", () => {
       const action = btn.getAttribute("data-action");
-      if (action === "ai") {
-        setChatOpen(true);
-        return;
-      }
       if (action === "route") {
         window.location.href = "map.html";
         return;
@@ -197,39 +208,46 @@ if (chatEls.menuItems.length > 0) {
   });
 }
 
-// 关闭聊天
-chatEls.close?.addEventListener("click", () => setChatOpen(false));
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") setChatOpen(false);
+  if (e.key !== "Escape") return;
+  setMenuOpen(false);
 });
 
-if (chatEls.root && chatEls.form && chatEls.input && chatEls.send && chatEls.messages) {
-  appendChatMessage("sys", "提示：在导览菜单点“AI 对话”，然后输入内容发送。");
-
-  chatEls.form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const userText = chatEls.input.value.trim();
-    if (!userText) return;
-
-    appendChatMessage("user", userText);
-    chatEls.input.value = "";
-
-    chatEls.send.disabled = true;
-    chatEls.input.disabled = true;
-    try {
-      const reply = await sendToAI(userText);
-      appendChatMessage("ai", reply);
-    } catch (err) {
-      console.error("发送失败:", err);
-      const msg =
-        (err && typeof err === "object" && "message" in err && typeof err.message === "string" && err.message.trim() ? err.message.trim() : null) ??
-        "发送失败：请检查控制台或后端 /api/chat 是否可用。";
-      appendChatMessage("sys", `发送失败：${msg}`);
-    } finally {
-      chatEls.send.disabled = false;
-      chatEls.input.disabled = false;
-      chatEls.input.focus();
-    }
+// ====== 桌宠漫画对话：复用 /api/chat ======
+if (petHost && petHitzone) {
+  (async () => {
+    let comic = null;
+    // #region agent log
+    console.log("[dbg ee6ebc] starting createDesktopPet", { hasHost: !!petHost, hasHitzone: !!petHitzone, hasAnchor: !!petAnchorEl, hasTarget: !!petTargetEl });
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:pet-init',message:'starting createDesktopPet',data:{hasHost:!!petHost,hasHitzone:!!petHitzone,hasAnchor:!!petAnchorEl,hasTarget:!!petTargetEl},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const pet = await createDesktopPet({
+      host: petHost,
+      hitzone: petHitzone,
+      anchorEl: petAnchorEl,
+      targetEl: petTargetEl,
+      prefersReducedMotion,
+      scale: 2,
+      onHeadClick() {
+        // #region agent log
+        console.log("[dbg ee6ebc] pet onHeadClick fired", { comicReady: !!comic });
+        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain.js:onHeadClick',message:'pet onHeadClick fired',data:{comicReady:!!comic},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        comic?.onHeadClick?.();
+      },
+    });
+    // #region agent log
+    console.log("[dbg ee6ebc] createDesktopPet resolved", { petNull: pet == null, hasGetAnchors: !!pet?.getAnchors });
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:pet-created',message:'createDesktopPet resolved',data:{petNull:pet==null,hasGetAnchors:!!pet?.getAnchors},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!pet) return;
+    comic = createPetComicChat({ pet, sendToAI, prefersReducedMotion });
+    // #region agent log
+    console.log("[dbg ee6ebc] createPetComicChat returned", { comicNull: comic == null, hasOnHeadClick: !!comic?.onHeadClick });
+    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:comic-created',message:'createPetComicChat returned',data:{comicNull:comic==null,hasOnHeadClick:!!comic?.onHeadClick},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  })().catch((err) => {
+    console.error("[desktop-pet] 初始化失败", err);
   });
 }
 

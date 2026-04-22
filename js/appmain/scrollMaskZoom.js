@@ -16,7 +16,7 @@ const LERP_ALPHA = 0.12;
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
 
-export function setupScrollMaskZoom({ prefersReducedMotion } = {}) {
+export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } = {}) {
   if (typeof window === "undefined") return null;
 
   const section = document.getElementById("cm-transition");
@@ -63,6 +63,7 @@ export function setupScrollMaskZoom({ prefersReducedMotion } = {}) {
   let entryOffsetPx = 0;
   let rafId = null;
   let currentTrackX = 0;
+  let hasEnded = false;
 
   const measure = () => {
     if (!hTrack) return;
@@ -92,6 +93,13 @@ export function setupScrollMaskZoom({ prefersReducedMotion } = {}) {
     const sectionTop = section.offsetTop;
     const scrollLength = Math.max(1, scrollWrap.offsetHeight - window.innerHeight);
     const progress = clamp01((window.scrollY - sectionTop) / scrollLength);
+    if (typeof onProgress === "function") {
+      try {
+        onProgress(progress);
+      } catch (e) {
+        console.error("[scrollMaskZoom] onProgress 回调执行失败", e);
+      }
+    }
 
     // panProgress：zoom 之后的“横移阶段”进度（给胶片轨道与双星公转共用）
     const panProgress =
@@ -136,6 +144,24 @@ export function setupScrollMaskZoom({ prefersReducedMotion } = {}) {
       bgMoon.style.transform = `translate(-50%, -50%) translateZ(${moonZ}px) translate(${moonX}px, ${moonY}px) rotate(${
         -angle * 30
       }deg)`;
+
+      // 月相渐变：从开始到结束才刚好变满（progress: 0 -> 1）
+      // 起始残月更细：把起始 shadow 调得更接近 0（绝对值更小）
+      const p = progress;
+      const startShadow = -8;   // 残月更细（可再调：-5 更细，-12 更厚）
+      const endShadow = -300;   // 接近满月
+      // 视觉上 box-shadow 的“变满速度”会显得偏快，这里用慢启动曲线拉长前段时间
+      const t = clamp01(p);
+      const tEase = Math.pow(t, 6); // 数值越大：越晚才明显变满（可在 2.0~3.2 之间调）
+      const shadow = startShadow + (endShadow - startShadow) * tEase;
+
+      if (t >= 0.999) {
+        bgMoon.style.backgroundColor = "#fff";
+        bgMoon.style.boxShadow = "none";
+      } else {
+        bgMoon.style.backgroundColor = "transparent";
+        bgMoon.style.boxShadow = `inset ${shadow}px ${shadow}px 0 0 #fff`;
+      }
     }
 
     // 阶段 B：胶片入场 + 横移 + 3D
@@ -162,6 +188,17 @@ export function setupScrollMaskZoom({ prefersReducedMotion } = {}) {
         data.currentTranslateZ = lerp(data.currentTranslateZ, targetTranslateZ, LERP_ALPHA);
         data.el.style.transform = `translateZ(${data.currentTranslateZ}px) rotateY(${data.currentRotateY}deg)`;
       });
+    }
+
+    if (!hasEnded && progress >= 0.999) {
+      hasEnded = true;
+      if (typeof onEnd === "function") {
+        try {
+          onEnd();
+        } catch (e) {
+          console.error("[scrollMaskZoom] onEnd 回调执行失败", e);
+        }
+      }
     }
   };
 
