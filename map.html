@@ -592,7 +592,7 @@
           driving.search(
             origin,
             destination,
-            waypoints.length ? { waypoints } : undefined,
+            { waypoints },
             (status, result) => {
               done = true;
               window.clearTimeout(timeout);
