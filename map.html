@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>互动小地图｜阊门导览</title>
+
+    <!-- 必须：先配置安全密钥，再加载 AMap 主脚本 -->
+    <script>
+      window._AMapSecurityConfig = {
+        securityJsCode: "[此处填入你的安全密钥]",
+      };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=[此处填入你的Key]"></script>
+
+    <style>
+      :root {
+        --bg: #06060a;
+        --panel: rgba(12, 12, 18, 0.72);
+        --panelBorder: rgba(255, 255, 255, 0.14);
+        --txt: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.72);
+        --acid: #b8ff2c;
+        --danger: #ff2d55;
+        --danger2: #ff3b30;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        overflow: hidden;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+      }
+
+      #map {
+        position: fixed;
+        inset: 0;
+      }
+
+      /* 覆盖层 UI（扁平/酸性风） */
+      .hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .hud__topbar {
+        pointer-events: none;
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--panelBorder);
+        background: linear-gradient(
+          180deg,
+          rgba(16, 16, 24, 0.72),
+          rgba(10, 10, 14, 0.55)
+        );
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow);
+        color: var(--txt);
+        border-radius: 14px;
+      }
+
+      .brand__dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--acid);
+        box-shadow: 0 0 0 3px rgba(184, 255, 44, 0.16),
+          0 0 20px rgba(184, 255, 44, 0.22);
+      }
+
+      .brand__title {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .brand__sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: 6px;
+      }
+
+      .btn {
+        pointer-events: auto;
+        appearance: none;
+        border: 1px solid var(--panelBorder);
+        background: rgba(18, 18, 26, 0.68);
+        color: var(--txt);
+        padding: 10px 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+        transition: transform 150ms ease, background 150ms ease,
+          border-color 150ms ease;
+        user-select: none;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(184, 255, 44, 0.55);
+      }
+
+      .btn:active {
+        transform: translateY(0px);
+      }
+
+      .btn--primary {
+        background: linear-gradient(135deg, rgba(184, 255, 44, 0.16), rgba(255, 45, 85, 0.12));
+        border-color: rgba(184, 255, 44, 0.28);
+      }
+
+      .panel {
+        pointer-events: auto;
+        position: fixed;
+        right: 14px;
+        top: 64px;
+        width: min(360px, calc(100vw - 28px));
+        border-radius: 16px;
+        border: 1px solid var(--panelBorder);
+        background: var(--panel);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .panel__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 12px 10px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .panel__title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--txt);
+      }
+
+      .panel__body {
+        padding: 10px 12px 12px 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .spotBtn {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 28px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(8, 8, 12, 0.55);
+        color: var(--txt);
+        cursor: pointer;
+        transition: transform 160ms ease, border-color 160ms ease,
+          background 160ms ease;
+      }
+
+      .spotBtn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 45, 85, 0.55);
+        background: rgba(10, 10, 16, 0.72);
+      }
+
+      .spotBtn:active {
+        transform: translateY(0px);
+      }
+
+      .spotBtn__pin {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: var(--danger);
+        box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.9),
+          0 0 0 10px rgba(255, 45, 85, 0.18),
+          0 18px 32px rgba(0, 0, 0, 0.35);
+      }
+
+      .spotBtn:hover .spotBtn__pin {
+        background: var(--acid);
+        box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.82),
+          0 0 0 10px rgba(184, 255, 44, 0.22),
+          0 18px 32px rgba(0, 0, 0, 0.35);
+      }
+
+      .spotBtn__name {
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .spotBtn__meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .spotBtn__hint {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.66);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 6px 8px;
+        border-radius: 999px;
+      }
+
+      /* 自定义 HTML Marker（扁平化圆点） */
+      .cm-marker {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: var(--danger2);
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.95),
+          0 0 0 12px rgba(255, 59, 48, 0.2),
+          0 22px 50px rgba(0, 0, 0, 0.45);
+        transform: translate3d(0, 0, 0);
+        transition: transform 160ms ease, filter 160ms ease;
+      }
+
+      .cm-marker:hover {
+        transform: translate3d(0, 0, 0) scale(1.18);
+        filter: hue-rotate(120deg) saturate(1.2);
+      }
+
+      .cm-marker.is-active {
+        transform: translate3d(0, 0, 0) scale(1.25);
+        filter: hue-rotate(80deg) saturate(1.4);
+      }
+
+      .toast {
+        pointer-events: none;
+        position: fixed;
+        left: 14px;
+        bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(10, 10, 14, 0.55);
+        color: var(--muted);
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow);
+        max-width: min(520px, calc(100vw - 28px));
+        font-size: 12px;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map" aria-label="高德地图容器"></div>
+
+    <div class="hud" aria-hidden="false">
+      <div class="hud__topbar">
+        <div class="brand" aria-label="页面标题">
+          <span class="brand__dot" aria-hidden="true"></span>
+          <span class="brand__title">互动导览</span>
+          <span class="brand__sub">AMap v2 · dark · 3D</span>
+        </div>
+        <button class="btn btn--primary" id="btn-back" type="button">
+          ◄ 返回
+        </button>
+      </div>
+
+      <aside class="panel" aria-label="推荐路线">
+        <div class="panel__head">
+          <div class="panel__title">推荐路线</div>
+          <button class="btn" id="btn-recenter" type="button">回到阊门</button>
+        </div>
+        <div class="panel__body" id="spots">
+          <button class="spotBtn" type="button" data-spot="changmen">
+            <span class="spotBtn__pin" aria-hidden="true"></span>
+            <span>
+              <div class="spotBtn__name">阊门</div>
+              <div class="spotBtn__meta">120.6056, 31.315116</div>
+            </span>
+            <span class="spotBtn__hint">定位</span>
+          </button>
+
+          <button class="spotBtn" type="button" data-spot="shantang">
+            <span class="spotBtn__pin" aria-hidden="true"></span>
+            <span>
+              <div class="spotBtn__name">山塘街</div>
+              <div class="spotBtn__meta">120.59389, 31.32611</div>
+            </span>
+            <span class="spotBtn__hint">定位</span>
+          </button>
+
+          <button class="spotBtn" type="button" data-spot="yipu">
+            <span class="spotBtn__pin" aria-hidden="true"></span>
+            <span>
+              <div class="spotBtn__name">艺圃</div>
+              <div class="spotBtn__meta">120.604722, 31.31525</div>
+            </span>
+            <span class="spotBtn__hint">定位</span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="toast" id="toast">
+        提示：点右侧“推荐路线”里的地点按钮，地图会使用缓动动画平滑移动并缩放到该点。
+      </div>
+    </div>
+
+    <script>
+      const SPOTS = {
+        changmen: { name: "阊门", lnglat: [120.6056, 31.315116] },
+        shantang: { name: "山塘街", lnglat: [120.59389, 31.32611] },
+        yipu: { name: "艺圃", lnglat: [120.604722, 31.31525] },
+      };
+
+      function ensureAmapReady() {
+        return new Promise((resolve, reject) => {
+          const start = Date.now();
+          const timeoutMs = 6000;
+          const tick = () => {
+            if (window.AMap && typeof window.AMap.Map === "function") {
+              resolve();
+              return;
+            }
+            if (Date.now() - start > timeoutMs) {
+              reject(
+                new Error(
+                  "AMap 未加载成功。请确认已填写 Key 与安全密钥，并检查网络。"
+                )
+              );
+              return;
+            }
+            requestAnimationFrame(tick);
+          };
+          tick();
+        });
+      }
+
+      function createHtmlMarkerEl() {
+        const el = document.createElement("div");
+        el.className = "cm-marker";
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "-1");
+        return el;
+      }
+
+      function setActiveMarker(activeId, markerElsById) {
+        Object.entries(markerElsById).forEach(([id, el]) => {
+          el.classList.toggle("is-active", id === activeId);
+        });
+      }
+
+      (async () => {
+        const toastEl = document.getElementById("toast");
+        const setToast = (txt) => {
+          if (!toastEl) return;
+          toastEl.textContent = txt;
+        };
+
+        try {
+          await ensureAmapReady();
+        } catch (err) {
+          console.error(err);
+          setToast(err.message);
+          return;
+        }
+
+        const map = new AMap.Map("map", {
+          center: [120.604, 31.314],
+          zoom: 15.5,
+          viewMode: "3D",
+          pitch: 45,
+          mapStyle: "amap://styles/dark",
+          resizeEnable: true,
+        });
+
+        const markerElsById = {};
+        const markersById = {};
+
+        Object.entries(SPOTS).forEach(([id, spot]) => {
+          const el = createHtmlMarkerEl();
+          markerElsById[id] = el;
+
+          const marker = new AMap.Marker({
+            position: spot.lnglat,
+            content: el,
+            offset: new AMap.Pixel(-9, -9),
+            clickable: true,
+          });
+          markersById[id] = marker;
+          map.add(marker);
+
+          el.addEventListener("mouseenter", () => setToast(`${spot.name}：hover`));
+          el.addEventListener("mouseleave", () =>
+            setToast("提示：点右侧“推荐路线”里的地点按钮进行定位。")
+          );
+
+          marker.on("click", () => {
+            setActiveMarker(id, markerElsById);
+            setToast(`${spot.name}：已定位`);
+            map.setZoomAndCenter(16.5, spot.lnglat, false, 850);
+          });
+        });
+
+        const focusSpot = (id) => {
+          const spot = SPOTS[id];
+          if (!spot) return;
+          setActiveMarker(id, markerElsById);
+          setToast(`${spot.name}：平滑移动中…`);
+          map.setZoomAndCenter(16.5, spot.lnglat, false, 850);
+        };
+
+        document.getElementById("spots")?.addEventListener("click", (e) => {
+          const btn = e.target?.closest?.("[data-spot]");
+          if (!btn) return;
+          focusSpot(btn.getAttribute("data-spot"));
+        });
+
+        document.getElementById("btn-recenter")?.addEventListener("click", () => {
+          setActiveMarker("changmen", markerElsById);
+          map.setZoomAndCenter(15.5, [120.604, 31.314], false, 850);
+          setToast("已回到阊门（初始视角）");
+        });
+
+        document.getElementById("btn-back")?.addEventListener("click", () => {
+          window.location.href = "appMain.html";
+        });
+
+        setToast("地图就绪：请选择右侧点位开始互动导览。");
+      })();
+    </script>
+  </body>
+</html>

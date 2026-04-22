@@ -188,6 +188,10 @@ if (chatEls.menuItems.length > 0) {
         setChatOpen(true);
         return;
       }
+      if (action === "route") {
+        window.location.href = "map.html";
+        return;
+      }
       console.log("[guide-menu]", action);
     });
   });
