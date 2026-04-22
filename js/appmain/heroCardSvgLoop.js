@@ -112,17 +112,49 @@ export function setupHeroCardSvgLoop({ stackCards = [], prefersReducedMotion = f
     return { destroy: () => {} };
   }
 
-  const loopHandles = [];
+  const loopsByVariant = new Map();
+  let activeVariant = null;
 
   MOTIF_VARIANTS.forEach((variant, index) => {
     const card = stackCards.find((item) => item.classList.contains(variant));
     if (!card) return;
-    loopHandles.push(...createCardLoop(card, index));
+    const loops = createCardLoop(card, index);
+    loops.forEach((loop) => loop?.pause?.(0));
+    loopsByVariant.set(variant, { card, loops });
+  });
+
+  const setActiveVariant = (nextVariant) => {
+    if (nextVariant === activeVariant) return;
+    activeVariant = nextVariant;
+    loopsByVariant.forEach(({ loops }, variant) => {
+      if (variant === nextVariant) loops.forEach((loop) => loop?.resume?.());
+      else loops.forEach((loop) => loop?.pause?.());
+    });
+  };
+
+  const pickActiveVariant = () => {
+    for (const variant of MOTIF_VARIANTS) {
+      const entry = loopsByVariant.get(variant);
+      if (!entry?.card) continue;
+      if (entry.card.classList.contains("is-active")) return variant;
+    }
+    return MOTIF_VARIANTS.find((variant) => loopsByVariant.has(variant)) ?? null;
+  };
+
+  setActiveVariant(pickActiveVariant());
+
+  const observer = new MutationObserver(() => {
+    const next = pickActiveVariant();
+    if (next) setActiveVariant(next);
+  });
+  loopsByVariant.forEach(({ card }) => {
+    observer.observe(card, { attributes: true, attributeFilter: ["class"] });
   });
 
   return {
     destroy() {
-      loopHandles.forEach((loop) => loop?.kill?.());
+      observer.disconnect();
+      loopsByVariant.forEach(({ loops }) => loops.forEach((loop) => loop?.kill?.()));
     },
   };
 }

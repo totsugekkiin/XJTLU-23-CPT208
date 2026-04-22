@@ -22,6 +22,13 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
   const { hero, heroCard, heroCardStack, stackCards, heroTopbarSync, heroHintSync, prefersReducedMotion } = context;
   const controllers = createCardControllers(stackCards, cardsConfig);
   let activeCardId = null;
+  let lastStage = null;
+  let lastSwitchQuant = null;
+  let lastReleaseQuant = null;
+  let lastViewportW = 0;
+  let lastViewportH = 0;
+  let cachedScrollLengthPx = null;
+  let cachedHiddenRatio = null;
 
   const setCardContentVisible = (id, visible) => {
     const card = controllers.find((item) => item.id === id);
@@ -41,12 +48,22 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
     controllers.forEach((card) => card.element.classList.toggle("is-active", card.id === id));
   };
 
-  const getDockBottom = (progress) => {
+  const refreshMetricsIfNeeded = () => {
+    if (!hero) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw === lastViewportW && vh === lastViewportH && cachedScrollLengthPx !== null && cachedHiddenRatio !== null) return;
+    lastViewportW = vw;
+    lastViewportH = vh;
     const heroStyles = window.getComputedStyle(hero);
+    cachedScrollLengthPx = parseCssNumber(heroStyles.getPropertyValue("--hero-scroll-length-px"), 1);
+    cachedHiddenRatio = parseCssNumber(heroStyles.getPropertyValue("--primary-card-hidden-ratio"), 0);
+  };
+
+  const getDockBottom = (progress) => {
     const primary = controllers[0];
     const cardHeight = primary?.element?.offsetHeight || heroCard.offsetHeight || 0;
-    const hiddenRatio = parseCssNumber(heroStyles.getPropertyValue("--primary-card-hidden-ratio"), 0);
-    const hiddenSize = cardHeight * hiddenRatio;
+    const hiddenSize = cardHeight * (cachedHiddenRatio ?? 0);
     const initialBottom = -hiddenSize;
     const targetBottom = (window.innerHeight - cardHeight) / 2 + 16;
     const moveProgress = clamp(progress / motionConfig.stages.dockEnd, 0, 1);
@@ -78,21 +95,25 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
   const renderSwitch = (progress) => {
     const switchProgress = (progress - motionConfig.stages.dockEnd) / (motionConfig.stages.switchEnd - motionConfig.stages.dockEnd);
     const p = clamp(switchProgress, 0, 1);
+    const quant = 1 / 240;
+    const qp = Math.round(p / quant) * quant;
+    if (lastStage === "switch" && lastSwitchQuant === qp) return;
+    lastSwitchQuant = qp;
     const edgeEnd = motionConfig.switch.point;
     const flipEnd = motionConfig.switch.faceOutEnd;
     const scatterStart = motionConfig.switch.scatterStart ?? flipEnd;
 
-    const primaryEdgeProgress = clamp(mapRange(p, 0, edgeEnd, 0, 1), 0, 1);
-    const flipProgress = clamp(mapRange(p, edgeEnd, flipEnd, 0, 1), 0, 1);
-    const scatterProgress = clamp(mapRange(p, scatterStart, 1, 0, 1), 0, 1);
-    const switched = p >= edgeEnd;
+    const primaryEdgeProgress = clamp(mapRange(qp, 0, edgeEnd, 0, 1), 0, 1);
+    const flipProgress = clamp(mapRange(qp, edgeEnd, flipEnd, 0, 1), 0, 1);
+    const scatterProgress = clamp(mapRange(qp, scatterStart, 1, 0, 1), 0, 1);
+    const switched = qp >= edgeEnd;
     const primaryRotateY = primaryEdgeProgress * motionConfig.switch.primaryRotateYMax;
     const stackScaleX = mapRange(flipProgress, 0, 1, motionConfig.switch.stackScaleXMin, 1);
     const stackRotateY = mapRange(flipProgress, 0, 1, -90, 0);
     const stackFrontReady = flipProgress >= 0.8;
 
-    const primaryOpacity = switched ? 1 - clamp(mapRange(p, edgeEnd, edgeEnd + 0.14, 0, 1), 0, 1) : 1;
-    const stackOpacity = switched ? clamp(mapRange(p, edgeEnd + 0.02, edgeEnd + 0.18, 0, 1), 0, 1) : 0;
+    const primaryOpacity = switched ? 1 - clamp(mapRange(qp, edgeEnd, edgeEnd + 0.14, 0, 1), 0, 1) : 1;
+    const stackOpacity = switched ? clamp(mapRange(qp, edgeEnd + 0.02, edgeEnd + 0.18, 0, 1), 0, 1) : 0;
     setCardActive(switched ? "blue" : "primary");
 
     controllers.forEach((card, index) => {
@@ -123,6 +144,10 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
       0,
       (progress - motionConfig.stages.switchEnd) / (motionConfig.stages.releaseEnd - motionConfig.stages.switchEnd)
     );
+    const quant = 1 / 180;
+    const qr = Math.round(clamp(releaseProgress, 0, 1) / quant) * quant;
+    if (lastStage === "release" && lastReleaseQuant === qr) return;
+    lastReleaseQuant = qr;
     const activeIndex = clamp(1 + Math.floor(Math.min(releaseProgress, 1) * (controllers.length - 1)), 1, controllers.length - 1);
     setCardActive(controllers[activeIndex]?.id || "blue");
 
@@ -160,9 +185,9 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
 
   const updateByScroll = () => {
     if (prefersReducedMotion || !hero || !heroCard || !heroCardStack || controllers.length === 0) return;
+    refreshMetricsIfNeeded();
     const scrollY = Math.max(0, window.scrollY);
-    const heroStyles = window.getComputedStyle(hero);
-    const scrollLengthPx = parseCssNumber(heroStyles.getPropertyValue("--hero-scroll-length-px"), 1);
+    const scrollLengthPx = cachedScrollLengthPx ?? 1;
     const progress = Math.max(0, scrollY / Math.max(1, scrollLengthPx));
 
     heroTopbarSync?.();
@@ -170,13 +195,28 @@ export function createHeroCardStackController({ context, cardsConfig, motionConf
     heroHintSync?.(clamp(Math.min(progress, 1) / motionConfig.stages.dockEnd, 0, 1));
 
     if (progress <= motionConfig.stages.dockEnd) {
-      renderDock();
+      if (lastStage !== "dock") {
+        renderDock();
+        lastSwitchQuant = null;
+        lastReleaseQuant = null;
+      }
+      lastStage = "dock";
       return;
     }
     if (progress <= motionConfig.stages.switchEnd) {
+      if (lastStage !== "switch") {
+        lastSwitchQuant = null;
+        lastReleaseQuant = null;
+      }
+      lastStage = "switch";
       renderSwitch(progress);
       return;
     }
+    if (lastStage !== "release") {
+      lastReleaseQuant = null;
+      lastSwitchQuant = null;
+    }
+    lastStage = "release";
     renderRelease(progress);
   };
 

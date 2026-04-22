@@ -4,6 +4,40 @@ export function setupHeroSurface({ context, motionConfig, prefersReducedMotion }
   const { heroCard, heroCardStack } = context;
   if (prefersReducedMotion || !heroCard || !heroCardStack) return;
 
+  const createQuickTo = (target, prop, vars) => {
+    if (typeof gsap?.quickTo === "function") return gsap.quickTo(target, prop, vars);
+    const setter = typeof gsap?.quickSetter === "function" ? gsap.quickSetter(target, prop) : null;
+    return (value) => {
+      if (setter) setter(value);
+      else gsap.set(target, { [prop]: value });
+    };
+  };
+
+  const setPointerX = createQuickTo(heroCard, "--pointer-x", {
+    duration: 0.22,
+    ease: "power3.out",
+    overwrite: "auto",
+  });
+  const setPointerY = createQuickTo(heroCard, "--pointer-y", {
+    duration: 0.22,
+    ease: "power3.out",
+    overwrite: "auto",
+  });
+  const setTiltX = createQuickTo(heroCardStack, "--tilt-x", {
+    duration: 0.26,
+    ease: "power3.out",
+    overwrite: "auto",
+  });
+  const setTiltY = createQuickTo(heroCardStack, "--tilt-y", {
+    duration: 0.26,
+    ease: "power3.out",
+    overwrite: "auto",
+  });
+
+  let pendingX = null;
+  let pendingY = null;
+  let rafId = null;
+
   const updateSurface = (clientX, clientY) => {
     const rect = heroCard.getBoundingClientRect();
     const localX = clamp(clientX - rect.left, 0, rect.width || 1);
@@ -13,25 +47,21 @@ export function setupHeroSurface({ context, motionConfig, prefersReducedMotion }
     const tiltX = (xRatio - 0.5) * motionConfig.tactile.hoverTiltX;
     const tiltY = (0.5 - yRatio) * motionConfig.tactile.hoverTiltY;
 
-    gsap.to(heroCard, {
-      "--pointer-x": `${Math.round(xRatio * 100)}%`,
-      "--pointer-y": `${Math.round(yRatio * 100)}%`,
-      duration: 0.22,
-      ease: "power3.out",
-      overwrite: "auto",
-    });
-
-    gsap.to(heroCardStack, {
-      "--tilt-x": `${tiltX.toFixed(2)}deg`,
-      "--tilt-y": `${tiltY.toFixed(2)}deg`,
-      duration: 0.26,
-      ease: "power3.out",
-      overwrite: "auto",
-    });
+    setPointerX(`${Math.round(xRatio * 100)}%`);
+    setPointerY(`${Math.round(yRatio * 100)}%`);
+    setTiltX(`${tiltX.toFixed(2)}deg`);
+    setTiltY(`${tiltY.toFixed(2)}deg`);
   };
 
   heroCard.addEventListener("pointermove", (event) => {
-    updateSurface(event.clientX, event.clientY);
+    pendingX = event.clientX;
+    pendingY = event.clientY;
+    if (rafId !== null) return;
+    rafId = window.requestAnimationFrame(() => {
+      rafId = null;
+      if (pendingX === null || pendingY === null) return;
+      updateSurface(pendingX, pendingY);
+    });
   });
 
   heroCard.addEventListener("pointerdown", (event) => {
@@ -48,22 +78,17 @@ export function setupHeroSurface({ context, motionConfig, prefersReducedMotion }
   });
 
   heroCard.addEventListener("pointerleave", () => {
-    gsap.to(heroCard, {
-      "--pointer-x": "50%",
-      "--pointer-y": "50%",
-      duration: 0.4,
-      ease: "power3.out",
-      overwrite: "auto",
-    });
+    pendingX = null;
+    pendingY = null;
+    if (rafId !== null) {
+      window.cancelAnimationFrame(rafId);
+      rafId = null;
+    }
 
-    gsap.to(heroCardStack, {
-      "--tilt-x": "0deg",
-      "--tilt-y": "0deg",
-      scaleX: 1,
-      scaleY: 1,
-      duration: 0.45,
-      ease: "power3.out",
-      overwrite: "auto",
-    });
+    setPointerX("50%");
+    setPointerY("50%");
+    setTiltX("0deg");
+    setTiltY("0deg");
+    gsap.to(heroCardStack, { scaleX: 1, scaleY: 1, duration: 0.45, ease: "power3.out", overwrite: "auto" });
   });
 }
