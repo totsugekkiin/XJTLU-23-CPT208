@@ -16,7 +16,8 @@ const STROKE = 0x2d3142;
 export const RIG_METRICS = {
   headRadius: 20,
   torsoWidth: 34,
-  torsoHeight: 40,
+  // 骨架躯干高度（影响头/手臂挂点与整体比例）
+  torsoHeight: 32,
   armWidth: 12,
   armLength: 36,
   armInset: 6,

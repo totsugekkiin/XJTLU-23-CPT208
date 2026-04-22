@@ -1,12 +1,12 @@
 /* appMain page styles (single-hero version) */
 
-/* 页面全局基底 */
+/* ???????????? */
 body {
   margin: 0;
   padding: 0;
   background-color: #f6cd45;
   color: #11324f;
-  font-family: "PingFang SC", "Microsoft YaHei", "华文仿宋", "SimSun", serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "????????", "SimSun", serif;
   overflow-x: hidden;
   position: relative;
 }
@@ -16,7 +16,7 @@ body > * {
   z-index: 1;
 }
 
-/* 通用按钮（Hero 中 GO 使用） */
+/* ??????????????Hero ? GO ?????? */
 .btn {
   background-color: #ff4d08;
   color: #fff;
@@ -35,14 +35,14 @@ body > * {
   filter: brightness(1.06);
 }
 
-/* Hero 首屏 */
+/* Hero ??? */
 .hero {
   --hero-pad-x: 30px;
   --hero-card-max-width: 460px;
   --hero-card-size: min(calc(100vw - (var(--hero-pad-x) * 2)), var(--hero-card-max-width));
   /*
-   * 主橙卡独立参数（只改这些即可微调主卡，不影响其它叠卡）
-   * width: 主卡宽度上限；height-ratio: 主卡高宽比（1 = 正方）
+   * ???????????????????????????????????????????????
+   * width: ???????????height-ratio: ?????????1 = ??????
    */
   --primary-card-max-width: 350px;
   --primary-card-width: min(calc(100vw - (var(--hero-pad-x) * 2)), var(--primary-card-max-width));
@@ -52,8 +52,8 @@ body > * {
   --primary-card-pad-x: 22px;
   --primary-card-pad-y: 28px;
   --primary-card-pad-bottom: 24px;
-  --primary-card-hidden-ratio: 0.2; /* 隐藏1/5，露出4/5 */
-  --hero-scroll-length-px: 2600px; /* 固定动画滚动长度 */
+  --primary-card-hidden-ratio: 0.2; /* ??????1/5????????4/5 */
+  --hero-scroll-length-px: 2600px; /* ???????????????????? */
   --hero-card-hidden-size: calc(var(--primary-card-height) * var(--primary-card-hidden-ratio));
   min-height: calc(100vh + var(--hero-card-hidden-size));
   min-height: calc(var(--hero-scroll-length-px) + 100vh + var(--hero-card-hidden-size));
@@ -68,7 +68,7 @@ body > * {
 }
 
 /* =========================================================
- * 背景云朵装饰层（随机分布 + 轻微漂浮）
+ * ????????????????????????????? + ???????
  * --------------------------------------------------------- */
 .cloud-field {
   position: absolute;
@@ -122,7 +122,39 @@ body > * {
   }
 }
 
-/* 顶部悬浮文案 */
+/* ??????? #hero ???????????????? */
+.hero-changmen-silhouette {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: calc(100px + clamp(52px, 9vh, 100px));
+  width: min(calc(92vw * 3), 2160px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0.92;
+  filter: drop-shadow(0 12px 28px rgba(17, 50, 79, 0.12));
+}
+
+.hero-changmen-silhouette__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(calc(38vh * 3), 960px);
+}
+
+@media (max-width: 520px) {
+  .hero-changmen-silhouette {
+    width: min(calc(96vw * 3), 1920px);
+    top: calc(100px + clamp(48px, 8vh, 88px));
+    opacity: 0.88;
+  }
+
+  .hero-changmen-silhouette__svg {
+    max-height: min(calc(32vh * 3), 780px);
+  }
+}
+
+/* ????????????? */
 .hero-topbar {
   position: fixed;
   top: 18px;
@@ -172,13 +204,13 @@ body > * {
   outline-offset: 3px;
 }
 
-/* 橙色卡片组件 */
+/* ???????????? */
 .hero-copy,
 .hero-card {
   background: transparent;
   border-radius: 0;
   min-height: 0;
-  aspect-ratio: 1 / 1; /* 改为正方形卡片 */
+  aspect-ratio: 1 / 1; /* ????????????? */
   padding: 0;
   text-align: center;
   position: fixed;
@@ -550,7 +582,7 @@ body > * {
 }
 
 /* =========================================================
- * 莲花绽放（stack-card--green 使用）
+ * ????????????stack-card--green ??????
  * --------------------------------------------------------- */
 .svg-motif--lotus .lotus-water {
   fill: #b9d9ff;
@@ -714,16 +746,16 @@ body > * {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: -14px; /* GO 上移 */
+  margin-top: -14px; /* GO ??? */
 }
 
-/* 下滑提示箭头 */
+/* ???????? */
 .hero-scroll-hint,
 .hero-card__scroll-hint {
   width: 30px;
   display: grid;
   justify-items: center;
-  margin-top: -6px; /* 箭头上移并更贴近 GO */
+  margin-top: -6px; /* ???????????? GO */
   animation: hintFloat 1.2s ease-in-out infinite;
 }
 
@@ -1004,13 +1036,13 @@ body {
 }
 
 /* =========================================================
- * 桌面宠物覆盖层
+ * ??????????????
  * --------------------------------------------------------- */
 
 .pet-layer {
   position: fixed;
   inset: 0;
-  /* 幕布转场层是 90；桌宠需要始终在最上层可见 */
+  /* ????????????? 90????????????????????????? */
   z-index: 120;
   pointer-events: none;
   overflow: hidden;
@@ -1055,7 +1087,7 @@ body {
   }
 }
 /* =========================================================
- * target-zone 感应区（IntersectionObserver 驱动）
+ * target-zone ??????????IntersectionObserver ??????
  * --------------------------------------------------------- */
 
 .target-zone-wrap {
@@ -1111,7 +1143,7 @@ body {
 }
 
 /* =========================================================
- * 转场：红色遮盖挖洞 + 滚动缩放
+ * ??????????????????? + ?????????
  * --------------------------------------------------------- */
 
 .cm-mask-transition {
@@ -1145,7 +1177,7 @@ body {
 }
 
 /* =========================================================
- * 底层界面：双星公转（日/月）
+ * ????????????????????????/?????
  * --------------------------------------------------------- */
 
 .cm-celestial-sun,
@@ -1330,6 +1362,9 @@ body {
   font-weight: 900;
   letter-spacing: 1px;
   animation: cmFilmstripFloat 3s ease-in-out infinite;
+  z-index: 5; /* ?????????????????????????????/????????? */
+  pointer-events: none;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
 }
 
 @keyframes cmFilmstripFloat {
@@ -1388,7 +1423,7 @@ body {
 }
 
 /* =========================================================
- * 幕布转场 + 河流第二幕（全屏覆盖层）
+ * ???????? + ??????????????????????
  * --------------------------------------------------------- */
 .curtain-container {
   position: fixed;
@@ -1407,12 +1442,12 @@ body {
 }
 
 /* =========================================================
- * 河流 Canvas 场景（幕布合上后出现）
+ * ?? Canvas ??????????????????????????
  * --------------------------------------------------------- */
 .river-stage {
   position: fixed;
   inset: 0;
-  z-index: 40; /* 低于幕布(90)，高于底层内容 */
+  z-index: 40; /* ????????(90)?????????????? */
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -1443,6 +1478,185 @@ body {
   opacity: 0;
   will-change: transform, opacity;
   transform-origin: 50% 50%;
+}
+
+/* =========================================================
+ * ????????????????????????????
+ * --------------------------------------------------------- */
+.river-island-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.river-island {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  max-width: none;
+  overflow-x: clip;
+  /* ? canvas ?????? riverScene ?? */
+  --river-cx: 50vw;
+  --river-hw: 72px;
+  transform: translate3d(-9999px, -9999px, 0);
+  will-change: transform;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.river-island.is-visible {
+  visibility: visible;
+}
+
+/* ?? | ?? | ?? ????????????????????? */
+.river-island__shore {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  grid-template-columns:
+    minmax(0, calc(var(--river-cx) - var(--river-hw)))
+    minmax(0, calc(2 * var(--river-hw)))
+    minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0;
+  transform: translate(0, -50%) scale(0.94);
+  opacity: 0;
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+}
+
+.river-island.is-active .river-island__shore {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+}
+
+.river-island--text-on-left .river-island__land {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: clamp(8px, 2vw, 22px);
+  margin-right: 6px;
+  max-width: min(440px, 100%);
+}
+
+.river-island--text-on-left .river-island__frame {
+  grid-column: 3;
+  justify-self: end;
+  margin-right: clamp(8px, 2vw, 22px);
+  margin-left: 6px;
+  width: min(210px, 28vw, 100%);
+}
+
+.river-island--text-on-right .river-island__land {
+  grid-column: 3;
+  justify-self: end;
+  margin-right: clamp(8px, 2vw, 22px);
+  margin-left: 6px;
+  max-width: min(440px, 100%);
+}
+
+.river-island--text-on-right .river-island__frame {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: clamp(8px, 2vw, 22px);
+  margin-right: 6px;
+  width: min(210px, 28vw, 100%);
+}
+
+.river-island__land {
+  min-width: 0;
+  padding: clamp(10px, 1.5vw, 18px) clamp(4px, 1vw, 8px);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.river-island__title {
+  margin: 0 0 8px;
+  color: rgba(12, 32, 52, 0.95);
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.95),
+    0 0 18px rgba(255, 255, 255, 0.75),
+    0 1px 3px rgba(255, 255, 255, 0.9);
+}
+
+.river-island__desc {
+  margin: 0;
+  color: rgba(30, 42, 58, 0.92);
+  line-height: 1.65;
+  font-size: 0.92rem;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.9),
+    0 0 14px rgba(255, 255, 255, 0.65),
+    0 1px 2px rgba(255, 255, 255, 0.85);
+}
+
+.river-island__frame {
+  position: relative;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  transform-origin: 50% 50%;
+  box-shadow: 0 14px 32px rgba(17, 50, 79, 0.22);
+  pointer-events: none;
+}
+
+.river-island[data-island-index="0"] .river-island__frame {
+  transform: rotate(-10deg);
+}
+
+.river-island[data-island-index="1"] .river-island__frame {
+  transform: rotate(12deg);
+}
+
+.river-island[data-island-index="2"] .river-island__frame {
+  transform: rotate(-7deg);
+}
+
+.river-island__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.06);
+}
+
+@media (max-width: 640px) {
+  .river-island--text-on-left .river-island__frame,
+  .river-island--text-on-right .river-island__frame {
+    width: min(148px, 38vw, 100%);
+  }
+
+  .river-island__title {
+    font-size: 1.15rem;
+  }
+
+  .river-island__desc {
+    font-size: 0.86rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river-island__shore {
+    transition: opacity 0.2s ease;
+    transform: translate(0, -50%);
+  }
+
+  .river-island.is-active .river-island__shore {
+    transform: translate(0, -50%);
+  }
 }
 
 #boat {
@@ -1499,35 +1713,52 @@ body {
 }
 
 /* =========================================================
- * 互动导览：顶部下拉白色选项栏
+ * ??????????????????????????????
  * --------------------------------------------------------- */
 .guide-menu {
   position: fixed;
-  top: 68px;
-  left: 0;
-  right: 0;
-  z-index: 70;
+  inset: 0;
+  z-index: 125;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.guide-menu__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(165deg, rgba(120, 56, 180, 0.42) 0%, rgba(255, 105, 180, 0.28) 45%, rgba(80, 40, 140, 0.38) 100%);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity 280ms ease;
+}
+
+.guide-menu.is-open .guide-menu__backdrop {
+  pointer-events: auto;
+  opacity: 1;
 }
 
 .guide-menu__panel {
+  position: relative;
+  z-index: 1;
   pointer-events: none;
-  width: min(720px, calc(100vw - 36px));
-  margin: 0 auto;
-  padding: 10px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 24px 60px rgba(17, 50, 79, 0.22);
-  border: 1px solid rgba(17, 50, 79, 0.12);
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  transform: translateY(-18px);
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 18px 22px 32px;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 0 18px 0 52px;
+  box-shadow: 0 28px 70px rgba(17, 50, 79, 0.18);
+  border: 1px solid rgba(17, 50, 79, 0.06);
+  transform: translateY(-14px);
   opacity: 0;
-  filter: blur(4px);
-  transition: transform 220ms ease, opacity 220ms ease, filter 220ms ease;
+  filter: blur(3px);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms ease, filter 280ms ease;
 }
 
 .guide-menu.is-open .guide-menu__panel {
@@ -1537,37 +1768,229 @@ body {
   filter: blur(0);
 }
 
-.guide-menu__item {
-  height: 42px;
-  border-radius: 12px;
-  border: 1px solid rgba(17, 50, 79, 0.12);
-  background: #fff;
-  color: #11324f;
+.guide-menu__chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.guide-menu__brand {
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-weight: 900;
-  letter-spacing: 0.04em;
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: #11324f;
+}
+
+.guide-menu__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-menu__icon-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(31, 102, 219, 0.55);
+  background: #f4efe6;
+  color: #1f4ec9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: transform 0.15s ease, filter 0.15s ease, background 0.15s ease;
+  text-decoration: none;
+  padding: 0;
+  transition: transform 0.15s ease, background 0.15s ease, filter 0.15s ease;
 }
 
-.guide-menu__item:hover {
+.guide-menu__icon-btn:hover {
+  transform: scale(1.04);
+  filter: brightness(1.03);
+}
+
+.guide-menu__icon-btn--close {
+  font-size: 0;
+}
+
+.guide-menu__pill-cta {
+  border: none;
+  border-radius: 999px;
+  padding: 0 20px;
+  height: 44px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #ff4500;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(255, 69, 0, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.guide-menu__pill-cta:hover {
   transform: translateY(-1px);
-  filter: brightness(1.02);
-  background: rgba(17, 50, 79, 0.04);
+  filter: brightness(1.05);
 }
 
-.guide-menu__item--ai {
-  border-color: rgba(31, 102, 219, 0.24);
-  background: linear-gradient(90deg, rgba(31, 102, 219, 0.1), rgba(255, 77, 8, 0.06));
+.guide-menu__headline {
+  margin: 0 0 22px;
+  padding: 0 4px;
+  font-family: Impact, "Arial Narrow", "Arial Black", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.35rem, 4.2vw, 1.85rem);
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+  color: #ff4500;
+  text-transform: none;
+  transform: rotate(-2.2deg);
+  transform-origin: 0 50%;
 }
 
-@media (max-width: 640px) {
+.guide-menu__headline-line {
+  display: block;
+}
+
+.guide-menu__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 28px;
+  padding: 0 4px 4px;
+}
+
+.guide-menu__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guide-menu__link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: #000;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.guide-menu__link:hover {
+  background: rgba(17, 50, 79, 0.06);
+  color: #11324f;
+}
+
+@media (prefers-reduced-motion: reduce) {
   .guide-menu__panel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    transition: opacity 180ms ease;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .guide-menu.is-open .guide-menu__panel {
+    transform: none !important;
+  }
+
+  .guide-menu__headline {
+    transform: none;
+  }
+
+  .guide-menu__backdrop {
+    transition: opacity 180ms ease;
+  }
+}
+
+@media (max-width: 480px) {
+  .guide-menu__actions {
+    gap: 8px;
+  }
+
+  .guide-menu__pill-cta {
+    padding: 0 14px;
+    font-size: 0.88rem;
+  }
+
+  .guide-menu__icon-btn {
+    width: 40px;
+    height: 40px;
   }
 }
 
 /* =========================================================
- * AI 聊天面板（由“AI 对话”选项打开）
+ * ????????????????????????
+ * --------------------------------------------------------- */
+.guide-map {
+  position: fixed;
+  inset: 0;
+  padding: 84px 18px 18px;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 85;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.guide-map.is-hidden {
+  display: none;
+}
+
+.guide-map__chrome {
+  width: min(980px, calc(100vw - 36px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px 14px 0 0;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(17, 50, 79, 0.12);
+  border-bottom: none;
+}
+
+.guide-map__title {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #11324f;
+}
+
+.guide-map__close {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 50, 79, 0.14);
+  background: #fff;
+  color: #11324f;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.guide-map__frame {
+  width: min(980px, calc(100vw - 36px));
+  height: calc(100vh - 84px - 18px - 60px);
+  margin: 0 auto;
+  border: 1px solid rgba(17, 50, 79, 0.12);
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  background: #0b0f14;
+}
+
+/* =========================================================
+ * AI ?????????????AI ????????????????
  * --------------------------------------------------------- */
 .ai-chat {
   position: fixed;
@@ -1735,7 +2158,7 @@ body {
 }
 
 /* =========================================================
- * 桌宠漫画对话 UI（气泡 + 斜切输入条）
+ * ????????? UI????? + ??????????????
  * --------------------------------------------------------- */
 
 .pet-comic-ui {
@@ -1747,7 +2170,7 @@ body {
   --comic-paper: #ffffff;
   --comic-accent-a: #e31221;
   --comic-accent-b: #1f66db;
-  /* 仍保留 45° 偏移“硬阴影”，但降低重量，叠加一层轻柔阴影 */
+  /* ????? 45? ?????????????????????????????????????????????? */
   --comic-shadow-hard: 7px 7px 0 rgba(10, 10, 10, 0.55);
   --comic-shadow-soft: 0 14px 28px rgba(10, 10, 10, 0.12);
   --comic-stroke: 3px;
@@ -1898,7 +2321,7 @@ body {
 }
 
 .pet-bubble.is-pop {
-  /* 不要在气泡外层做 transform 动画，否则会覆盖 JS 定位用的 transform */
+  /* ?????????????? transform ??????????????????? JS ????????? transform */
   animation: none;
 }
 
@@ -2047,3 +2470,7 @@ body {
     transition: none !important;
   }
 }
+
+/* =========================================================
+ * ?????????????????????????????
+ * --------------------------------------------------------- */

@@ -25,6 +25,7 @@ export function createRiverScene({
   boatContainerId = "boat-container",
   boatId = "boat",
   spacerId = "river-scroll-spacer",
+  islandLayerId = "river-island-layer",
   sceneHeight = null,
 } = {}) {
   const gsap = typeof window !== "undefined" ? window.gsap : null;
@@ -33,6 +34,10 @@ export function createRiverScene({
   const boatContainer = document.getElementById(boatContainerId);
   const boatEl = document.getElementById(boatId);
   const spacer = document.getElementById(spacerId);
+  const islandLayer = document.getElementById(islandLayerId);
+  const islandEls = islandLayer
+    ? Array.from(islandLayer.querySelectorAll(".river-island"))
+    : [];
 
   if (!stage || !canvas) {
     console.warn("[riverScene] 缺少 river-stage 或 river-canvas，跳过初始化");
@@ -213,6 +218,68 @@ export function createRiverScene({
     ctx.restore();
   }
 
+  function syncIslands() {
+    if (!islandEls.length) return;
+    const count = islandEls.length;
+    const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+
+    // 沿场景高度等距分布（两端留白），让岛屿与河流进度对齐
+    const spacing = view.sceneH / (count + 1);
+
+    const centerScreenY = view.h * 0.5;
+    const activateRadius = view.h * 0.32;
+    // 岛屿应始终贴着可视区向上移动，离开视口时隐藏以节省合成
+    const offscreenPad = 260;
+
+    for (let i = 0; i < count; i += 1) {
+      const el = islandEls[i];
+      const worldY = (i + 1) * spacing;
+      const screenY = worldY - scrollDelta;
+
+      const inViewport =
+        screenY >= -offscreenPad && screenY <= view.h + offscreenPad;
+      const riverReady =
+        isActive &&
+        (riverAnimState === "flowing" || riverAnimState === "done") &&
+        flow.riverFlowY >= worldY - view.h * 0.2;
+
+      if (inViewport && riverReady) {
+        el.style.transform = `translate3d(0, ${screenY}px, 0)`;
+        const cx = getCenterX(worldY);
+        const hw = getRiverHalfWidth(worldY, 0);
+        el.style.setProperty("--river-cx", `${cx}px`);
+        el.style.setProperty("--river-hw", `${hw}px`);
+        const edgePad = 12;
+        const landLeft = Math.max(0, cx - hw - edgePad);
+        const landRight = Math.max(0, view.w - (cx + hw) - edgePad);
+        const textOnRight = landRight > landLeft;
+        el.classList.toggle("river-island--text-on-right", textOnRight);
+        el.classList.toggle("river-island--text-on-left", !textOnRight);
+        if (!el.classList.contains("is-visible")) {
+          el.classList.add("is-visible");
+        }
+        const shouldActivate = Math.abs(screenY - centerScreenY) < activateRadius;
+        el.classList.toggle("is-active", shouldActivate);
+      } else {
+        el.style.removeProperty("--river-cx");
+        el.style.removeProperty("--river-hw");
+        if (el.classList.contains("is-active")) el.classList.remove("is-active");
+        if (el.classList.contains("is-visible")) el.classList.remove("is-visible");
+      }
+    }
+  }
+
+  function resetIslands() {
+    for (let i = 0; i < islandEls.length; i += 1) {
+      const el = islandEls[i];
+      el.classList.remove("is-active");
+      el.classList.remove("is-visible");
+      el.style.removeProperty("--river-cx");
+      el.style.removeProperty("--river-hw");
+      el.style.transform = "translate3d(-9999px, -9999px, 0)";
+    }
+  }
+
   function syncBoat(t) {
     if (!boatContainer || !boatEl) return;
 
@@ -254,6 +321,7 @@ export function createRiverScene({
 
     drawRiver({ t });
     syncBoat(t);
+    syncIslands();
 
     const rate = riverAnimState === "done" ? 2.6 : 1;
     updateAndDrawParticles(t, rate);
@@ -293,6 +361,7 @@ export function createRiverScene({
     fx.particles = [];
     fx.lastParticleAt = 0;
     if (spacer) spacer.style.height = "0px";
+    resetIslands();
     setActive(false);
     stopRaf();
   }
@@ -315,6 +384,7 @@ export function createRiverScene({
     fx.continuousRippleRadius = 0;
     fx.particles = [];
     fx.lastParticleAt = 0;
+    resetIslands();
 
     setActive(true);
     ensureRaf();

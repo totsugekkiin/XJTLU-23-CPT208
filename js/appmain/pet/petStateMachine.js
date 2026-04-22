@@ -2,6 +2,8 @@ export const PET_STATES = Object.freeze({
   IDLE: "idle",
   DRAGGING: "dragging",
   HOMING: "homing",
+  WAVING: "waving",
+  PLACED: "placed",
 });
 
 /**

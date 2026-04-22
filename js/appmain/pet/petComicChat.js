@@ -25,6 +25,8 @@ export function createPetComicChat({
   sendToAI,
   prefersReducedMotion = false,
   root = document,
+  // 头顶大气泡与头部锚点的额外间隙（px）
+  agentBubbleGapPx = 86,
 } = {}) {
   const els = {
     ui: root.getElementById("pet-comic-ui"),
@@ -75,7 +77,7 @@ export function createPetComicChat({
     els.agentBubble.style.top = `${Math.round(headY)}px`;
     // 把气泡整体抬到“头的正上方”，并让尖角仍指向锚点
     // 12px 尾巴 + 约 24px 间隙（避免压到头部/发饰），整体更像截图里的悬浮效果
-    els.agentBubble.style.transform = `translate(-50%, calc(-100% - 36px))`;
+    els.agentBubble.style.transform = `translate(-50%, calc(-100% - ${Math.round(agentBubbleGapPx)}px))`;
 
     // 身侧小气泡：从桌宠侧边“水平弹出”（更像侧边云朵气泡）
     const side = headX < window.innerWidth * 0.5 ? 1 : -1; // 左半屏 -> 右侧弹出；右半屏 -> 左侧弹出

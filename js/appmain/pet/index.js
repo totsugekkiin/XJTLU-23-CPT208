@@ -8,14 +8,24 @@ import { observeTargetZone } from "./targetObserver.js";
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
+const WAVE_DURATION_MS = 900;
+const WAVE_FREQ_HZ = 2.5;
+// 注意：不同贴图“手臂朝向”不同，rotation 正负号可能需要翻转
+const WAVE_DIR = 1; // -1/1：翻转抬臂方向
+const WAVE_SWING_RAD = 0.65; // 挥动幅度（rad）
+const WAVE_LIFT_RAD = 1.85; // 抬臂基准角（rad）
+
 async function tryReplacePartWithSprite({
   PIXI,
   container,
   oldGraphics,
   url,
   pivot,
+  childOffset = { x: 0, y: 0 },
   desiredWidth,
   scaleMul = 1,
+  scaleXMul = 1,
+  scaleYMul = 1,
   zIndex = undefined,
 }) {
   if (!url) return { ok: false, reason: "no-url" };
@@ -27,11 +37,11 @@ async function tryReplacePartWithSprite({
 
     const sprite = new PIXI.Sprite(texture);
     sprite.pivot.set(pivot.x, pivot.y);
-    sprite.position.set(0, 0);
+    sprite.position.set(childOffset?.x ?? 0, childOffset?.y ?? 0);
 
     const texW = texture.width || sprite.width || 1;
     const s = (desiredWidth / texW) * scaleMul;
-    sprite.scale.set(s);
+    sprite.scale.set(s * scaleXMul, s * scaleYMul);
 
     // 关键：替换成 Sprite 后继承/指定层级，避免“裙摆盖不住腿”等遮挡问题。
     if (zIndex !== undefined) {
@@ -104,7 +114,9 @@ async function tryReplaceHeadWithSprite({
  * @param {{x:number,y:number}=} params.rightShoulderPivot 右臂 PNG 内的肩关节像素坐标
  * @param {{x:number,y:number}=} params.leftHipPivot   左腿 PNG 内的胯关节像素坐标
  * @param {{x:number,y:number}=} params.rightHipPivot  右腿 PNG 内的胯关节像素坐标
- * @param {number=}      params.limbScaleMul   四肢贴图额外倍率，默认 3.2
+ * @param {number=}      params.limbScaleMul   四肢贴图额外倍率（兼容旧参数），默认 3.2
+ * @param {number=}      params.armScaleMul    手臂贴图额外倍率（优先于 limbScaleMul）
+ * @param {number=}      params.legScaleMul    腿部贴图额外倍率（优先于 limbScaleMul）
  */
 export async function createDesktopPet({
   host,
@@ -114,21 +126,44 @@ export async function createDesktopPet({
   prefersReducedMotion = false,
   scale = 2,
   onHeadClick = null,
+  // 拖拽松手后是否自动归位到 anchor/target；false 表示“拖到哪就停哪”
+  autoReturnOnRelease = false,
+  // hitzone 额外外扩（像素），只影响鼠标/触控命中范围
+  hitboxPaddingX = 48,
+  hitboxPaddingY = 36,
+  // 只把命中区“顶部”额外上提（底部保持不变）
+  hitboxTopExtra = 50,
+  // 聊天气泡锚点额外上移（像素）
+  chatBubbleRaise = 100,
+  // 手臂“骨骼肩关节”偏移（像素，作用在 rig.leftArm/rightArm 容器上）
+  // 用于：贴图站姿对了，但转动时关节不对——通过移动骨骼节点来匹配真实肩点
+  leftShoulderJointOffset = { x: 0, y: 0 },
+  rightShoulderJointOffset = { x: 0, y: 0 },
   headTextureUrl = "images/pet/head.png",
-  headNeckPivot = { x: 578, y: 553 },
-  headScaleMul = 4.6,
-  torsoScaleMul =9,
+  // 默认按 1000x1000 导出图的关节坐标（你后续都用这套）
+  // 头图：脖子点
+  headNeckPivot = { x: 500, y: 510 },
+  headScaleMul = 5.2,
+  torsoScaleMul = 9,
+  // 躯干贴图可做非等比缩放：只压短高度（不影响宽度）
+  torsoScaleXMul = 1,
+  torsoScaleYMul = 0.76,//躯干长度修改
   torsoTextureUrl = "images/pet/torso.png",
-  torsoHipPivot = { x: (561 + 622) / 2, y: 728 },
-  leftArmTextureUrl = "images/pet/arm_left.png",
-  rightArmTextureUrl = "images/pet/arm_right.png",
-  leftLegTextureUrl = "images/pet/leg_left.png",
-  rightLegTextureUrl = "images/pet/leg_right.png",
-  leftShoulderPivot = { x: 560, y: 607 },
-  rightShoulderPivot = { x: 537, y: 607 },
-  leftHipPivot = { x: 561, y: 728 },
-  rightHipPivot = { x: 622, y: 728 },
-  limbScaleMul = 3.2,
+  // 躯干图：胯部中心点（用左右腿胯点的中点）
+  torsoHipPivot = { x: (480 + 519) / 2, y: (624 + 625) / 2 },
+  leftArmTextureUrl = "images/pet/leftarm.png",
+  rightArmTextureUrl = "images/pet/rightarm.png",
+  leftLegTextureUrl = "images/pet/leftleg.png",
+  rightLegTextureUrl = "images/pet/rightleg.png",
+  // 手臂图：肩关节点（你给的“左手/右手”坐标）
+  leftShoulderPivot = { x: 440, y: 510 },
+  rightShoulderPivot = { x: 559, y: 510 },
+  // 腿图：胯关节点
+  leftHipPivot = { x: 470, y: 624 },
+  rightHipPivot = { x: 529, y: 625 },
+  limbScaleMul = 18,
+  armScaleMul = 20,
+  legScaleMul = undefined,
 } = {}) {
   const PIXI = globalThis.PIXI;
   if (!PIXI) {
@@ -149,6 +184,28 @@ export async function createDesktopPet({
   rig.root.scale.set(scale);
   app.stage.addChild(rig.root);
 
+  // 层级：让双臂位于头部上方（决定顺序的是各部位 Container 的 zIndex）
+  if (rig.torso) rig.torso.sortableChildren = true;
+  // 腿层级：让腿部位于躯干之下
+  if (rig.leftLeg) rig.leftLeg.zIndex = 1;
+  if (rig.rightLeg) rig.rightLeg.zIndex = 1;
+  if (rig.leftArm) rig.leftArm.zIndex = 6;
+  if (rig.rightArm) rig.rightArm.zIndex = 6;
+  if (rig.head && typeof rig.head.zIndex === "number") rig.head.zIndex = 4;
+
+  // 骨骼节点微调：移动肩关节容器本身（不改贴图），保证动画旋转轴正确
+  if (rig.leftArm && leftShoulderJointOffset) {
+    rig.leftArm.x += leftShoulderJointOffset.x || 0;
+    rig.leftArm.y += leftShoulderJointOffset.y || 0;
+    // 站立外观保持不变：把子节点（占位 Graphics）反向移回去
+    rig.graphics?.leftArm?.position?.set?.(-(leftShoulderJointOffset.x || 0), -(leftShoulderJointOffset.y || 0));
+  }
+  if (rig.rightArm && rightShoulderJointOffset) {
+    rig.rightArm.x += rightShoulderJointOffset.x || 0;
+    rig.rightArm.y += rightShoulderJointOffset.y || 0;
+    rig.graphics?.rightArm?.position?.set?.(-(rightShoulderJointOffset.x || 0), -(rightShoulderJointOffset.y || 0));
+  }
+
   // 贴图替换：如果对应 PNG 存在，就替换占位 Graphics；否则保持默认绘制。
   // desiredWidth 使用 rig 本地坐标系下的尺寸（不包含 rig.root 的 scale）。
   await tryReplacePartWithSprite({
@@ -159,6 +216,8 @@ export async function createDesktopPet({
     pivot: torsoHipPivot,
     desiredWidth: RIG_METRICS.torsoWidth,
     scaleMul: torsoScaleMul,
+    scaleXMul: torsoScaleXMul,
+    scaleYMul: torsoScaleYMul,
     zIndex: 2,
   });
   await tryReplacePartWithSprite({
@@ -167,9 +226,13 @@ export async function createDesktopPet({
     oldGraphics: rig.graphics?.leftArm,
     url: leftArmTextureUrl,
     pivot: leftShoulderPivot,
+    childOffset: {
+      x: -(leftShoulderJointOffset?.x || 0),
+      y: -(leftShoulderJointOffset?.y || 0),
+    },
     desiredWidth: RIG_METRICS.armWidth,
-    scaleMul: limbScaleMul,
-    zIndex: 3,
+    scaleMul: armScaleMul ?? limbScaleMul,
+    zIndex: 6,
   });
   await tryReplacePartWithSprite({
     PIXI,
@@ -177,9 +240,13 @@ export async function createDesktopPet({
     oldGraphics: rig.graphics?.rightArm,
     url: rightArmTextureUrl,
     pivot: rightShoulderPivot,
+    childOffset: {
+      x: -(rightShoulderJointOffset?.x || 0),
+      y: -(rightShoulderJointOffset?.y || 0),
+    },
     desiredWidth: RIG_METRICS.armWidth,
-    scaleMul: limbScaleMul,
-    zIndex: 3,
+    scaleMul: armScaleMul ?? limbScaleMul,
+    zIndex: 6,
   });
   await tryReplacePartWithSprite({
     PIXI,
@@ -188,7 +255,7 @@ export async function createDesktopPet({
     url: leftLegTextureUrl,
     pivot: leftHipPivot,
     desiredWidth: RIG_METRICS.legWidth,
-    scaleMul: limbScaleMul,
+    scaleMul: legScaleMul ?? limbScaleMul,
     zIndex: 1,
   });
   await tryReplacePartWithSprite({
@@ -198,7 +265,7 @@ export async function createDesktopPet({
     url: rightLegTextureUrl,
     pivot: rightHipPivot,
     desiredWidth: RIG_METRICS.legWidth,
-    scaleMul: limbScaleMul,
+    scaleMul: legScaleMul ?? limbScaleMul,
     zIndex: 1,
   });
   await tryReplacePartWithSprite({
@@ -238,6 +305,7 @@ export async function createDesktopPet({
   let dragOffsetX = 0;
   let dragOffsetY = 0;
   let targetVisible = false;
+  let waveUntil = 0;
 
   const anchors = {
     head: { x: pos.x, y: pos.y },
@@ -269,12 +337,14 @@ export async function createDesktopPet({
   };
 
   const updateHitzone = () => {
-    const w = bounds.width * scale + 24;
-    const h = bounds.height * scale + 18;
+    const w = bounds.width * scale + hitboxPaddingX;
+    const h = bounds.height * scale + hitboxPaddingY + hitboxTopExtra;
     hitzone.style.width = `${w}px`;
     hitzone.style.height = `${h}px`;
     const left = Math.round(pos.x - w / 2);
-    const top = Math.round(pos.y + bounds.top * scale - 8);
+    // 让增大的命中区在视觉上更“居中”覆盖身体
+    // 同时 top 再上移 hitboxTopExtra，保证“底部位置正好”不变
+    const top = Math.round(pos.y + bounds.top * scale - 8 - (hitboxPaddingY - 18) / 2 - hitboxTopExtra);
     hitzone.style.left = `${left}px`;
     hitzone.style.top = `${top}px`;
 
@@ -288,7 +358,7 @@ export async function createDesktopPet({
     anchors.head.x = pos.x;
     anchors.head.y = headCenterY - RIG_METRICS.headRadius * 0.9 * scale;
     anchors.user.x = pos.x + (bounds.halfWidth * scale + 18) * (pos.x < window.innerWidth * 0.5 ? 1 : -1);
-    anchors.user.y = pos.y + (-RIG_METRICS.legLength - RIG_METRICS.torsoHeight * 0.2) * scale;
+    anchors.user.y = pos.y + (-RIG_METRICS.legLength - RIG_METRICS.torsoHeight * 0.2) * scale - chatBubbleRaise;
   };
 
   const interaction = createPetDragInteraction({
@@ -307,10 +377,13 @@ export async function createDesktopPet({
     },
     onDragEnd() {
       velocitySampler.clear();
-      if (targetVisible) {
-        fsm.setState(PET_STATES.HOMING);
+      if (autoReturnOnRelease) {
+        if (targetVisible) fsm.setState(PET_STATES.HOMING);
+        else fsm.setState(PET_STATES.IDLE);
       } else {
-        fsm.setState(PET_STATES.IDLE);
+        desired.x = pos.x;
+        desired.y = pos.y;
+        fsm.setState(PET_STATES.PLACED);
       }
     },
   });
@@ -360,6 +433,9 @@ export async function createDesktopPet({
     fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/pet/index.js:pointerup',message:'hitzone pointerup click-eval',data:{x:e.clientX,y:e.clientY,dt:Math.round(dt),move2:Math.round(dx*dx+dy*dy),isDragging:!!interaction?.isDragging?.(),inHead,anchorHead:{x:Math.round(anchors.head.x),y:Math.round(anchors.head.y)},scale},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (!inHead) return;
+    // 点击头部：挥手 + 对话一起触发（不干扰拖拽态）
+    waveUntil = performance.now() + WAVE_DURATION_MS;
+    fsm.setState(PET_STATES.WAVING);
     onHeadClick?.({ x: e.clientX, y: e.clientY, anchors: { ...anchors } });
   };
 
@@ -396,8 +472,22 @@ export async function createDesktopPet({
 
   const tick = (ticker) => {
     const dt = Math.max(0.0001, Math.min(ticker.deltaTime, 2.5));
+    const now = performance.now();
 
-    if (fsm.is(PET_STATES.IDLE)) {
+    if (fsm.is(PET_STATES.WAVING)) {
+      // 保持当前位置（不追随 anchor/target），只播放动作
+      if (now >= waveUntil) {
+        if (autoReturnOnRelease) {
+          fsm.setState(targetVisible ? PET_STATES.HOMING : PET_STATES.IDLE);
+        } else {
+          desired.x = pos.x;
+          desired.y = pos.y;
+          fsm.setState(PET_STATES.PLACED);
+        }
+      }
+    } else if (fsm.is(PET_STATES.PLACED)) {
+      // 固定在当前位置：不更新 desired
+    } else if (fsm.is(PET_STATES.IDLE)) {
       const a = getAnchorPoint();
       desired.x = a.x;
       desired.y = a.y;
@@ -445,6 +535,14 @@ export async function createDesktopPet({
         legTargetR = swing * 0.45 - vertical * 0.2;
         headTarget = -swing * 0.32;
         torsoTarget = -swing * 0.12;
+      } else if (fsm.is(PET_STATES.WAVING)) {
+        const t = now * 0.001;
+        const phase = t * Math.PI * 2 * WAVE_FREQ_HZ;
+        // 左手抬起并左右摆动，右手略微跟随
+        armTargetL = (WAVE_LIFT_RAD + Math.sin(phase) * WAVE_SWING_RAD) * WAVE_DIR;
+        armTargetR = -0.08 + Math.sin(phase + Math.PI) * 0.08;
+        headTarget = Math.sin(phase) * 0.06;
+        torsoTarget = Math.sin(phase) * 0.03;
       } else {
         const travelLean = clamp(worldVel.x * 0.09, -0.45, 0.45);
         armTargetL = travelLean + 0.05;

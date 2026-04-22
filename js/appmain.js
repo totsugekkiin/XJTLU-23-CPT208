@@ -160,13 +160,33 @@ async function sendToAI(userText) {
 const chatEls = {
   menu: document.getElementById("guide-menu"),
   menuPanel: document.getElementById("guide-menu-panel"),
+  menuClose: document.getElementById("guide-menu-close"),
   menuItems: Array.from(document.querySelectorAll("#guide-menu [data-action]")),
+};
+
+const guideMapEls = {
+  root: document.getElementById("guide-map"),
+  frame: document.getElementById("guide-map-frame"),
+  close: document.getElementById("guide-map-close"),
 };
 
 function setMenuOpen(nextOpen) {
   if (!chatEls.menu || !chatEls.menuPanel) return;
   chatEls.menu.classList.toggle("is-open", nextOpen);
+  chatEls.menu.setAttribute("aria-hidden", nextOpen ? "false" : "true");
   chatEls.menuPanel.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+}
+
+function setGuideMapOpen(nextOpen) {
+  if (!guideMapEls.root || !guideMapEls.frame) return;
+  guideMapEls.root.classList.toggle("is-hidden", !nextOpen);
+  guideMapEls.root.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+  if (nextOpen) {
+    // 第一次打开时再设置 src，避免无意义加载
+    if (!guideMapEls.frame.getAttribute("src")) {
+      guideMapEls.frame.setAttribute("src", "map.html");
+    }
+  }
 }
 
 // 点击“互动导览”后，下拉显示导览选项栏
@@ -174,7 +194,7 @@ context.heroPill?.addEventListener("click", () => {
   setMenuOpen(!(chatEls.menu?.classList.contains("is-open") ?? false));
 });
 
-// 点击空白处自动收起导览菜单
+// 点击遮罩或页面空白处收起导览菜单（面板内点击不收起）
 document.addEventListener(
   "click",
   (e) => {
@@ -185,7 +205,6 @@ document.addEventListener(
     const target = e.target instanceof Node ? e.target : null;
     if (!target) return;
 
-    // 点在触发按钮或菜单面板内，不收起
     if (context.heroPill?.contains(target)) return;
     if (chatEls.menuPanel.contains(target)) return;
 
@@ -194,22 +213,65 @@ document.addEventListener(
   { capture: true }
 );
 
-// 菜单项点击
+chatEls.menuClose?.addEventListener("click", () => setMenuOpen(false));
+
+function runGuideMenuAction(action) {
+  const smooth = prefersReducedMotion ? "auto" : "smooth";
+
+  if (action === "route") {
+    setMenuOpen(false);
+    setGuideMapOpen(true);
+    return;
+  }
+
+  if (action === "timeline") {
+    setMenuOpen(false);
+    document.getElementById("cm-transition")?.scrollIntoView({ behavior: smooth, block: "start" });
+    return;
+  }
+
+  if (action === "hero") {
+    setMenuOpen(false);
+    document.getElementById("hero")?.scrollIntoView({ behavior: smooth, block: "start" });
+    return;
+  }
+
+  if (action === "pet") {
+    setMenuOpen(false);
+    document.getElementById("pet-hitzone")?.focus({ preventScroll: false });
+    return;
+  }
+
+  if (action === "explore") {
+    setMenuOpen(false);
+    context.heroGoBtn?.click();
+    return;
+  }
+
+  console.log("[guide-menu]", action);
+  setMenuOpen(false);
+}
+
+// 菜单项与顶栏「开始探索」
 if (chatEls.menuItems.length > 0) {
   chatEls.menuItems.forEach((btn) => {
     btn.addEventListener("click", () => {
       const action = btn.getAttribute("data-action");
-      if (action === "route") {
-        window.location.href = "map.html";
-        return;
-      }
-      console.log("[guide-menu]", action);
+      if (!action) return;
+      runGuideMenuAction(action);
     });
   });
 }
 
+// 关闭地图：按钮/点遮罩/ESC
+guideMapEls.close?.addEventListener("click", () => setGuideMapOpen(false));
+guideMapEls.root?.addEventListener("click", (e) => {
+  if (e.target === guideMapEls.root) setGuideMapOpen(false);
+});
+
 window.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
+  setGuideMapOpen(false);
   setMenuOpen(false);
 });
 
