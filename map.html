@@ -169,7 +169,7 @@
       .spotBtn {
         width: 100%;
         display: grid;
-        grid-template-columns: 28px 1fr auto;
+        grid-template-columns: 28px 1fr auto auto;
         align-items: center;
         gap: 10px;
         padding: 12px 12px;
@@ -226,6 +226,66 @@
         background: rgba(255, 255, 255, 0.06);
         padding: 6px 8px;
         border-radius: 999px;
+      }
+
+      .spotCheck {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+
+      .spotCheck::after {
+        content: "";
+        width: 9px;
+        height: 6px;
+        border-left: 2px solid rgba(0, 0, 0, 0.9);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.9);
+        transform: rotate(-45deg) scale(0);
+        transition: transform 140ms ease;
+      }
+
+      .spotCheck:checked {
+        background: rgba(184, 255, 44, 0.86);
+        border-color: rgba(184, 255, 44, 0.9);
+      }
+
+      .spotCheck:checked::after {
+        transform: rotate(-45deg) scale(1);
+      }
+
+      .panel__footer {
+        pointer-events: auto;
+        position: fixed;
+        right: 14px;
+        top: auto;
+        bottom: 14px;
+        width: min(360px, calc(100vw - 28px));
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 16px;
+        border: 1px solid var(--panelBorder);
+        background: rgba(12, 12, 18, 0.68);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--shadow);
+      }
+
+      .panel__footer[hidden] {
+        display: none;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
       }
 
       /* 自定义 HTML Marker（扁平化圆点） */
@@ -297,6 +357,7 @@
               <div class="spotBtn__meta">120.6056, 31.315116</div>
             </span>
             <span class="spotBtn__hint">定位</span>
+            <input class="spotCheck" type="checkbox" data-select="changmen" aria-label="勾选 阊门" />
           </button>
 
           <button class="spotBtn" type="button" data-spot="shantang">
@@ -306,6 +367,7 @@
               <div class="spotBtn__meta">120.59389, 31.32611</div>
             </span>
             <span class="spotBtn__hint">定位</span>
+            <input class="spotCheck" type="checkbox" data-select="shantang" aria-label="勾选 山塘街" />
           </button>
 
           <button class="spotBtn" type="button" data-spot="yipu">
@@ -315,9 +377,17 @@
               <div class="spotBtn__meta">120.604722, 31.31525</div>
             </span>
             <span class="spotBtn__hint">定位</span>
+            <input class="spotCheck" type="checkbox" data-select="yipu" aria-label="勾选 艺圃" />
           </button>
         </div>
       </aside>
+
+      <div class="panel__footer" id="routeFooter" hidden>
+        <button class="btn btn--primary" id="btn-route" type="button" disabled>
+          按已选地点导航
+        </button>
+        <button class="btn" id="btn-clear-select" type="button">清空选择</button>
+      </div>
 
       <div class="toast" id="toast">
         提示：点右侧“推荐路线”里的地点按钮，地图会使用缓动动画平滑移动并缩放到该点。
@@ -392,8 +462,22 @@
           resizeEnable: true,
         });
 
+        let driving = null;
+        let drivingReady = false;
+        const drivingReadyPromise = new Promise((resolve) => {
+          AMap.plugin(["AMap.Driving"], () => {
+            driving = new AMap.Driving({
+              map,
+              hideMarkers: true,
+            });
+            drivingReady = true;
+            resolve(true);
+          });
+        });
+
         const markerElsById = {};
         const markersById = {};
+        const selectedIds = [];
 
         Object.entries(SPOTS).forEach(([id, spot]) => {
           const el = createHtmlMarkerEl();
@@ -428,10 +512,106 @@
           map.setZoomAndCenter(16.5, spot.lnglat, false, 850);
         };
 
+        const routeFooterEl = document.getElementById("routeFooter");
+        const btnRouteEl = document.getElementById("btn-route");
+        const btnClearSelectEl = document.getElementById("btn-clear-select");
+
+        const updateFooter = () => {
+          const count = selectedIds.length;
+          if (!routeFooterEl || !btnRouteEl) return;
+
+          const shouldShow = count >= 2;
+          routeFooterEl.hidden = !shouldShow;
+          btnRouteEl.disabled = !shouldShow || !drivingReady;
+          btnRouteEl.textContent = shouldShow
+            ? `按已选地点导航（${count} 个点）`
+            : "按已选地点导航";
+        };
+
+        const syncCheckboxes = () => {
+          document.querySelectorAll(".spotCheck[data-select]").forEach((el) => {
+            const id = el.getAttribute("data-select");
+            el.checked = selectedIds.includes(id);
+          });
+        };
+
+        const toggleSelected = (id, nextChecked) => {
+          if (!SPOTS[id]) return;
+          const exists = selectedIds.includes(id);
+          const shouldSelect = typeof nextChecked === "boolean" ? nextChecked : !exists;
+
+          if (shouldSelect && !exists) selectedIds.push(id);
+          if (!shouldSelect && exists) selectedIds.splice(selectedIds.indexOf(id), 1);
+
+          syncCheckboxes();
+          updateFooter();
+          setToast(
+            selectedIds.length >= 2
+              ? `已勾选：${selectedIds.map((x) => SPOTS[x].name).join(" → ")}`
+              : "请至少勾选 2 个地点以导航"
+          );
+        };
+
         document.getElementById("spots")?.addEventListener("click", (e) => {
+          if (e.target?.closest?.(".spotCheck")) return;
           const btn = e.target?.closest?.("[data-spot]");
           if (!btn) return;
           focusSpot(btn.getAttribute("data-spot"));
+        });
+
+        document.getElementById("spots")?.addEventListener("change", (e) => {
+          const chk = e.target?.closest?.(".spotCheck[data-select]");
+          if (!chk) return;
+          toggleSelected(chk.getAttribute("data-select"), chk.checked);
+        });
+
+        const toLngLat = (lnglat) => new AMap.LngLat(lnglat[0], lnglat[1]);
+
+        btnRouteEl?.addEventListener("click", async () => {
+          if (selectedIds.length < 2) return;
+          await drivingReadyPromise;
+          if (!driving) return;
+
+          const origin = toLngLat(SPOTS[selectedIds[0]].lnglat);
+          const destination = toLngLat(SPOTS[selectedIds[selectedIds.length - 1]].lnglat);
+          const waypoints = selectedIds
+            .slice(1, -1)
+            .map((id) => toLngLat(SPOTS[id].lnglat));
+
+          driving.clear();
+          setToast("正在规划路线…");
+
+          let done = false;
+          const timeout = window.setTimeout(() => {
+            if (done) return;
+            setToast(
+              "规划超时：请用本地服务器方式打开页面（不要 file://），并检查 Key/安全密钥的域名白名单限制"
+            );
+          }, 9000);
+
+          driving.search(
+            origin,
+            destination,
+            waypoints.length ? { waypoints } : undefined,
+            (status, result) => {
+              done = true;
+              window.clearTimeout(timeout);
+              if (status === "complete") {
+                setToast(`路线已生成：${selectedIds.map((x) => SPOTS[x].name).join(" → ")}`);
+              } else {
+                console.error("Driving.search failed:", status, result);
+                setToast("路线生成失败：请用本地服务器打开页面，并检查 Key/安全密钥与域名限制");
+              }
+            }
+          );
+        });
+
+        btnClearSelectEl?.addEventListener("click", () => {
+          selectedIds.splice(0, selectedIds.length);
+          syncCheckboxes();
+          updateFooter();
+          driving?.clear?.();
+          setToast("已清空勾选与路线");
         });
 
         document.getElementById("btn-recenter")?.addEventListener("click", () => {
@@ -444,7 +624,9 @@
           window.location.href = "appMain.html";
         });
 
-        setToast("地图就绪：请选择右侧点位开始互动导览。");
+        drivingReadyPromise.then(() => updateFooter());
+        updateFooter();
+        setToast("地图就绪：可点“定位”，也可勾选 2 个以上地点生成导航路线。");
       })();
     </script>
   </body>
