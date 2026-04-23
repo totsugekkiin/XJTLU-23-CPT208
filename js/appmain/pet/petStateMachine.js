@@ -2,6 +2,9 @@ export const PET_STATES = Object.freeze({
   IDLE: "idle",
   DRAGGING: "dragging",
   HOMING: "homing",
+  DOCKING: "docking",
+  /** 持续下滑一段时间后整体上移离场 */
+  SCROLL_EXIT: "scroll_exit",
   WAVING: "waving",
   PLACED: "placed",
 });

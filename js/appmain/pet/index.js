@@ -130,6 +130,8 @@ export async function createDesktopPet({
   heroEl = null,
   homingScrollProgress = null,
   homingScrollRelease = null,
+  /** 离场后无 scroll 事件达到该毫秒数则回场（Lenis 下间隔较大，默认与 petConfig 一致） */
+  scrollHideReturnMs = 2800,
   prefersReducedMotion = false,
   scale = 2,
   onHeadClick = null,
@@ -181,6 +183,21 @@ export async function createDesktopPet({
     console.warn("[desktop-pet] 缺少 host 或 hitzone 节点。");
     return null;
   }
+
+  const getAnchorPoint = () => {
+    if (!anchorEl) {
+      return { x: window.innerWidth / 2, y: window.innerHeight * 0.7 };
+    }
+    const rect = anchorEl.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      return { x: window.innerWidth / 2, y: window.innerHeight * 0.7 };
+    }
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + 2,
+    };
+  };
+
   // #region agent log
   console.log("[dbg ee6ebc] createDesktopPet entry", { hasPixi: !!PIXI, hasHost: !!host, hasHitzone: !!hitzone, scale, prefersReducedMotion, hasOnHeadClick: typeof onHeadClick === "function" });
   fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/pet/index.js:entry',message:'createDesktopPet entry',data:{hasPixi:!!PIXI,hasHost:!!host,hasHitzone:!!hitzone,scale,prefersReducedMotion,hasOnHeadClick:typeof onHeadClick==='function'},timestamp:Date.now()})}).catch(()=>{});
@@ -190,6 +207,11 @@ export async function createDesktopPet({
   const rig = createPetRig(PIXI);
   rig.root.scale.set(scale);
   app.stage.addChild(rig.root);
+  // 贴图异步加载前就会渲染：默认 (0,0) 会在左上角/上沿露一截，先对齐锚点再加载
+  {
+    const a = getAnchorPoint();
+    rig.root.position.set(a.x, a.y);
+  }
 
   // 层级：让双臂位于头部上方（决定顺序的是各部位 Container 的 zIndex）
   if (rig.torso) rig.torso.sortableChildren = true;
@@ -291,7 +313,8 @@ export async function createDesktopPet({
 
   const fsm = createPetStateMachine(PET_STATES.IDLE);
 
-  const pos = { x: window.innerWidth / 2, y: window.innerHeight * 0.55 };
+  const anchorWorld = getAnchorPoint();
+  const pos = { x: anchorWorld.x, y: anchorWorld.y };
   const desired = { x: pos.x, y: pos.y };
   const lastPos = { x: pos.x, y: pos.y };
   const worldVel = { x: 0, y: 0 };
@@ -322,20 +345,6 @@ export async function createDesktopPet({
     hitzone: { left: 0, top: 0, width: 0, height: 0 },
   };
 
-  const getAnchorPoint = () => {
-    if (!anchorEl) {
-      return { x: window.innerWidth / 2, y: window.innerHeight * 0.7 };
-    }
-    const rect = anchorEl.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) {
-      return { x: window.innerWidth / 2, y: window.innerHeight * 0.7 };
-    }
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + 2,
-    };
-  };
-
   const getTargetPoint = () => {
     if (!targetEl) {
       if (scrollTargetActive || ioTargetActive) {
@@ -348,6 +357,27 @@ export async function createDesktopPet({
       x: rect.left + rect.width / 2,
       y: rect.top - 10,
     };
+  };
+
+  /** 根节点为脚底中心：把整只宠物收进视口右下角留白内 */
+  const getViewportCornerPoint = () => {
+    const m = 20;
+    const hw = bounds.halfWidth * scale;
+    const footBottom = bounds.bottom * scale;
+    const maxX = window.innerWidth - m - hw;
+    const minX = hw + m;
+    const x = maxX < minX ? window.innerWidth * 0.5 : maxX;
+    const y = Math.min(window.innerHeight - m - footBottom, window.innerHeight - m - 8);
+    return { x, y: Math.max(m + 40, y) };
+  };
+
+  /** 根节点 y：使整体完全移到视口上沿之外（贴图腿/裙摆 scale 远大于 bounds.bottom，需大 legPad） */
+  const getOffScreenAboveY = () => {
+    const margin = 120;
+    const headPad = (RIG_METRICS.headRadius * 2.5 + 52) * scale;
+    const legPad = (RIG_METRICS.legLength * 1.45 + 72) * scale;
+    const skirtSlack = 56 * scale;
+    return -margin - bounds.top * scale - headPad - legPad - skirtSlack;
   };
 
   const updateHitzone = () => {
@@ -479,25 +509,58 @@ export async function createDesktopPet({
     updateHitzone();
   }
 
+  /**
+   * 滚动检测挂在 window「scroll」上（与 Pixi ticker 解耦）。
+   * 「一下滚」：任意一次 scroll 即离场（拖拽 / 挥手 / 固定放置态除外）。
+   */
+  let lastScrollPulseAt = performance.now();
+  const scrollPetArmAt = performance.now() + 450;
+  /** SCROLL_EXIT 内冻结水平目标，避免随主卡锚点横向跟滚导致轨迹抖动 / 假「回屏」 */
+  let scrollExitFrozenX = null;
+
+  const onWindowScrollForPet = () => {
+    const n = performance.now();
+    lastScrollPulseAt = n;
+    if (fsm.is(PET_STATES.SCROLL_EXIT)) return;
+    if (n < scrollPetArmAt) return;
+    if (fsm.is(PET_STATES.DRAGGING) || fsm.is(PET_STATES.WAVING) || fsm.is(PET_STATES.PLACED)) return;
+    fsm.setState(PET_STATES.SCROLL_EXIT);
+  };
+  window.addEventListener("scroll", onWindowScrollForPet, { passive: true });
+
   const tick = (ticker) => {
     const dt = Math.max(0.0001, Math.min(ticker.deltaTime, 2.5));
     const now = performance.now();
 
+    let scrollProgress = 0;
     if (homingScrollProgress != null && heroEl) {
       const sl = parseCssNumber(
         window.getComputedStyle(heroEl).getPropertyValue("--hero-scroll-length-px"),
         6000
       );
-      const p = Math.max(0, window.scrollY) / Math.max(1, sl);
+      scrollProgress = Math.max(0, window.scrollY) / Math.max(1, sl);
       const release =
         homingScrollRelease ?? Math.max(0, homingScrollProgress - 0.1);
-      if (p >= homingScrollProgress) scrollTargetActive = true;
-      else if (p < release) scrollTargetActive = false;
+      if (scrollProgress >= homingScrollProgress) scrollTargetActive = true;
+      else if (scrollProgress < release) scrollTargetActive = false;
     }
 
     targetVisible = ioTargetActive || scrollTargetActive;
 
-    if (!fsm.is(PET_STATES.DRAGGING) && !fsm.is(PET_STATES.WAVING) && !fsm.is(PET_STATES.PLACED)) {
+    const idleSinceScroll = now - lastScrollPulseAt;
+
+    if (fsm.is(PET_STATES.SCROLL_EXIT) && idleSinceScroll >= scrollHideReturnMs) {
+      scrollExitFrozenX = null;
+      fsm.setState(PET_STATES.IDLE);
+    }
+
+    if (
+      !fsm.is(PET_STATES.DRAGGING) &&
+      !fsm.is(PET_STATES.WAVING) &&
+      !fsm.is(PET_STATES.PLACED) &&
+      !fsm.is(PET_STATES.DOCKING) &&
+      !fsm.is(PET_STATES.SCROLL_EXIT)
+    ) {
       if (targetVisible && !fsm.is(PET_STATES.HOMING)) {
         fsm.setState(PET_STATES.HOMING);
       } else if (!targetVisible && fsm.is(PET_STATES.HOMING)) {
@@ -526,12 +589,24 @@ export async function createDesktopPet({
       const a = getTargetPoint();
       desired.x = a.x;
       desired.y = a.y;
+    } else if (fsm.is(PET_STATES.DOCKING)) {
+      const c = getViewportCornerPoint();
+      desired.x = c.x;
+      desired.y = c.y;
+    } else if (fsm.is(PET_STATES.SCROLL_EXIT)) {
+      if (scrollExitFrozenX == null) scrollExitFrozenX = pos.x;
+      desired.x = scrollExitFrozenX;
+      desired.y = getOffScreenAboveY();
     }
 
     let lerpBase;
     if (fsm.is(PET_STATES.DRAGGING)) {
       lerpBase = 0.55;
-    } else if (fsm.is(PET_STATES.HOMING)) {
+    } else if (
+      fsm.is(PET_STATES.HOMING) ||
+      fsm.is(PET_STATES.DOCKING) ||
+      fsm.is(PET_STATES.SCROLL_EXIT)
+    ) {
       lerpBase = prefersReducedMotion ? 0.6 : 0.09;
     } else {
       lerpBase = prefersReducedMotion ? 0.8 : 0.22;
@@ -593,6 +668,7 @@ export async function createDesktopPet({
     rig.torso.rotation = springs.torso.step(torsoTarget, dt);
 
     updateHitzone();
+    if (!fsm.is(PET_STATES.SCROLL_EXIT)) scrollExitFrozenX = null;
   };
 
   app.ticker.add(tick);
@@ -607,6 +683,9 @@ export async function createDesktopPet({
     rig,
     fsm,
     states: PET_STATES,
+    dockToViewportCorner() {
+      fsm.setState(PET_STATES.DOCKING);
+    },
     getAnchors() {
       return anchors;
     },
@@ -614,6 +693,7 @@ export async function createDesktopPet({
       hitzone.removeEventListener("pointerdown", handleClickDown);
       window.removeEventListener("pointerup", handleClickUp);
       window.removeEventListener("pointercancel", handleClickUp);
+      window.removeEventListener("scroll", onWindowScrollForPet);
       window.removeEventListener("resize", onWindowResize);
       app.ticker.remove(tick);
       targetHandle.destroy();

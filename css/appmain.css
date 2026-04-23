@@ -163,8 +163,46 @@ body > * {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 9999;
+  /* 高于 #cm-transition(3) 与 .pet-layer(120)，低于 .guide-menu(125) 以免压住导览模态 */
+  z-index: 124;
   pointer-events: none;
+}
+
+.hero-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hero-pet-dock-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2.5px solid #e89b2a;
+  background: transparent;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.hero-pet-dock-btn:hover {
+  transform: translateY(-1px);
+  border-color: #f6cd45;
+  box-shadow: 0 0 0 1px rgba(232, 155, 42, 0.35), 0 3px 12px rgba(232, 155, 42, 0.25);
+}
+
+.hero-pet-dock-btn:active {
+  transform: translateY(0);
+  border-color: #d4861f;
+}
+
+.hero-pet-dock-btn:focus-visible {
+  outline: 3px solid rgba(232, 155, 42, 0.45);
+  outline-offset: 3px;
 }
 
 .hero-logo {
@@ -1069,22 +1107,10 @@ body {
   border-radius: 28px;
   -webkit-user-select: none;
   user-select: none;
-  transition: box-shadow 0.18s ease;
-}
-
-.pet-hitzone:hover {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35) inset;
 }
 
 .pet-hitzone.is-dragging {
   cursor: grabbing;
-  box-shadow: 0 0 0 2px rgba(31, 102, 219, 0.45) inset;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pet-hitzone {
-    transition: none;
-  }
 }
 /* =========================================================
  * target-zone ??????????IntersectionObserver ??????
@@ -1938,7 +1964,8 @@ body {
   background: rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 85;
+  /* 高于顶栏 chrome(124)，避免地图全屏时被顶栏压住 */
+  z-index: 130;
   display: grid;
   grid-template-rows: auto 1fr;
 }

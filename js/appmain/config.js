@@ -100,4 +100,6 @@ export const petConfig = {
   homingScrollProgress: 0.16,
   /** 上滑低于该进度则取消目标态（滞回，避免边界抖动） */
   homingScrollRelease: 0.1,
+  /** 离场后无新的 scroll 事件达到该毫秒数，桌宠回到主卡锚点（Lenis 滚动脉冲间隔常 >420ms，勿过小） */
+  scrollHideReturnMs: 2800,
 };

@@ -1,6 +1,8 @@
 export function createDomContext() {
   const hero = document.getElementById("hero");
   const heroTopbar = document.querySelector(".hero-topbar");
+  const heroTopbarLeft = document.querySelector(".hero-topbar__left");
+  const heroPetDockBtn = document.getElementById("hero-pet-dock-btn");
   const heroLogo = document.querySelector(".hero-logo");
   const heroPill = document.querySelector(".hero-pill");
   const heroCard = document.querySelector("#hero-card");
@@ -12,6 +14,8 @@ export function createDomContext() {
   return {
     hero,
     heroTopbar,
+    heroTopbarLeft,
+    heroPetDockBtn,
     heroLogo,
     heroPill,
     heroCard,

@@ -64,6 +64,7 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
   let rafId = null;
   let currentTrackX = 0;
   let hasEnded = false;
+  let zDbgThrottle = { t: 0, bucket: -99 };
 
   const measure = () => {
     if (!hTrack) return;
@@ -100,6 +101,64 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
         console.error("[scrollMaskZoom] onProgress 回调执行失败", e);
       }
     }
+
+    // #region agent log
+    {
+      const b = Math.floor(progress * 15) / 15;
+      const now = Date.now();
+      if (progress > 0.02 && progress < 0.995 && (now - zDbgThrottle.t > 380 || b !== zDbgThrottle.bucket)) {
+        zDbgThrottle = { t: now, bucket: b };
+        const hero = document.getElementById("hero");
+        const cm = document.getElementById("cm-transition");
+        const dock = document.getElementById("hero-pet-dock-btn");
+        const pill = document.getElementById("hero-guide-btn");
+        const guide = document.getElementById("guide-menu");
+        const sz = (el) => (el ? getComputedStyle(el).zIndex : "none");
+        const probe = (el) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          if (r.width < 1 && r.height < 1) return { empty: true };
+          let x = Math.round(r.left + r.width / 2);
+          let y = Math.round(r.top + r.height / 2);
+          x = Math.max(0, Math.min(window.innerWidth - 1, x));
+          y = Math.max(0, Math.min(window.innerHeight - 1, y));
+          const hit = document.elementFromPoint(x, y);
+          return {
+            x,
+            y,
+            id: hit?.id || "",
+            tag: hit?.tagName || "",
+            cls: typeof hit?.className === "string" ? hit.className.slice(0, 120) : "",
+          };
+        };
+        const guideOpen = !!(guide && guide.classList.contains("is-open"));
+        const panel = guide?.querySelector(".guide-menu__panel");
+        fetch("http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0b45e0" },
+          body: JSON.stringify({
+            sessionId: "0b45e0",
+            runId: "post-fix",
+            hypothesisId: "A",
+            location: "js/appmain/scrollMaskZoom.js:update",
+            message: "cm scroll transition stacking probe",
+            data: {
+              progress: Number(progress.toFixed(4)),
+              heroZ: sz(hero),
+              cmZ: sz(cm),
+              maskLayerZ: sz(maskLayer),
+              guideOpen,
+              guideZ: guide ? sz(guide) : null,
+              dockProbe: probe(dock),
+              pillProbe: probe(pill),
+              guidePanelProbe: guideOpen && panel ? probe(panel) : null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+    }
+    // #endregion
 
     // panProgress：zoom 之后的“横移阶段”进度（给胶片轨道与双星公转共用）
     const panProgress =

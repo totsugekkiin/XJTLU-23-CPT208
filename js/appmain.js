@@ -206,6 +206,7 @@ document.addEventListener(
     if (!target) return;
 
     if (context.heroPill?.contains(target)) return;
+    if (context.heroPetDockBtn?.contains(target)) return;
     if (chatEls.menuPanel.contains(target)) return;
 
     setMenuOpen(false);
@@ -305,6 +306,10 @@ if (petHost && petHitzone) {
     fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:pet-created',message:'createDesktopPet resolved',data:{petNull:pet==null,hasGetAnchors:!!pet?.getAnchors},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (!pet) return;
+    context.heroPetDockBtn?.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      pet.dockToViewportCorner?.();
+    });
     comic = createPetComicChat({ pet, sendToAI, prefersReducedMotion });
     // #region agent log
     console.log("[dbg ee6ebc] createPetComicChat returned", { comicNull: comic == null, hasOnHeadClick: !!comic?.onHeadClick });
