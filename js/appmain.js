@@ -1,4 +1,4 @@
-import { layoutConfig, cardsConfig, motionConfig } from "./appmain/config.js";
+import { layoutConfig, cardsConfig, motionConfig, petConfig } from "./appmain/config.js";
 import { createDomContext } from "./appmain/dom.js";
 import { setupHeroButton } from "./appmain/heroButton.js";
 import { createHeroCardStackController } from "./appmain/heroCardStack.js";
@@ -288,6 +288,8 @@ if (petHost && petHitzone) {
       hitzone: petHitzone,
       anchorEl: petAnchorEl,
       targetEl: petTargetEl,
+      heroEl: context.hero,
+      ...petConfig,
       prefersReducedMotion,
       scale: 2,
       onHeadClick() {

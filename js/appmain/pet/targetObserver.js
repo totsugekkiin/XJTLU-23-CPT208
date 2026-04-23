@@ -5,6 +5,8 @@
 export function observeTargetZone({
   element,
   threshold = 0.35,
+  /** 扩大根视口（例如底部加 vh）可让目标区更早被判为“进入视口” */
+  rootMargin = "0px 0px 0px 0px",
   onEnter,
   onLeave,
 } = {}) {
@@ -34,7 +36,7 @@ export function observeTargetZone({
     },
     {
       threshold: [0, threshold, Math.min(1, threshold + 0.25), 1],
-      rootMargin: "0px 0px -5% 0px",
+      rootMargin,
     }
   );
 

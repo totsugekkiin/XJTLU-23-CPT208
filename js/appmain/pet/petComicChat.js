@@ -215,7 +215,10 @@ export function createPetComicChat({
       if (els.send) els.send.disabled = false;
       if (els.enter) els.enter.disabled = false;
       els.input.disabled = false;
-      close();
+      // 不在此处 close：close() 会给整层 #pet-comic-ui 加 display:none，回复刚写入时气泡弹出动画会被立刻裁掉，用户看不到「再次弹出」
+      window.setTimeout(() => {
+        els.input.focus({ preventScroll: true });
+      }, 0);
     }
   };
 

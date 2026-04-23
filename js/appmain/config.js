@@ -93,3 +93,11 @@ export const motionConfig = {
     pressScaleY: 0.985,
   },
 };
+
+/** 桌宠：飞向目标区的滚动触发（相对 #hero 的 --hero-scroll-length-px，与 motionConfig.stages 同刻度 0~1） */
+export const petConfig = {
+  /** 达到该进度即开始 HOMING；设得比 dockEnd（0.34）小越多越早（约在重叠卡片动画之前） */
+  homingScrollProgress: 0.16,
+  /** 上滑低于该进度则取消目标态（滞回，避免边界抖动） */
+  homingScrollRelease: 0.1,
+};

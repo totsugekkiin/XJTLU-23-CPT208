@@ -5,6 +5,7 @@ import { createSpring, createVelocitySampler } from "./petMotion.js";
 import { createPetDragInteraction } from "./petInteraction.js";
 import { createPetStateMachine, PET_STATES } from "./petStateMachine.js";
 import { observeTargetZone } from "./targetObserver.js";
+import { parseCssNumber } from "../utils.js";
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -98,6 +99,9 @@ async function tryReplaceHeadWithSprite({
  * @param {HTMLElement}  params.hitzone        DOM 拾取区，随宠物包围盒同步尺寸。
  * @param {HTMLElement=} params.anchorEl       宠物 idle 状态下的站立参考（主橙卡）。
  * @param {HTMLElement=} params.targetEl       IntersectionObserver 监听的目标区。
+ * @param {HTMLElement=} params.heroEl         用于读取 --hero-scroll-length-px，配合 homingScrollProgress。
+ * @param {number=}      params.homingScrollProgress  hero 滚动进度阈值（0~1），达到则飞向目标。
+ * @param {number=}      params.homingScrollRelease   滞回下限，进度低于此则收回目标态。
  * @param {boolean}      params.prefersReducedMotion
  * @param {number=}      params.scale          占位符整体缩放，默认 2。
  * @param {string=}      params.headTextureUrl 头部 PNG 路径，默认 images/pet/head.png
@@ -123,6 +127,9 @@ export async function createDesktopPet({
   hitzone,
   anchorEl = null,
   targetEl = null,
+  heroEl = null,
+  homingScrollProgress = null,
+  homingScrollRelease = null,
   prefersReducedMotion = false,
   scale = 2,
   onHeadClick = null,
@@ -304,6 +311,8 @@ export async function createDesktopPet({
 
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  let ioTargetActive = false;
+  let scrollTargetActive = false;
   let targetVisible = false;
   let waveUntil = 0;
 
@@ -328,7 +337,12 @@ export async function createDesktopPet({
   };
 
   const getTargetPoint = () => {
-    if (!targetEl) return getAnchorPoint();
+    if (!targetEl) {
+      if (scrollTargetActive || ioTargetActive) {
+        return { x: window.innerWidth / 2, y: -120 };
+      }
+      return getAnchorPoint();
+    }
     const rect = targetEl.getBoundingClientRect();
     return {
       x: rect.left + rect.width / 2,
@@ -447,18 +461,13 @@ export async function createDesktopPet({
 
   const targetHandle = observeTargetZone({
     element: targetEl,
-    threshold: 0.35,
+    threshold: 0.08,
+    rootMargin: "0px 0px 52vh 0px",
     onEnter() {
-      targetVisible = true;
-      if (!fsm.is(PET_STATES.DRAGGING)) {
-        fsm.setState(PET_STATES.HOMING);
-      }
+      ioTargetActive = true;
     },
     onLeave() {
-      targetVisible = false;
-      if (fsm.is(PET_STATES.HOMING)) {
-        fsm.setState(PET_STATES.IDLE);
-      }
+      ioTargetActive = false;
     },
   });
 
@@ -473,6 +482,28 @@ export async function createDesktopPet({
   const tick = (ticker) => {
     const dt = Math.max(0.0001, Math.min(ticker.deltaTime, 2.5));
     const now = performance.now();
+
+    if (homingScrollProgress != null && heroEl) {
+      const sl = parseCssNumber(
+        window.getComputedStyle(heroEl).getPropertyValue("--hero-scroll-length-px"),
+        6000
+      );
+      const p = Math.max(0, window.scrollY) / Math.max(1, sl);
+      const release =
+        homingScrollRelease ?? Math.max(0, homingScrollProgress - 0.1);
+      if (p >= homingScrollProgress) scrollTargetActive = true;
+      else if (p < release) scrollTargetActive = false;
+    }
+
+    targetVisible = ioTargetActive || scrollTargetActive;
+
+    if (!fsm.is(PET_STATES.DRAGGING) && !fsm.is(PET_STATES.WAVING) && !fsm.is(PET_STATES.PLACED)) {
+      if (targetVisible && !fsm.is(PET_STATES.HOMING)) {
+        fsm.setState(PET_STATES.HOMING);
+      } else if (!targetVisible && fsm.is(PET_STATES.HOMING)) {
+        fsm.setState(PET_STATES.IDLE);
+      }
+    }
 
     if (fsm.is(PET_STATES.WAVING)) {
       // 保持当前位置（不追随 anchor/target），只播放动作
