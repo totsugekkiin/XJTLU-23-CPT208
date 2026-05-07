@@ -113,16 +113,24 @@ export function createRiverScene({
   }
 
   function drawRiver({ t }) {
+    const HEAD_LEN_MAX = 150;
+    const SHOULDER_BULGE_RATIO = 0.12;
+    const TIP_INNER_RATIO = 0.08;
+
     const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
     // 关键修正：底部“固定空白”来自把 scrollDelta 从可视长度里扣掉。
     // 设计目标是：视口内永远有河道（沿着 worldY 前进），而不是滚到末端变成 0。
     const grownAhead = flow.riverFlowY - scrollDelta;
-    const visibleEndY = riverAnimState === "done" ? view.h : clamp(grownAhead, 0, view.h);
-    if (visibleEndY <= 0.5) {
+    const reachedBottom =
+      riverAnimState === "done" || grownAhead >= view.h + HEAD_LEN_MAX;
+
+    const tipY = Math.min(grownAhead, view.h);
+    const visibleForBlank = riverAnimState === "done" ? view.h : tipY;
+    if (visibleForBlank <= 0.5) {
       if (!hasLoggedBlank && isActive && (riverAnimState === "flowing" || riverAnimState === "done")) {
         hasLoggedBlank = true;
         // #region agent log
-        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:drawRiver(blank)',message:'visibleEndY<=0.5 while active',data:{riverAnimState,scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),visibleEndY:Math.round(visibleEndY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:drawRiver(blank)',message:'visibleEndY<=0.5 while active',data:{riverAnimState,scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),visibleEndY:Math.round(visibleForBlank),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
       }
       return;
@@ -132,41 +140,125 @@ export function createRiverScene({
     const left = [];
     const right = [];
 
-    for (let screenY = 0; screenY <= visibleEndY; screenY += step) {
-      const worldY = scrollDelta + screenY;
-      const cx = getCenterX(worldY);
-      const hw = getRiverHalfWidth(worldY, t);
+    function sampleStripTo(endY) {
+      left.length = 0;
+      right.length = 0;
+      let lastY = -1;
+      for (let screenY = 0; screenY <= endY; screenY += step) {
+        const worldY = scrollDelta + screenY;
+        const cx = getCenterX(worldY);
+        const hw = getRiverHalfWidth(worldY, t);
 
-      // 只让边缘扭动：wobble 叠加在左右岸上，中心线不动
-      const wobble = Math.sin(worldY * 0.09 + t * 0.003) * 2.0;
-      left.push({ x: cx - hw + wobble, y: screenY });
-      right.push({ x: cx + hw + wobble, y: screenY });
+        // 只让边缘扭动：wobble 叠加在左右岸上，中心线不动
+        const wobble = Math.sin(worldY * 0.09 + t * 0.003) * 2.0;
+        left.push({ x: cx - hw + wobble, y: screenY });
+        right.push({ x: cx + hw + wobble, y: screenY });
+        lastY = screenY;
+      }
+      if (endY > 0.01 && lastY < endY - 0.01) {
+        const worldY = scrollDelta + endY;
+        const cx = getCenterX(worldY);
+        const hw = getRiverHalfWidth(worldY, t);
+        const wobble = Math.sin(worldY * 0.09 + t * 0.003) * 2.0;
+        left.push({ x: cx - hw + wobble, y: endY });
+        right.push({ x: cx + hw + wobble, y: endY });
+      }
     }
 
     ctx.save();
 
-    // 河水主体（偏墨色 + 一点透明，营造“渗出/墨坠”）
+    // 水头已触底并被“吸入”完成：平底铺满（视口内不再出现尖头）
+    if (reachedBottom) {
+      sampleStripTo(view.h);
+
+      ctx.beginPath();
+      ctx.moveTo(left[0].x, left[0].y);
+      for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+      for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+      ctx.closePath();
+
+      ctx.fillStyle = "rgba(6, 28, 45, 0.92)";
+      ctx.fill();
+
+      ctx.globalCompositeOperation = "screen";
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.beginPath();
+      ctx.moveTo(left[0].x, left[0].y);
+      for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(right[0].x, right[0].y);
+      for (let i = 1; i < right.length; i++) ctx.lineTo(right[i].x, right[i].y);
+      ctx.stroke();
+
+      ctx.restore();
+      return;
+    }
+
+    // 泪滴水头：主体条带 + 底部圆润外扩肩 + 尖点
+    const bodyEndY = Math.max(0, grownAhead - HEAD_LEN_MAX);
+    const tipLen = tipY - bodyEndY;
+    sampleStripTo(bodyEndY);
+
+    const leftBodyX = left[left.length - 1].x;
+    const rightBodyX = right[right.length - 1].x;
+    const cxTip = getCenterX(scrollDelta + tipY);
+    const hwBody = getRiverHalfWidth(scrollDelta + bodyEndY, t);
+    const bulge = hwBody * SHOULDER_BULGE_RATIO;
+    const innerX = hwBody * TIP_INNER_RATIO;
+
     ctx.beginPath();
     ctx.moveTo(left[0].x, left[0].y);
     for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
-    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.bezierCurveTo(
+      leftBodyX - bulge,
+      bodyEndY + tipLen * 0.35,
+      cxTip - innerX,
+      tipY - tipLen * 0.05,
+      cxTip,
+      tipY
+    );
+    ctx.bezierCurveTo(
+      cxTip + innerX,
+      tipY - tipLen * 0.05,
+      rightBodyX + bulge,
+      bodyEndY + tipLen * 0.35,
+      rightBodyX,
+      bodyEndY
+    );
+    for (let i = right.length - 2; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
     ctx.closePath();
 
-    // 去掉“上方渐变透明”的观感：河水主体改为稳定的纯色填充
     ctx.fillStyle = "rgba(6, 28, 45, 0.92)";
     ctx.fill();
 
-    // 两岸高光线（类似水面边缘反光）
     ctx.globalCompositeOperation = "screen";
     ctx.lineWidth = 2.2;
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.beginPath();
     ctx.moveTo(left[0].x, left[0].y);
     for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+    ctx.bezierCurveTo(
+      leftBodyX - bulge,
+      bodyEndY + tipLen * 0.35,
+      cxTip - innerX,
+      tipY - tipLen * 0.05,
+      cxTip,
+      tipY
+    );
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(right[0].x, right[0].y);
     for (let i = 1; i < right.length; i++) ctx.lineTo(right[i].x, right[i].y);
+    ctx.bezierCurveTo(
+      rightBodyX + bulge,
+      bodyEndY + tipLen * 0.35,
+      cxTip + innerX,
+      tipY - tipLen * 0.05,
+      cxTip,
+      tipY
+    );
     ctx.stroke();
 
     ctx.restore();
