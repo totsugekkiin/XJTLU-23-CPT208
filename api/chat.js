@@ -1,5 +1,5 @@
 // api/chat.js
-// Vercel Node Serverless Function (CommonJS export for widest compatibility)
+// Vercel Node Serverless Function (ESM; repo uses "type":"module")
 
 function safeJsonParse(maybeJson) {
   if (maybeJson == null) return null;
@@ -38,7 +38,7 @@ const SYSTEM_PROMPT = `你现在的身份是《红楼梦》中的林黛玉。你
 【输出要求】
 回复简洁有信息量，便于游客在街头阅读；若用户只打招呼，可短答并温和引导其提问。`;
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed", message: "请使用 POST 请求" });
@@ -109,4 +109,4 @@ module.exports = async function handler(req, res) {
       message: error?.message ? String(error.message) : "服务器出了点小问题，请稍后再试",
     });
   }
-};
+}
