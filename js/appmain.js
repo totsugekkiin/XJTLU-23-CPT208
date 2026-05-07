@@ -13,6 +13,24 @@ import { createCurtainRiverTransition } from "./appmain/curtainRiverTransition.j
 import { createRiverScene } from "./appmain/riverScene.js";
 
 export function bootstrapAppMain() {
+  // 屏蔽本地调试上报（127.0.0.1:7502）在生产/未启动服务时刷屏报错
+  // 仅拦截 ingest 域名，不影响其它 fetch
+  if (typeof window !== "undefined" && typeof window.fetch === "function" && !window.__INGEST_FETCH_PATCHED__) {
+    window.__INGEST_FETCH_PATCHED__ = true;
+    const _fetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      try {
+        const url = typeof input === "string" ? input : input?.url;
+        if (typeof url === "string" && url.includes("127.0.0.1:7502/ingest/")) {
+          return Promise.resolve(new Response("", { status: 204 }));
+        }
+      } catch {
+        // ignore
+      }
+      return _fetch(input, init);
+    };
+  }
+
   // 防止在某些开发环境/热更新场景下重复执行入口脚本，导致转场回调触发两次
   if (globalThis.__APPMAIN_BOOTSTRAPPED__) {
     // #region agent log

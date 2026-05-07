@@ -67,7 +67,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
   const walkingRef = useRef(null); // [AI 新增/修改]
   const overlaysRef = useRef([]); // 手动绘制覆盖物（fallback 用）
 
-  const drawFallback = (map, pts) => {
+  const drawFallback = (map, pts, { strokeColor = "#cc5628" } = {}) => {
     if (!map || !Array.isArray(pts) || pts.length < 2) return false;
     try {
       const path = pts.map((p) => [Number(p?.[0]), Number(p?.[1])]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
@@ -75,7 +75,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
       const line = new window.AMap.Polyline({
         path,
-        strokeColor: "#cc5628",
+        strokeColor,
         strokeOpacity: 0.95,
         strokeWeight: 8,
         strokeStyle: "solid",
@@ -115,29 +115,44 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     }
   };
 
-  // [AI 新增/修改] 绘制并切换路线：清除旧覆盖物 → Walking 规划 → setFitView
-  const drawRoute = (routeId) => {
+  // 绘制并切换路线：支持 string routeId；若误传事件对象则从 data-route-id 兜底解析
+  const drawRoute = (routeIdOrEvent) => {
+    let routeId = null;
+    if (typeof routeIdOrEvent === "string") {
+      routeId = routeIdOrEvent;
+    } else {
+      const el = routeIdOrEvent?.currentTarget;
+      const dsId = el?.getAttribute?.("data-route-id") ?? el?.dataset?.routeId ?? null;
+      if (typeof dsId === "string" && dsId.trim()) routeId = dsId.trim();
+    }
+
+    if (!routeId) return;
+
     const map = amapMapRef.current;
     const walking = walkingRef.current;
     const cfg = routeData[routeId];
-    if (!map || !walking || !cfg) return;
+
+    // [安全检查] 确保 cfg 存在
+    if (!map || !walking || !cfg) {
+      console.warn("未找到路线配置或地图实例未就绪", routeId);
+      return;
+    }
+
+    // 提前缓存 name，防止异步回调时 cfg 状态异常
+    const currentRouteName = cfg.name || "未知线路";
 
     setActiveRouteId(routeId);
     setRouteTip("正在规划路线…");
 
+    // 清除旧覆盖物
     try {
-      // 不用 clearMap：它会把底层控件/状态一起清掉，且在某些布局变化下易引发白屏
       walking.clear?.();
-      overlaysRef.current.forEach((ov) => {
-        try {
-          ov?.setMap?.(null);
-        } catch {
-          // ignore
-        }
-      });
-      overlaysRef.current = [];
-    } catch {
-      // ignore
+      if (overlaysRef.current) {
+        overlaysRef.current.forEach((ov) => ov?.setMap?.(null));
+        overlaysRef.current = [];
+      }
+    } catch (e) {
+      console.error(e);
     }
 
     const pts = cfg.points || [];
@@ -146,32 +161,37 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     const toLngLat = (p) => new window.AMap.LngLat(Number(p?.[0]), Number(p?.[1]));
     const origin = toLngLat(pts[0]);
     const destination = toLngLat(pts[pts.length - 1]);
-    const waypoints = pts.slice(1, -1).map((p) => toLngLat(p)); // 去掉首尾的中间节点
+    const waypoints = pts.slice(1, -1).map((p) => toLngLat(p));
 
-    try {
-      walking.search(origin, destination, { waypoints }, (status, result) => {
-        if (status === "complete") {
-          setRouteTip(`路线已生成：${cfg.name}`);
-          // [AI 新增/修改] 绘制完成后自动适配视野
-          window.requestAnimationFrame(() => {
-            try {
-              map.setFitView();
-            } catch {
-              // ignore
-            }
-          });
-          return;
-        }
+    let settled = false;
+    // 增加定时器引用，确保能清除
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const ok = drawFallback(map, pts, { strokeColor: "#234e35" });
+      setRouteTip(ok ? `规划超时，已使用本地连线预览：${currentRouteName}` : "规划超时");
+    }, 3500);
 
-        console.error("Walking.search failed:", status, result);
+    // 执行搜索
+    walking.search(origin, destination, { waypoints }, (status, result) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+
+      if (status === "complete") {
+        // [修复点] 使用前面缓存的 currentRouteName，确保安全
+        setRouteTip(`路线已生成：${currentRouteName}`);
+        window.requestAnimationFrame(() => {
+          try {
+            map.setFitView();
+          } catch (e) {}
+        });
+      } else {
+        console.error("搜索失败:", status);
         const ok = drawFallback(map, pts);
-        setRouteTip(ok ? `规划失败（${String(status)}），已使用本地连线预览：${cfg.name}` : `规划失败（${String(status)}），且本地预览绘制失败`);
-      });
-    } catch (e) {
-      console.error("Walking.search threw:", e);
-      const ok = drawFallback(map, pts);
-      setRouteTip(ok ? `规划异常，已使用本地连线预览：${cfg.name}` : "规划异常，且本地预览绘制失败");
-    }
+        setRouteTip(ok ? `规划失败，已展示预览：${currentRouteName}` : "规划失败");
+      }
+    });
   };
 
   useEffect(() => {
@@ -632,7 +652,8 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           className={`felt-card ${activeRouteId === "waterAlley" ? "is-active" : ""}`}
           type="button"
           aria-label="经典水巷线"
-          onClick={() => drawRoute("waterAlley")} // [AI 新增/修改]
+          data-route-id="waterAlley"
+          onClick={() => drawRoute("waterAlley")}
         >
           <div className="felt-card-label patch stitch">第1线</div>
           <div className="felt-card-body patch stitch stitch-dark">
@@ -659,7 +680,8 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           className={`felt-card ${activeRouteId === "nightTour" ? "is-active" : ""}`}
           type="button"
           aria-label="夜游氛围线"
-          onClick={() => drawRoute("nightTour")} // [AI 新增/修改]
+          data-route-id="nightTour"
+          onClick={() => drawRoute("nightTour")}
         >
           <div className="felt-card-label orange patch stitch">第2线</div>
           <div className="felt-card-body patch stitch stitch-dark">
