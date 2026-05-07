@@ -326,11 +326,15 @@ export function createRiverScene({
   function render(t) {
     ctx.clearRect(0, 0, view.w, view.h);
 
-    // 防止滚动推进速度大于生长速度导致“追不上”的空白
+    // 防止滚动推进速度大于生长速度导致“追不上”的空白：
+    // 仅在用户已经滚动（scrollDelta > 0）时启用兜底；幕布刚合上、用户还没滚动时
+    // 让 GSAP 把 riverFlowY 从 0 自然涨上来，呈现“水头从上往下流”的视觉。
     if (riverAnimState === "flowing") {
       const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
-      const minNeeded = scrollDelta + view.h + 80;
-      if (flow.riverFlowY < minNeeded) flow.riverFlowY = minNeeded;
+      if (scrollDelta > 0) {
+        const minNeeded = scrollDelta + view.h + 80;
+        if (flow.riverFlowY < minNeeded) flow.riverFlowY = minNeeded;
+      }
     }
 
     drawRiver({ t });

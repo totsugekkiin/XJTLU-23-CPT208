@@ -108,10 +108,10 @@ export function bootstrapAppMain() {
       const gsap = window.gsap;
       const start = () =>
         riverScene.startFlow({
-          duration: prefersReducedMotion ? 0.01 : 2.0,
+          duration: prefersReducedMotion ? 0.01 : 2.4,
           ease: prefersReducedMotion ? "none" : "power2.inOut",
-          boatDelay: prefersReducedMotion ? 0 : 0.12,
-          boatEnterDuration: prefersReducedMotion ? 0.01 : 0.65,
+          boatDelay: prefersReducedMotion ? 0 : 0.55,
+          boatEnterDuration: prefersReducedMotion ? 0.01 : 0.7,
         });
       // 双保险：确保幕布完全铺好（合拢完成）后，再启动河流/船/内容显现链路
       if (gsap?.delayedCall && !prefersReducedMotion) gsap.delayedCall(0.06, start);
