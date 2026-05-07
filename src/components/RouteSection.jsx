@@ -113,8 +113,45 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
   const [activeRouteId, setActiveRouteId] = useState("waterAlley"); // [AI 新增/修改] 默认选中经典水巷线
   const [routeTip, setRouteTip] = useState("加载中…");
   const amapMapRef = useRef(null); // [AI 新增/修改]
-  const walkingRef = useRef(null); // [AI 新增/修改]
   const overlaysRef = useRef([]); // 手动绘制覆盖物（fallback 用）
+
+  const jsonp = (url, params = {}, { timeoutMs = 9000 } = {}) =>
+    new Promise((resolve, reject) => {
+      const cb = `__amap_jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+      const qs = new URLSearchParams({ ...params, callback: cb });
+      const src = `${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`;
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+
+      const cleanup = () => {
+        try {
+          delete window[cb];
+        } catch {
+          window[cb] = undefined;
+        }
+        script.remove?.();
+      };
+
+      const t = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("jsonp_timeout"));
+      }, Math.max(1000, timeoutMs));
+
+      window[cb] = (data) => {
+        window.clearTimeout(t);
+        cleanup();
+        resolve(data);
+      };
+
+      script.onerror = () => {
+        window.clearTimeout(t);
+        cleanup();
+        reject(new Error("jsonp_load_failed"));
+      };
+
+      document.head.appendChild(script);
+    });
 
   const drawFallback = (map, pts, { strokeColor = "#cc5628" } = {}) => {
     if (!map || !Array.isArray(pts) || pts.length < 2) return false;
@@ -178,11 +215,10 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     if (!routeId) return;
 
     const map = amapMapRef.current;
-    const walking = walkingRef.current;
     const cfg = routeData[routeId];
 
     // [安全检查] 确保 cfg 存在
-    if (!map || !walking || !cfg) {
+    if (!map || !cfg) {
       console.warn("未找到路线配置或地图实例未就绪", routeId);
       setRouteTip("地图未就绪：请等待加载完成后再试（或刷新页面）");
       return;
@@ -196,7 +232,6 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
     // 清除旧覆盖物
     try {
-      walking.clear?.();
       if (overlaysRef.current) {
         overlaysRef.current.forEach((ov) => ov?.setMap?.(null));
         overlaysRef.current = [];
@@ -211,75 +246,53 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     const toLngLat = (p) => new window.AMap.LngLat(Number(p?.[0]), Number(p?.[1]));
     const origin = toLngLat(pts[0]);
     const destination = toLngLat(pts[pts.length - 1]);
-    const waypoints = pts.slice(1, -1).map((p) => toLngLat(p));
+    const waypointLngLats = pts.slice(1, -1).map((p) => toLngLat(p));
 
-    let settled = false;
-    // 增加定时器引用，确保能清除
-    const timeoutId = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      const ok = drawFallback(map, pts, { strokeColor: "#234e35" });
+    const segs = [origin, ...waypointLngLats, destination];
+    const allCoords = [];
+    const allInstructions = [];
+    let totalDistance = 0;
+    let totalDuration = 0;
+
+    const run = async () => {
+      for (let i = 0; i < segs.length - 1; i++) {
+        const a = segs[i];
+        const b = segs[i + 1];
+        const res = await jsonp("https://restapi.amap.com/v3/direction/walking", {
+          key: AMAP_KEY,
+          origin: `${a.lng},${a.lat}`,
+          destination: `${b.lng},${b.lat}`,
+        }, { timeoutMs: 6500 });
+
+        const parsed = parseWalkingWebServiceResult(res);
+        if (!parsed.ok) {
+          const reason = formatWalkingFailure(res?.status, res);
+          throw new Error(`walking_failed:${reason}`);
+        }
+
+        if (parsed.coords.length) allCoords.push(...parsed.coords);
+        if (parsed.instructions.length) allInstructions.push(...parsed.instructions);
+        if (typeof parsed.distance === "number" && Number.isFinite(parsed.distance)) totalDistance += parsed.distance;
+        if (typeof parsed.duration === "number" && Number.isFinite(parsed.duration)) totalDuration += parsed.duration;
+      }
+
+      const ok2 = drawFallback(map, allCoords, { strokeColor: "#cc5628" });
+      const km = totalDistance > 0 ? (totalDistance / 1000).toFixed(2) : null;
+      const min = totalDuration > 0 ? Math.round(totalDuration / 60) : null;
+      const head = allInstructions.slice(0, 2).join("；");
       setRouteTip(
-        ok
-          ? `规划超时，已使用本地连线预览：${currentRouteName}（若需真实导航，请检查高德 Key/安全密钥的域名白名单）`
-          : "规划超时：本地预览绘制也失败了（请刷新重试）"
+        ok2
+          ? `路线已生成：${currentRouteName}${km ? ` · ${km}km` : ""}${min != null ? ` · ${min}min` : ""}${head ? ` · ${head}` : ""}`
+          : `路线已生成：${currentRouteName}（但绘制失败，请刷新重试）`
       );
-    }, 3500);
+    };
 
-    // 执行搜索
-    try {
-      walking.search(origin, destination, { waypoints }, (status, result) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timeoutId);
-
-        if (status === "complete") {
-          // [修复点] 使用前面缓存的 currentRouteName，确保安全
-          setRouteTip(`路线已生成：${currentRouteName}`);
-          window.requestAnimationFrame(() => {
-            try {
-              map.setFitView();
-            } catch (e) {}
-          });
-          return;
-        }
-
-        // 兼容 WebService JSONP 格式（你贴出来的 status=1 / route.paths[].steps[].polyline）
-        try {
-          const parsed = parseWalkingWebServiceResult(result);
-          if (parsed.ok) {
-            const ok2 = drawFallback(map, parsed.coords, { strokeColor: "#cc5628" });
-            const km = typeof parsed.distance === "number" && Number.isFinite(parsed.distance) ? (parsed.distance / 1000).toFixed(2) : null;
-            const min = typeof parsed.duration === "number" && Number.isFinite(parsed.duration) ? Math.round(parsed.duration / 60) : null;
-            const head = parsed.instructions.slice(0, 2).join("；");
-            setRouteTip(
-              ok2
-                ? `路线已生成：${currentRouteName}${km ? ` · ${km}km` : ""}${min != null ? ` · ${min}min` : ""}${head ? ` · ${head}` : ""}`
-                : `路线已生成：${currentRouteName}（但绘制失败，请刷新重试）`
-            );
-            return;
-          }
-        } catch (e) {
-          console.error("[walking] parse WebService result failed:", e);
-        }
-
-        const reason = formatWalkingFailure(status, result);
-        console.error("Walking.search failed:", { status, result });
-        const ok = drawFallback(map, pts);
-        setRouteTip(
-          ok
-            ? `规划失败（${reason}），已展示预览：${currentRouteName}（可能是域名白名单/配额/权限问题）`
-            : `规划失败（${reason}），且本地预览绘制失败（请刷新重试）`
-        );
-      });
-    } catch (err) {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeoutId);
-      console.error("Walking.search threw:", err);
-      const ok = drawFallback(map, pts);
-      setRouteTip(ok ? `规划异常（${formatAmapErr(err)}），已展示预览：${currentRouteName}` : `规划异常（${formatAmapErr(err)}）`);
-    }
+    // 运行：失败则用绿色超时线/预览线兜底
+    run().catch((err) => {
+      console.error("[route] webservice walking failed:", err);
+      const ok = drawFallback(map, pts, { strokeColor: "#234e35" });
+      setRouteTip(ok ? `规划失败，已使用本地连线预览：${currentRouteName}` : `规划失败：${formatAmapErr(err)}`);
+    });
   };
 
   useEffect(() => {
@@ -339,25 +352,6 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         io.observe(mapRef.current);
       }
 
-      // [AI 新增/修改] 加载 AMap.Walking 插件
-      try {
-        await new Promise((resolve) => {
-          window.AMap.plugin(["AMap.Walking"], () => {
-            try {
-              walkingRef.current = new window.AMap.Walking({ map });
-            } catch (e) {
-              console.error("[amap] Walking init failed:", e);
-              walkingRef.current = null;
-              setRouteTip(`步行导航组件初始化失败：${formatAmapErr(e)}（将仅显示本地预览连线）`);
-            }
-            resolve(true);
-          });
-        });
-      } catch (e) {
-        console.error("[amap] Walking plugin load failed:", e);
-        setRouteTip(`步行导航插件加载失败：${formatAmapErr(e)}（将仅显示本地预览连线）`);
-      }
-
       setMapReady(true);
       setRouteTip("请选择一条推荐路线");
       window.requestAnimationFrame(() => map?.resize?.());
@@ -372,14 +366,12 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       try {
         io?.disconnect?.();
         resizeObs?.disconnect?.();
-        walkingRef.current?.clear?.(); // [AI 新增/修改]
         map?.destroy?.();
       } catch {
         // ignore
       }
       map = null;
       amapMapRef.current = null; // [AI 新增/修改]
-      walkingRef.current = null; // [AI 新增/修改]
       setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
