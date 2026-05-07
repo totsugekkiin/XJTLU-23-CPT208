@@ -79,12 +79,8 @@ body.is-river-page .cm-mask-transition {
   display: none;
 }
 
-/* 地图段只在河流页模式中可见，避免“胶片底部也有地图” */
+/* 地图段：始终可见（避免退出河流页后“地图消失”） */
 .route-after-river {
-  display: none;
-}
-
-body.is-river-page .route-after-river {
   display: block;
 }
 

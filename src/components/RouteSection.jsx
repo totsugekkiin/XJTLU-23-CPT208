@@ -62,8 +62,58 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [activeRouteId, setActiveRouteId] = useState("waterAlley"); // [AI 新增/修改] 默认选中经典水巷线
+  const [routeTip, setRouteTip] = useState("加载中…");
   const amapMapRef = useRef(null); // [AI 新增/修改]
   const walkingRef = useRef(null); // [AI 新增/修改]
+  const overlaysRef = useRef([]); // 手动绘制覆盖物（fallback 用）
+
+  const drawFallback = (map, pts) => {
+    if (!map || !Array.isArray(pts) || pts.length < 2) return false;
+    try {
+      const path = pts.map((p) => [Number(p?.[0]), Number(p?.[1])]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      if (path.length < 2) return false;
+
+      const line = new window.AMap.Polyline({
+        path,
+        strokeColor: "#cc5628",
+        strokeOpacity: 0.95,
+        strokeWeight: 8,
+        strokeStyle: "solid",
+        lineJoin: "round",
+        lineCap: "round",
+        isOutline: true,
+        outlineColor: "rgba(255,255,255,0.9)",
+        outlineWeight: 2,
+        zIndex: 120,
+      });
+      line.setMap(map);
+      overlaysRef.current.push(line);
+
+      const mkStart = new window.AMap.Marker({
+        position: path[0],
+        anchor: "bottom-center",
+        title: "起点",
+        zIndex: 130,
+      });
+      mkStart.setMap(map);
+      overlaysRef.current.push(mkStart);
+
+      const mkEnd = new window.AMap.Marker({
+        position: path[path.length - 1],
+        anchor: "bottom-center",
+        title: "终点",
+        zIndex: 130,
+      });
+      mkEnd.setMap(map);
+      overlaysRef.current.push(mkEnd);
+
+      map.setFitView(overlaysRef.current);
+      return true;
+    } catch (e) {
+      console.error("fallback draw failed:", e);
+      return false;
+    }
+  };
 
   // [AI 新增/修改] 绘制并切换路线：清除旧覆盖物 → Walking 规划 → setFitView
   const drawRoute = (routeId) => {
@@ -73,10 +123,19 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     if (!map || !walking || !cfg) return;
 
     setActiveRouteId(routeId);
+    setRouteTip("正在规划路线…");
 
     try {
-      map.clearMap(); // [AI 新增/修改] 每次切换必须清空旧路线/标记
-      walking.clear?.(); // [AI 新增/修改] 额外清空 Walking 内部绘制（若有）
+      // 不用 clearMap：它会把底层控件/状态一起清掉，且在某些布局变化下易引发白屏
+      walking.clear?.();
+      overlaysRef.current.forEach((ov) => {
+        try {
+          ov?.setMap?.(null);
+        } catch {
+          // ignore
+        }
+      });
+      overlaysRef.current = [];
     } catch {
       // ignore
     }
@@ -84,30 +143,43 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     const pts = cfg.points || [];
     if (pts.length < 2) return;
 
-    const origin = new window.AMap.LngLat(pts[0][0], pts[0][1]);
-    const destination = new window.AMap.LngLat(pts[pts.length - 1][0], pts[pts.length - 1][1]);
-    const waypoints = pts.slice(1, -1).map((p) => new window.AMap.LngLat(p[0], p[1])); // [AI 新增/修改] 去掉首尾的中间节点
+    const toLngLat = (p) => new window.AMap.LngLat(Number(p?.[0]), Number(p?.[1]));
+    const origin = toLngLat(pts[0]);
+    const destination = toLngLat(pts[pts.length - 1]);
+    const waypoints = pts.slice(1, -1).map((p) => toLngLat(p)); // 去掉首尾的中间节点
 
-    walking.search(origin, destination, { waypoints }, (status, result) => {
-      if (status === "complete") {
-        // [AI 新增/修改] 绘制完成后自动适配视野
-        window.requestAnimationFrame(() => {
-          try {
-            map.setFitView();
-          } catch {
-            // ignore
-          }
-        });
-      } else {
+    try {
+      walking.search(origin, destination, { waypoints }, (status, result) => {
+        if (status === "complete") {
+          setRouteTip(`路线已生成：${cfg.name}`);
+          // [AI 新增/修改] 绘制完成后自动适配视野
+          window.requestAnimationFrame(() => {
+            try {
+              map.setFitView();
+            } catch {
+              // ignore
+            }
+          });
+          return;
+        }
+
         console.error("Walking.search failed:", status, result);
-      }
-    });
+        const ok = drawFallback(map, pts);
+        setRouteTip(ok ? `规划失败（${String(status)}），已使用本地连线预览：${cfg.name}` : `规划失败（${String(status)}），且本地预览绘制失败`);
+      });
+    } catch (e) {
+      console.error("Walking.search threw:", e);
+      const ok = drawFallback(map, pts);
+      setRouteTip(ok ? `规划异常，已使用本地连线预览：${cfg.name}` : "规划异常，且本地预览绘制失败");
+    }
   };
 
   useEffect(() => {
     let cancelled = false;
     /** @type {any} */
     let map = null;
+    let resizeObs = null;
+    let io = null;
 
     const init = async () => {
       if (!mapRef.current) return;
@@ -129,6 +201,29 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
       amapMapRef.current = map; // [AI 新增/修改] 保存 map 实例供 drawRoute 使用
 
+      // 容器从隐藏/尺寸变化恢复时，强制 resize，避免白屏
+      const tryResize = () => {
+        try {
+          map?.resize?.();
+        } catch {
+          // ignore
+        }
+      };
+      tryResize();
+      if ("ResizeObserver" in window) {
+        resizeObs = new ResizeObserver(() => tryResize());
+        resizeObs.observe(mapRef.current);
+      }
+      if ("IntersectionObserver" in window) {
+        io = new IntersectionObserver(
+          (entries) => {
+            if (entries?.[0]?.isIntersecting) tryResize();
+          },
+          { threshold: 0.01 }
+        );
+        io.observe(mapRef.current);
+      }
+
       // [AI 新增/修改] 加载 AMap.Walking 插件
       await new Promise((resolve) => {
         window.AMap.plugin(["AMap.Walking"], () => {
@@ -140,6 +235,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       });
 
       setMapReady(true);
+      setRouteTip("请选择一条推荐路线");
       window.requestAnimationFrame(() => map?.resize?.());
 
       // [AI 新增/修改] 首次进入默认绘制“经典水巷线”
@@ -150,6 +246,8 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     return () => {
       cancelled = true;
       try {
+        io?.disconnect?.();
+        resizeObs?.disconnect?.();
         walkingRef.current?.clear?.(); // [AI 新增/修改]
         map?.destroy?.();
       } catch {
@@ -305,7 +403,6 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           flex-direction: column;
           padding: 8px;
           margin-bottom: 16px;
-          transform: rotate(0.5deg);
         }
 
         .felt-map-info {
@@ -462,6 +559,22 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           opacity: 0;
           pointer-events: none;
         }
+
+        .felt-routeTip {
+          position: absolute;
+          left: 8px;
+          right: 8px;
+          bottom: 8px;
+          z-index: 35;
+          background: rgba(244, 239, 230, 0.92);
+          border: 1px solid rgba(44, 44, 44, 0.25);
+          color: var(--felt-dark);
+          font-size: 12px;
+          font-weight: 800;
+          padding: 6px 8px;
+          border-radius: 4px;
+          box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.12);
+        }
       `}</style>
 
       {showBackButton ? (
@@ -506,6 +619,10 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           <div className={`loading-cloth stitch ${mapReady ? "fade" : ""}`}>
             <div style={{ fontSize: "24px", animation: "clothSpin 3s linear infinite" }}>🧶</div>
             <div style={{ fontWeight: "bold", marginTop: "8px", fontSize: "14px" }}>布艺拼贴中...</div>
+          </div>
+
+          <div className="felt-routeTip" aria-live="polite">
+            {routeTip}
           </div>
         </div>
       </div>
