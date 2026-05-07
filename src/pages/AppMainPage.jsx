@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { RouteSection } from "../components/RouteSection.jsx";
 
 export function AppMainPage() {
   useEffect(() => {
@@ -430,6 +431,7 @@ export function AppMainPage() {
               </div>
             </div>
           </div>
+
         </div>
 
         <div id="boat-container" aria-hidden="true">
@@ -451,6 +453,11 @@ export function AppMainPage() {
           </svg>
         </div>
       </div>
+
+      {/* 河流阶段结束后，紧贴进入地图界面（正常网页下滑） */}
+      <section className="route-after-river" id="route-section" aria-label="推荐路线">
+        <RouteSection heightVh={100} />
+      </section>
 
       <div id="pet-layer" className="pet-layer" aria-hidden="true">
         <div id="pet-hitzone" className="pet-hitzone" role="button" aria-label="可拖拽的桌面宠物" tabIndex={-1} />

@@ -97,6 +97,31 @@ export function bootstrapAppMain() {
   cardStackController.updateByScroll();
 
   const riverScene = createRiverScene();
+  const riverStageEl = document.getElementById("river-stage");
+  const routeSectionEl = document.getElementById("route-section");
+  let routeSectionObserver = null;
+  if (riverStageEl && routeSectionEl && "IntersectionObserver" in window) {
+    // 当地图段进入视口时，隐藏 fixed 河流层，避免遮挡文档流内容
+    routeSectionObserver = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        riverStageEl.classList.toggle("river-stage--hidden-by-route", !!e?.isIntersecting);
+      },
+      { threshold: 0.02 }
+    );
+    routeSectionObserver.observe(routeSectionEl);
+  }
+
+  // ====== 河流页模式：允许向上滑“退出河流页”回到胶片段 ======
+  const riverPage = {
+    active: false,
+    exiting: false,
+    riverTopY: 0,
+    preScrollY: 0,
+    cmBottomScrollY: 0,
+    exitArmed: false,
+    lastScrollY: 0,
+  };
 
   const transition = createCurtainRiverTransition({
     onClosed() {
@@ -106,6 +131,31 @@ export function bootstrapAppMain() {
       fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:onClosed',message:'curtain closed -> startFlow',data:{scrollY:Math.round(window.scrollY),prefersReducedMotion},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       const gsap = window.gsap;
+      const enterRiverPage = () => {
+        if (riverPage.exiting) return;
+        // 记录进入河流前“胶片段最底部附近”的 scrollY，退出时回到这里
+        const cmSection = document.getElementById("cm-transition");
+        const cmWrap = document.getElementById("cm-mask-scroll");
+        if (cmSection && cmWrap) {
+          const scrollLength = Math.max(1, cmWrap.offsetHeight - window.innerHeight);
+          riverPage.cmBottomScrollY = Math.max(0, cmSection.offsetTop + scrollLength - 4);
+        } else {
+          riverPage.cmBottomScrollY = window.scrollY;
+        }
+
+        document.body.classList.add("is-river-page");
+        riverPage.active = true;
+        riverPage.exitArmed = false;
+        riverPage.preScrollY = window.scrollY;
+        // 进入河流“页面”后，让滚动叙事从 river-scroll-spacer 开始
+        // 注意：这里必须用 auto，避免平滑滚动过程中 scrollMaskZoom 继续驱动幕布回开
+        const spacer = document.getElementById("river-scroll-spacer");
+        spacer?.scrollIntoView({ behavior: "auto", block: "start" });
+        // 记录“河流页顶部”的 scrollY，用于检测用户向上滑到顶并退出
+        riverPage.riverTopY = spacer ? spacer.offsetTop : window.scrollY;
+        riverPage.lastScrollY = window.scrollY;
+      };
+
       const start = () =>
         riverScene.startFlow({
           duration: prefersReducedMotion ? 0.01 : 2.4,
@@ -113,17 +163,76 @@ export function bootstrapAppMain() {
           boatDelay: prefersReducedMotion ? 0 : 0.55,
           boatEnterDuration: prefersReducedMotion ? 0.01 : 0.7,
         });
+
       // 双保险：确保幕布完全铺好（合拢完成）后，再启动河流/船/内容显现链路
-      if (gsap?.delayedCall && !prefersReducedMotion) gsap.delayedCall(0.06, start);
-      else start();
+      // 关键：先把页面切到“河流页”并跳转滚动位置，再 startFlow，确保 riverScene 记录的 scroll.startY 正确
+      if (gsap?.delayedCall && !prefersReducedMotion) {
+        gsap.delayedCall(0.06, () => {
+          enterRiverPage();
+          start();
+        });
+      } else {
+        enterRiverPage();
+        start();
+      }
     },
     onBeforeOpen() {
       // 回退时：先让幕布后内容消失，再开幕布
       riverScene?.stopAndHide?.();
+      document.body.classList.remove("is-river-page");
+      riverPage.active = false;
     },
   });
 
-  setupScrollMaskZoom({ prefersReducedMotion, onProgress: transition.handleProgress });
+  const exitRiverPage = () => {
+    if (!riverPage.active || riverPage.exiting) return;
+    riverPage.exiting = true;
+    // 退出河流页：先开幕布（内部会 stopAndHide），再恢复滚动到胶片段附近
+    try {
+      transition.reverseOpen();
+    } catch (e) {
+      console.error("[riverPage] reverseOpen failed", e);
+      riverScene?.stopAndHide?.();
+      document.body.classList.remove("is-river-page");
+      riverPage.active = false;
+    }
+
+    // 还原到胶片段“最底部附近”（避免回到初始阊门界面）
+    const targetY = Math.max(0, (riverPage.cmBottomScrollY || riverPage.preScrollY) - 12);
+    // display none 切换会改变文档高度：等一帧再滚动，避免浏览器把 scrollY 钳到 0
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: targetY, behavior: "auto" });
+    });
+    riverPage.exiting = false;
+  };
+
+  const onScrollForRiverPageExit = () => {
+    if (!riverPage.active) return;
+    const y = window.scrollY;
+    const dy = y - (riverPage.lastScrollY ?? y);
+    riverPage.lastScrollY = y;
+
+    // 只有当用户已经从河流顶部往下滚开一段距离，才允许“向上滑退出”
+    if (!riverPage.exitArmed) {
+      if (y >= riverPage.riverTopY + 24) riverPage.exitArmed = true;
+      return;
+    }
+
+    // 当用户明确向上滚，并回到河流页顶部附近：自动退出回到胶片段
+    if (dy < -0.5 && y <= riverPage.riverTopY + 6) {
+      exitRiverPage();
+    }
+  };
+  window.addEventListener("scroll", onScrollForRiverPageExit, { passive: true });
+
+  setupScrollMaskZoom({
+    prefersReducedMotion,
+    onProgress: (p) => {
+      // 进入河流页后，禁止胶片滚动 progress 再驱动幕布状态机
+      if (document.body.classList.contains("is-river-page")) return;
+      transition.handleProgress(p);
+    },
+  });
 
   const petHost = document.getElementById("pet-layer");
   const petHitzone = document.getElementById("pet-hitzone");
@@ -228,7 +337,7 @@ export function bootstrapAppMain() {
 
     if (action === "route") {
       setMenuOpen(false);
-      setGuideMapOpen(true);
+      document.getElementById("route-section")?.scrollIntoView({ behavior: smooth, block: "start" });
       return;
     }
 
@@ -357,11 +466,13 @@ export function bootstrapAppMain() {
       guideMapEls.root?.removeEventListener("click", onGuideMapBackdropClick);
       menuItemHandlers.forEach(([btn, handler]) => btn.removeEventListener("click", handler));
       revealObserver?.disconnect?.();
+      routeSectionObserver?.disconnect?.();
       if (rafId !== null) cancelAnimationFrame(rafId);
       onDockClick && context.heroPetDockBtn?.removeEventListener("click", onDockClick);
       comic?.destroy?.();
       pet?.destroy?.();
       riverScene?.stopAndHide?.();
+      window.removeEventListener("scroll", onScrollForRiverPageExit);
     },
   };
 }

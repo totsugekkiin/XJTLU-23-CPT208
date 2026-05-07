@@ -373,6 +373,7 @@ export function createRiverScene({
     }
   }
 
+
   function resetIslands() {
     for (let i = 0; i < islandEls.length; i += 1) {
       const el = islandEls[i];

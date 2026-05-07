@@ -67,6 +67,27 @@ body > * {
   overflow: hidden;
 }
 
+/* =========================
+ * 河流页模式：
+ * 幕布合拢进入河流后，把首屏/胶片段从滚动叙事中摘掉
+ * ========================= */
+body.is-river-page .hero {
+  display: none;
+}
+
+body.is-river-page .cm-mask-transition {
+  display: none;
+}
+
+/* 地图段只在河流页模式中可见，避免“胶片底部也有地图” */
+.route-after-river {
+  display: none;
+}
+
+body.is-river-page .route-after-river {
+  display: block;
+}
+
 /* =========================================================
  * ????????????????????????????? + ???????
  * --------------------------------------------------------- */
@@ -1484,6 +1505,13 @@ body {
   visibility: visible;
 }
 
+/* 当地图段进入视口：隐藏 fixed 河流层，避免遮挡后续文档流内容 */
+.river-stage.river-stage--hidden-by-route {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 #river-scroll-spacer {
   height: 0;
 }
@@ -1603,6 +1631,8 @@ body {
   box-shadow: none;
   pointer-events: auto;
 }
+
+/* (route-island-ui styles removed; route now lives in RouteSection below river) */
 
 .river-island__title {
   margin: 0 0 8px;

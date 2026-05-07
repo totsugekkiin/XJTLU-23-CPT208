@@ -1,0 +1,324 @@
+/* 路线推荐区（内嵌 appMain / 独立 map.html 共用），作用域挂在 .route-section */
+
+.route-section {
+  position: relative;
+  --bg: #06060a;
+  --panel: rgba(12, 12, 18, 0.72);
+  --panelBorder: rgba(255, 255, 255, 0.14);
+  --txt: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.72);
+  --acid: #b8ff2c;
+  --danger: #ff2d55;
+  --danger2: #ff3b30;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  height: 100vh;
+  min-height: 720px;
+  background: var(--bg);
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", Arial, sans-serif;
+}
+
+.route-section *,
+.route-section *::before,
+.route-section *::after {
+  box-sizing: inherit;
+}
+
+/* map.html 独立页：全屏覆盖 #root */
+.route-section.route-section--standalone {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  height: 100%;
+  min-height: 100%;
+}
+
+.route-section #map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* 覆盖层 UI（扁平/酸性风） */
+.route-section .hud {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.route-section .hud__topbar {
+  pointer-events: none;
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.route-section .brand {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--panelBorder);
+  background: linear-gradient(180deg, rgba(16, 16, 24, 0.72), rgba(10, 10, 14, 0.55));
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  color: var(--txt);
+  border-radius: 14px;
+}
+
+.route-section .brand__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--acid);
+  box-shadow: 0 0 0 3px rgba(184, 255, 44, 0.16), 0 0 20px rgba(184, 255, 44, 0.22);
+}
+
+.route-section .brand__title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.route-section .brand__sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.route-section .btn {
+  pointer-events: auto;
+  appearance: none;
+  border: 1px solid var(--panelBorder);
+  background: rgba(18, 18, 26, 0.68);
+  color: var(--txt);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
+  user-select: none;
+}
+
+.route-section .btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(184, 255, 44, 0.55);
+}
+
+.route-section .btn:active {
+  transform: translateY(0px);
+}
+
+.route-section .btn--primary {
+  background: linear-gradient(135deg, rgba(184, 255, 44, 0.16), rgba(255, 45, 85, 0.12));
+  border-color: rgba(184, 255, 44, 0.28);
+}
+
+.route-section .panel {
+  pointer-events: auto;
+  position: absolute;
+  right: 14px;
+  top: 64px;
+  width: min(360px, calc(100% - 28px));
+  max-width: calc(100vw - 28px);
+  border-radius: 16px;
+  border: 1px solid var(--panelBorder);
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.route-section .panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.route-section .panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt);
+}
+
+.route-section .panel__body {
+  padding: 10px 12px 12px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.route-section .spotBtn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 12, 0.55);
+  color: var(--txt);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.route-section .spotBtn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 45, 85, 0.55);
+  background: rgba(10, 10, 16, 0.72);
+}
+
+.route-section .spotBtn:active {
+  transform: translateY(0px);
+}
+
+.route-section .spotBtn__pin {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--danger);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.9), 0 0 0 10px rgba(255, 45, 85, 0.18),
+    0 18px 32px rgba(0, 0, 0, 0.35);
+}
+
+.route-section .spotBtn:hover .spotBtn__pin {
+  background: var(--acid);
+  box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.82), 0 0 0 10px rgba(184, 255, 44, 0.22),
+    0 18px 32px rgba(0, 0, 0, 0.35);
+}
+
+.route-section .spotBtn__name {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.route-section .spotBtn__meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.route-section .spotBtn__hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 8px;
+  border-radius: 999px;
+}
+
+.route-section .spotCheck {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.route-section .spotCheck::after {
+  content: "";
+  width: 9px;
+  height: 6px;
+  border-left: 2px solid rgba(0, 0, 0, 0.9);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.9);
+  transform: rotate(-45deg) scale(0);
+  transition: transform 140ms ease;
+}
+
+.route-section .spotCheck:checked {
+  background: rgba(184, 255, 44, 0.86);
+  border-color: rgba(184, 255, 44, 0.9);
+}
+
+.route-section .spotCheck:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+.route-section .panel__footer {
+  pointer-events: auto;
+  position: absolute;
+  right: 14px;
+  top: auto;
+  bottom: 14px;
+  width: min(360px, calc(100% - 28px));
+  max-width: calc(100vw - 28px);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--panelBorder);
+  background: rgba(12, 12, 18, 0.68);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.route-section .panel__footer[hidden] {
+  display: none;
+}
+
+.route-section .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 自定义 HTML Marker（扁平化圆点） */
+.route-section .cm-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--danger2);
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.95), 0 0 0 12px rgba(255, 59, 48, 0.2),
+    0 22px 50px rgba(0, 0, 0, 0.45);
+  transform: translate3d(0, 0, 0);
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.route-section .cm-marker:hover {
+  transform: translate3d(0, 0, 0) scale(1.18);
+  filter: hue-rotate(120deg) saturate(1.2);
+}
+
+.route-section .cm-marker.is-active {
+  transform: translate3d(0, 0, 0) scale(1.25);
+  filter: hue-rotate(80deg) saturate(1.4);
+}
+
+.route-section .toast {
+  pointer-events: none;
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 10, 14, 0.55);
+  color: var(--muted);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  max-width: min(520px, calc(100% - 28px));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
