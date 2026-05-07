@@ -317,18 +317,13 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       <div id="map" ref={mapRef} aria-label="高德地图容器" />
 
       <div className="hud" aria-hidden="false">
-        <div className="hud__topbar">
-          <div className="brand" aria-label="页面标题">
-            <span className="brand__dot" aria-hidden="true" />
-            <span className="brand__title">互动导览</span>
-            <span className="brand__sub">AMap v2 · dark · 3D</span>
-          </div>
-          {showBackButton ? (
+        {showBackButton ? (
+          <div className="hud__topbar">
             <button className="btn btn--primary" ref={btnBackRef} id="btn-back" type="button">
               ◄ 返回
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <aside className="panel" aria-label="推荐路线">
           <div className="panel__head">

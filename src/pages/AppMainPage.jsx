@@ -456,6 +456,18 @@ export function AppMainPage() {
 
       {/* 河流阶段结束后，紧贴进入地图界面（正常网页下滑） */}
       <section className="route-after-river" id="route-section" aria-label="推荐路线">
+        <svg className="river-sea-funnel" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path
+            d="M 47.2 0
+         C 47.2 28, 33 50, 20 70
+         C 13 80, 7 90, 0 100
+         L 100 100
+         C 93 90, 87 80, 80 70
+         C 67 50, 52.8 28, 52.8 0
+         Z"
+            fill="rgba(6, 28, 45, 0.92)"
+          />
+        </svg>
         <RouteSection heightVh={100} />
       </section>
 

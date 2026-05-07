@@ -488,6 +488,7 @@ export function createRiverScene({
     ease = "power2.inOut",
     boatDelay = 0.25,
     boatEnterDuration = 0.9,
+    onReachedBottom,
   } = {}) {
     if (!gsap) {
       console.warn("[riverScene] GSAP 未加载，无法启动 riverFlowY 动画");
@@ -496,6 +497,7 @@ export function createRiverScene({
     if (riverAnimState === "flowing") return;
 
     riverAnimState = "flowing";
+    let reachedBottomFired = false;
     track.startX = window.innerWidth / 2;
     flow.riverFlowY = 0;
     scroll.startY = window.scrollY;
@@ -521,6 +523,22 @@ export function createRiverScene({
       duration,
       ease,
       onUpdate: () => {
+        // 当水头触底后就认为“蔓延完成”，可用于解锁滚动
+        // 这里复用 drawRiver 里用于 reachedBottom 的阈值（view.h + HEAD_LEN_MAX）
+        if (!reachedBottomFired && typeof onReachedBottom === "function") {
+          const HEAD_LEN_MAX = 150;
+          const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
+          const grownAhead = flow.riverFlowY - scrollDelta;
+          if (grownAhead >= view.h + HEAD_LEN_MAX) {
+            reachedBottomFired = true;
+            try {
+              onReachedBottom();
+            } catch (e) {
+              console.error("[riverScene] onReachedBottom failed", e);
+            }
+          }
+        }
+
         const now = Date.now();
         if (now - lastFlowLogAt > 700) {
           lastFlowLogAt = now;
@@ -531,6 +549,15 @@ export function createRiverScene({
         }
       },
       onComplete: () => {
+        // 兜底：如果没有触发“触底”阈值，也要确保回调能触发一次
+        if (!reachedBottomFired && typeof onReachedBottom === "function") {
+          reachedBottomFired = true;
+          try {
+            onReachedBottom();
+          } catch (e) {
+            console.error("[riverScene] onReachedBottom failed", e);
+          }
+        }
         riverAnimState = "done";
         flowTween = null;
         // #region agent log

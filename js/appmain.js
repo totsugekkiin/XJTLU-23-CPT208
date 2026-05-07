@@ -101,11 +101,11 @@ export function bootstrapAppMain() {
   const routeSectionEl = document.getElementById("route-section");
   let routeSectionObserver = null;
   if (riverStageEl && routeSectionEl && "IntersectionObserver" in window) {
-    // 当地图段进入视口时，隐藏 fixed 河流层，避免遮挡文档流内容
+    // 当地图段进入视口时，把 fixed 河流层降到地图之下（不消失、不遮挡）
     routeSectionObserver = new IntersectionObserver(
       (entries) => {
         const e = entries[0];
-        riverStageEl.classList.toggle("river-stage--hidden-by-route", !!e?.isIntersecting);
+        riverStageEl.classList.toggle("river-stage--behind-route", !!e?.isIntersecting);
       },
       { threshold: 0.02 }
     );
@@ -131,6 +131,49 @@ export function bootstrapAppMain() {
       fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:onClosed',message:'curtain closed -> startFlow',data:{scrollY:Math.round(window.scrollY),prefersReducedMotion},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       const gsap = window.gsap;
+
+      // ====== 幕布合拢后：短暂锁定滚动，直到河流蔓延触底 ======
+      const scrollLock = { locked: false, y: 0 };
+      const lockScroll = () => {
+        if (scrollLock.locked) return;
+        scrollLock.locked = true;
+        scrollLock.y = window.scrollY;
+        document.body.classList.add("is-scroll-locked");
+        // 用 fixed 锁住视觉位置，防止任何滚动（包含触摸惯性）
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${scrollLock.y}px`;
+        document.body.style.left = "0";
+        document.body.style.right = "0";
+        document.body.style.width = "100%";
+
+        const prevent = (e) => e.preventDefault();
+        const preventKeys = (e) => {
+          const keys = ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"];
+          if (keys.includes(e.key)) e.preventDefault();
+        };
+        scrollLock._prevent = prevent;
+        scrollLock._preventKeys = preventKeys;
+        window.addEventListener("wheel", prevent, { passive: false });
+        window.addEventListener("touchmove", prevent, { passive: false });
+        window.addEventListener("keydown", preventKeys, { passive: false });
+      };
+
+      const unlockScroll = () => {
+        if (!scrollLock.locked) return;
+        scrollLock.locked = false;
+        document.body.classList.remove("is-scroll-locked");
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+        window.removeEventListener("wheel", scrollLock._prevent);
+        window.removeEventListener("touchmove", scrollLock._prevent);
+        window.removeEventListener("keydown", scrollLock._preventKeys);
+        // 恢复到锁定前的 scrollY（fixed 解锁时需要手动回填）
+        window.scrollTo({ top: scrollLock.y, behavior: "auto" });
+      };
+
       const enterRiverPage = () => {
         if (riverPage.exiting) return;
         // 记录进入河流前“胶片段最底部附近”的 scrollY，退出时回到这里
@@ -162,6 +205,7 @@ export function bootstrapAppMain() {
           ease: prefersReducedMotion ? "none" : "power2.inOut",
           boatDelay: prefersReducedMotion ? 0 : 0.55,
           boatEnterDuration: prefersReducedMotion ? 0.01 : 0.7,
+          onReachedBottom: () => unlockScroll(),
         });
 
       // 双保险：确保幕布完全铺好（合拢完成）后，再启动河流/船/内容显现链路
@@ -169,11 +213,19 @@ export function bootstrapAppMain() {
       if (gsap?.delayedCall && !prefersReducedMotion) {
         gsap.delayedCall(0.06, () => {
           enterRiverPage();
-          start();
+          // 先滚到河流页顶部（spacer），再锁滚动，避免锁住时无法 scrollIntoView 导致直接露出地图段
+          requestAnimationFrame(() => {
+            lockScroll();
+            start();
+          });
         });
       } else {
+        // reduce motion：立即锁住 -> 启动瞬时流动 -> onReachedBottom 会立刻解锁
         enterRiverPage();
-        start();
+        requestAnimationFrame(() => {
+          lockScroll();
+          start();
+        });
       }
     },
     onBeforeOpen() {
