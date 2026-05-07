@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Persona UI Transitions</title>
-    <title>Persona UI Transitions</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/home.css">
     <link rel="stylesheet" href="css/team.css">
@@ -13,98 +11,7 @@
 </head>
 <body>
 
-<div class="tear-half tear-top" id="tear-top"></div>
-<div class="tear-half tear-bottom" id="tear-bottom"></div>
-
-<nav class="screen" id="home-screen">
-    <ul id="home-nav">
-        <li><a href="appMain.html" class="nav-item app-go">GO</a></li>
-        <li><a href="#" id="btn-team" class="nav-item">[TEAM]</a></li>
-        <li><a href="#" id="btn-persona" class="nav-item">[PERSONA!]</a></li>
-    </ul>
-</nav>
-
-<div class="water-transition" id="water-layer"></div>
-
-<button class="btn-return" id="btn-back-team">◄ RETURN</button>
-<button class="btn-return" id="btn-back-persona">◄ BACK</button>
-<div class="water-transition" id="water-layer"></div>
-
-<button class="btn-return" id="btn-back-team">◄ RETURN</button>
-<button class="btn-return" id="btn-back-persona">◄ BACK</button>
-
-<main class="screen" id="team-screen">
-    <div class="speed-lines"></div>
-    <div class="roster-container">
-        <div class="team-card">
-            <div class="portrait has-photo" style="background-image: url('images/pjy-profilepicture.jpg');"></div>
-            <div class="info">
-                <div class="name">Pang Jiayang</div>
-                <div class="student-id">2360711</div>
-                <div class="intro"><span class="typewriter" data-text="Sephiroth."></span></div>
-            </div>
-        </div>
-        <div class="team-card">
-            <div class="portrait has-photo" style="background-image: url('images/dwb-pp.jpg');"></div>
-            <div class="info">
-                <div class="name">Ding Wenbin</div>
-                <div class="student-id">2362270</div>
-                <div class="intro"><span class="typewriter" data-text="Hello, I am a student majoring in DMT. I'm now working on a user-centered interactive tour project for Chang Gate. I aim to make historical sightseeing clear, approachable, and enjoyable for all kinds of visitors."></span></div>
-            </div>
-        </div>
-        <div class="team-card">
-            <div class="portrait has-photo" style="background-image: url('images/gjm-pp.jpg');"></div>
-            <div class="info">
-                <div class="name">Jiaming Gong</div>
-                <div class="student-id">2361315</div>
-                <div class="intro"><span class="typewriter" data-text="Digital Media Tech undergrad. Hardware enthusiast & visual designer. Into embedded systems, sensor interaction, UI design, and motion graphics. Telling stories through visuals."></span></div>
-                <div class="intro"><span class="typewriter" data-text="Digital Media Tech undergrad. Hardware enthusiast & visual designer. Into embedded systems, sensor interaction, UI design, and motion graphics. Telling stories through visuals."></span></div>
-            </div>
-        </div>
-        <div class="team-card">
-            <div class="portrait has-photo" style="background-image: url('images/fjq-pp.jpg');"></div>
-            <div class="info">
-                <div class="name">Fu Jiaqi</div>
-                <div class="student-id">2360733</div>
-                <div class="intro"><span class="typewriter" data-text="Digital Media Technology student. Currently studying embedded system development. Feel free to communicate."></span></div>
-            </div>
-        </div>
-    </div>
-</main>
-
-<main class="screen" id="persona-screen">
-    <div class="p3-dot-pattern"></div>
-    <div class="slanted-bg-wrapper">
-        <div class="slanted-white-wave"></div>
-    </div>
-
-    <div class="persona-container">
-        <div class="pendant-wrapper" style="opacity: 1;"> <div class="photo-frame-hard">
-                </div>
-        </div>
-
-        <div class="info-card-solid" style="opacity: 1;">
-            <div class="info-content">
-                <div class="arcana-tag"> XXX    / 00</div>
-                <h1 class="persona-name">XXXXXX</h1>
-                
-                <div class="tag-group">
-                    <span>X</span>
-                    <span>X</span>
-                    <span>X: ELECTRIC</span>
-                </div>
-                
-                <div class="quote-box">
-                    "ASDASDSADAD124S"<br>
-                    "ASDAXXXSDASD."
-                </div>
-            </div>
-        </div>
-    </div>
-</main>
-
-<script src="js/team.js" defer></script>
-<script src="js/persona.js" defer></script>
-<script src="js/main.js" defer></script>
+<div id="root"></div>
+<script type="module" src="/src/entries/index.jsx"></script>
 </body>
 </html>

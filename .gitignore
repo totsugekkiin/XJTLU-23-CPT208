@@ -25,8 +25,15 @@ bin/
 ### VS Code ###
 .vscode/
 
+### Cursor ###
+.cursor/*.log
+
 ### Mac OS ###
 .DS_Store
 
 .env
 .env.*
+
+### Node / Vite ###
+node_modules/
+.vite/

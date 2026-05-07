@@ -146,7 +146,7 @@ export async function createDesktopPet({
   chatBubbleRaise = 100,
   // 手臂“骨骼肩关节”偏移（像素，作用在 rig.leftArm/rightArm 容器上）
   // 用于：贴图站姿对了，但转动时关节不对——通过移动骨骼节点来匹配真实肩点
-  leftShoulderJointOffset = { x: 0, y: 0 },
+  leftShoulderJointOffset = { x: 6, y: -5 },
   rightShoulderJointOffset = { x: 0, y: 0 },
   headTextureUrl = "images/pet/head.png",
   // 默认按 1000x1000 导出图的关节坐标（你后续都用这套）

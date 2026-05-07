@@ -63,6 +63,9 @@ export function createRiverScene({
 
   const boat = {
     angleDeg: 0,
+    revealAlpha: 1,
+    enterOffsetPx: 0,
+    enterTween: null,
   };
 
   const track = {
@@ -257,6 +260,15 @@ export function createRiverScene({
         el.classList.toggle("river-island--text-on-left", !textOnRight);
         if (!el.classList.contains("is-visible")) {
           el.classList.add("is-visible");
+          // 首次出现：字与图一起淡入（不改变布局，只做透明/微缩放）
+          if (gsap) {
+            gsap.killTweensOf(el);
+            gsap.fromTo(
+              el,
+              { opacity: 0, scale: 0.985 },
+              { opacity: 1, scale: 1, duration: 0.65, ease: "power2.out" }
+            );
+          }
         }
         const shouldActivate = Math.abs(screenY - centerScreenY) < activateRadius;
         el.classList.toggle("is-active", shouldActivate);
@@ -274,6 +286,8 @@ export function createRiverScene({
       const el = islandEls[i];
       el.classList.remove("is-active");
       el.classList.remove("is-visible");
+      el.style.opacity = "";
+      el.style.transformOrigin = "";
       el.style.removeProperty("--river-cx");
       el.style.removeProperty("--river-hw");
       el.style.transform = "translate3d(-9999px, -9999px, 0)";
@@ -286,7 +300,7 @@ export function createRiverScene({
     // 船在水面上跟随：放在“当前水头”稍上方
     const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
     const fadeP = clamp01(((flow.riverFlowY - scrollDelta) - view.h * 0.5) / (view.h * 0.25));
-    boatContainer.style.opacity = String(fadeP);
+    boatContainer.style.opacity = String(fadeP * (boat.revealAlpha ?? 1));
     if (fadeP <= 0.02) return;
 
     const visibleEndY = flow.riverFlowY - scrollDelta;
@@ -294,7 +308,7 @@ export function createRiverScene({
     const preferredY = view.h * 0.42;
     // 但不能超过“水头”太多，否则看起来船漂在未生成的水面上
     const maxY = Math.max(0, visibleEndY - 90);
-    const screenY = clamp(Math.min(preferredY, maxY), 0, view.h - 140);
+    const screenY = clamp(Math.min(preferredY, maxY), 0, view.h - 140) + (boat.enterOffsetPx ?? 0);
     const worldY = scrollDelta + screenY;
     const x = getCenterX(worldY);
     // 船头随时指向流动方向：用河道切线方向决定朝向
@@ -362,11 +376,22 @@ export function createRiverScene({
     fx.lastParticleAt = 0;
     if (spacer) spacer.style.height = "0px";
     resetIslands();
+    if (boat.enterTween) {
+      boat.enterTween.kill();
+      boat.enterTween = null;
+    }
+    boat.revealAlpha = 1;
+    boat.enterOffsetPx = 0;
     setActive(false);
     stopRaf();
   }
 
-  function startFlow({ duration = 3.0, ease = "power2.inOut" } = {}) {
+  function startFlow({
+    duration = 3.0,
+    ease = "power2.inOut",
+    boatDelay = 0.25,
+    boatEnterDuration = 0.9,
+  } = {}) {
     if (!gsap) {
       console.warn("[riverScene] GSAP 未加载，无法启动 riverFlowY 动画");
       return;
@@ -416,6 +441,23 @@ export function createRiverScene({
         // #endregion
       },
     });
+
+    // 船：从上方开出来（配合河流先“渗出”一点点）
+    if (boatContainer) {
+      if (boat.enterTween) boat.enterTween.kill();
+      boat.revealAlpha = 0;
+      boat.enterOffsetPx = -160;
+      boat.enterTween = gsap.to(boat, {
+        revealAlpha: 1,
+        enterOffsetPx: 0,
+        duration: boatEnterDuration,
+        delay: Math.max(0, boatDelay),
+        ease: "power2.out",
+        onComplete: () => {
+          boat.enterTween = null;
+        },
+      });
+    }
   }
 
   function destroy() {
