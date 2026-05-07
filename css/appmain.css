@@ -91,41 +91,14 @@ body.is-river-page .route-after-river {
 /* 地图顶部遮盖：与河流同色（从“渐变”改为纯色） */
 body.is-river-page .route-after-river {
   position: relative;
+  background-color: rgba(6, 28, 45, 0.92);
 }
 
 body.is-river-page .route-after-river::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 140px;
-  z-index: 3;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(6, 28, 45, 0.92) 0%,
-    rgba(6, 28, 45, 0.92) 35%,
-    rgba(6, 28, 45, 0.55) 65%,
-    rgba(6, 28, 45, 0) 100%
-  );
-}
-
-.river-sea-funnel {
   display: none;
 }
 
-body.is-river-page .river-sea-funnel {
-  display: block;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  width: 100%;
-  height: clamp(70px, 10vh, 110px);
-  z-index: 4;
-  pointer-events: none;
-}
+/* river-sea-funnel（入海漏斗 SVG）已移除 */
 
 /* =========================================================
  * ????????????????????????????? + ???????
