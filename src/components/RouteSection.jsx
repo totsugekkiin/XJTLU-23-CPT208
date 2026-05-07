@@ -54,6 +54,55 @@ function ensureAmapScriptLoaded() {
   });
 }
 
+function formatAmapErr(err) {
+  if (!err) return "未知错误";
+  if (typeof err === "string") return err;
+  const msg = err?.message ? String(err.message) : null;
+  const info = err?.info ? String(err.info) : null;
+  const infocode = err?.infocode ? String(err.infocode) : null;
+  const parts = [msg, info, infocode].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "未知错误";
+}
+
+function formatWalkingFailure(status, result) {
+  const pieces = [];
+  if (status) pieces.push(String(status));
+  const info = result?.info ? String(result.info) : null;
+  const infocode = result?.infocode ? String(result.infocode) : null;
+  if (info) pieces.push(info);
+  if (infocode) pieces.push(`code=${infocode}`);
+  return pieces.length ? pieces.join(" · ") : "未知失败原因";
+}
+
+function parseWalkingWebServiceResult(result) {
+  const route = result?.route;
+  const paths = Array.isArray(route?.paths) ? route.paths : [];
+  const firstPath = paths[0] || null;
+  const steps = Array.isArray(firstPath?.steps) ? firstPath.steps : [];
+  const distance = firstPath?.distance != null ? Number(firstPath.distance) : null;
+  const duration = firstPath?.duration != null ? Number(firstPath.duration) : null;
+
+  const coords = [];
+  for (const step of steps) {
+    const pl = typeof step?.polyline === "string" ? step.polyline : "";
+    if (!pl) continue;
+    const pairs = pl.split(";");
+    for (const pair of pairs) {
+      const [lngStr, latStr] = pair.split(",");
+      const lng = Number(lngStr);
+      const lat = Number(latStr);
+      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat]);
+    }
+  }
+
+  const instructions = steps
+    .map((s) => (typeof s?.instruction === "string" ? s.instruction.trim() : ""))
+    .filter(Boolean);
+
+  const ok = String(result?.status ?? "") === "1" && String(result?.infocode ?? "") === "10000" && coords.length >= 2;
+  return { ok, coords, distance, duration, instructions };
+}
+
 /**
  * 路线推荐区 - 布艺拼贴手机版 (Felt Patchwork Style)
  */
@@ -135,6 +184,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     // [安全检查] 确保 cfg 存在
     if (!map || !walking || !cfg) {
       console.warn("未找到路线配置或地图实例未就绪", routeId);
+      setRouteTip("地图未就绪：请等待加载完成后再试（或刷新页面）");
       return;
     }
 
@@ -169,29 +219,67 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       if (settled) return;
       settled = true;
       const ok = drawFallback(map, pts, { strokeColor: "#234e35" });
-      setRouteTip(ok ? `规划超时，已使用本地连线预览：${currentRouteName}` : "规划超时");
+      setRouteTip(
+        ok
+          ? `规划超时，已使用本地连线预览：${currentRouteName}（若需真实导航，请检查高德 Key/安全密钥的域名白名单）`
+          : "规划超时：本地预览绘制也失败了（请刷新重试）"
+      );
     }, 3500);
 
     // 执行搜索
-    walking.search(origin, destination, { waypoints }, (status, result) => {
+    try {
+      walking.search(origin, destination, { waypoints }, (status, result) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+
+        if (status === "complete") {
+          // [修复点] 使用前面缓存的 currentRouteName，确保安全
+          setRouteTip(`路线已生成：${currentRouteName}`);
+          window.requestAnimationFrame(() => {
+            try {
+              map.setFitView();
+            } catch (e) {}
+          });
+          return;
+        }
+
+        // 兼容 WebService JSONP 格式（你贴出来的 status=1 / route.paths[].steps[].polyline）
+        try {
+          const parsed = parseWalkingWebServiceResult(result);
+          if (parsed.ok) {
+            const ok2 = drawFallback(map, parsed.coords, { strokeColor: "#cc5628" });
+            const km = typeof parsed.distance === "number" && Number.isFinite(parsed.distance) ? (parsed.distance / 1000).toFixed(2) : null;
+            const min = typeof parsed.duration === "number" && Number.isFinite(parsed.duration) ? Math.round(parsed.duration / 60) : null;
+            const head = parsed.instructions.slice(0, 2).join("；");
+            setRouteTip(
+              ok2
+                ? `路线已生成：${currentRouteName}${km ? ` · ${km}km` : ""}${min != null ? ` · ${min}min` : ""}${head ? ` · ${head}` : ""}`
+                : `路线已生成：${currentRouteName}（但绘制失败，请刷新重试）`
+            );
+            return;
+          }
+        } catch (e) {
+          console.error("[walking] parse WebService result failed:", e);
+        }
+
+        const reason = formatWalkingFailure(status, result);
+        console.error("Walking.search failed:", { status, result });
+        const ok = drawFallback(map, pts);
+        setRouteTip(
+          ok
+            ? `规划失败（${reason}），已展示预览：${currentRouteName}（可能是域名白名单/配额/权限问题）`
+            : `规划失败（${reason}），且本地预览绘制失败（请刷新重试）`
+        );
+      });
+    } catch (err) {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeoutId);
-
-      if (status === "complete") {
-        // [修复点] 使用前面缓存的 currentRouteName，确保安全
-        setRouteTip(`路线已生成：${currentRouteName}`);
-        window.requestAnimationFrame(() => {
-          try {
-            map.setFitView();
-          } catch (e) {}
-        });
-      } else {
-        console.error("搜索失败:", status);
-        const ok = drawFallback(map, pts);
-        setRouteTip(ok ? `规划失败，已展示预览：${currentRouteName}` : "规划失败");
-      }
-    });
+      console.error("Walking.search threw:", err);
+      const ok = drawFallback(map, pts);
+      setRouteTip(ok ? `规划异常（${formatAmapErr(err)}），已展示预览：${currentRouteName}` : `规划异常（${formatAmapErr(err)}）`);
+    }
   };
 
   useEffect(() => {
@@ -206,18 +294,25 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       try {
         await ensureAmapScriptLoaded();
       } catch (e) {
-        console.error(e);
+        console.error("[amap] script load failed:", e);
+        setRouteTip(`地图脚本加载失败：${formatAmapErr(e)}（请检查网络/是否被广告拦截器拦截）`);
         return;
       }
       if (cancelled || !mapRef.current) return;
 
-      map = new window.AMap.Map(mapRef.current, {
-        center: [120.604, 31.314],
-        zoom: 15,
-        viewMode: "3D",
-        pitch: 45,
-        resizeEnable: true,
-      });
+      try {
+        map = new window.AMap.Map(mapRef.current, {
+          center: [120.604, 31.314],
+          zoom: 15,
+          viewMode: "3D",
+          pitch: 45,
+          resizeEnable: true,
+        });
+      } catch (e) {
+        console.error("[amap] map init failed:", e);
+        setRouteTip(`地图初始化失败：${formatAmapErr(e)}（请刷新或更换浏览器）`);
+        return;
+      }
 
       amapMapRef.current = map; // [AI 新增/修改] 保存 map 实例供 drawRoute 使用
 
@@ -245,14 +340,23 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       }
 
       // [AI 新增/修改] 加载 AMap.Walking 插件
-      await new Promise((resolve) => {
-        window.AMap.plugin(["AMap.Walking"], () => {
-          walkingRef.current = new window.AMap.Walking({
-            map,
+      try {
+        await new Promise((resolve) => {
+          window.AMap.plugin(["AMap.Walking"], () => {
+            try {
+              walkingRef.current = new window.AMap.Walking({ map });
+            } catch (e) {
+              console.error("[amap] Walking init failed:", e);
+              walkingRef.current = null;
+              setRouteTip(`步行导航组件初始化失败：${formatAmapErr(e)}（将仅显示本地预览连线）`);
+            }
+            resolve(true);
           });
-          resolve(true);
         });
-      });
+      } catch (e) {
+        console.error("[amap] Walking plugin load failed:", e);
+        setRouteTip(`步行导航插件加载失败：${formatAmapErr(e)}（将仅显示本地预览连线）`);
+      }
 
       setMapReady(true);
       setRouteTip("请选择一条推荐路线");
