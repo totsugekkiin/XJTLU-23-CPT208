@@ -143,7 +143,7 @@ export function ScrollRevealWords({
                 <React.Fragment key={`${i}-${word}`}>
                   <span
                     className="scroll-reveal-words__wave"
-                    style={{ animationDelay: `${i * 0.052}s` }}
+                    style={{ animationDelay: `${i * 0.072}s` }}
                     aria-hidden="true"
                   >
                     <WordSpan
