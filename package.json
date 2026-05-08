@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "framer-motion": "^11.18.2",
     "@amap/amap-jsapi-loader": "^1.0.1",
     "@gsap/react": "^2.1.2",
     "gsap": "^3.13.0",

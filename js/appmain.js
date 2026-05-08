@@ -6,7 +6,7 @@ import { setupHeroHint } from "./appmain/heroHint.js";
 import { setupHeroCardSvgLoop } from "./appmain/heroCardSvgLoop.js";
 import { setupHeroTopbar } from "./appmain/heroTopbar.js";
 import { applyPerCardCssVariables, applyRootCssVariables } from "./appmain/styleVars.js";
-import { createDesktopPet } from "./appmain/pet/index.js";
+import { createDesktopPet, startPetTexturePreload } from "./appmain/pet/index.js";
 import { createPetComicChat } from "./appmain/pet/petComicChat.js";
 import { setupScrollMaskZoom } from "./appmain/scrollMaskZoom.js";
 import { createCurtainRiverTransition } from "./appmain/curtainRiverTransition.js";
@@ -31,12 +31,9 @@ export function bootstrapAppMain() {
     };
   }
 
-  // 防止在某些开发环境/热更新场景下重复执行入口脚本，导致转场回调触发两次
+  // 防止重复执行；React 18 StrictMode 会卸载再挂载一次，第二次必须直接跳过（不能 throw，否则开发环境主界面脚本报错）
   if (globalThis.__APPMAIN_BOOTSTRAPPED__) {
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:bootstrapGuard',message:'appmain.js already bootstrapped, aborting duplicate init',data:{},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    throw new Error("[appmain] duplicate bootstrap prevented");
+    return;
   }
   globalThis.__APPMAIN_BOOTSTRAPPED__ = true;
   // #region agent log
@@ -44,6 +41,9 @@ export function bootstrapAppMain() {
   // #endregion
 
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (globalThis.PIXI?.Assets) {
+    startPetTexturePreload(globalThis.PIXI);
+  }
   const context = createDomContext();
 
   applyRootCssVariables(context.hero, layoutConfig);

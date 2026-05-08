@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { RouteSection } from "../components/RouteSection.jsx";
+import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 
 export function AppMainPage() {
   useEffect(() => {
@@ -258,6 +259,12 @@ export function AppMainPage() {
           互动导览
         </button>
       </div>
+
+      <ScrollRevealWords
+        id="scroll-reveal-changmen"
+        splitMode="char"
+        text="剥开这四层初印象，阊门的底色藏在岁月深处。让我们沿着时间轴，重走这繁华阅尽的千年。"
+      />
 
       <section className="cm-mask-transition" id="cm-transition" aria-label="阊门挖洞转场">
         <div className="cm-mask-transition__scroll" id="cm-mask-scroll">

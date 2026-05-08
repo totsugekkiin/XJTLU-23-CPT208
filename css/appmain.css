@@ -68,6 +68,107 @@ body > * {
 }
 
 /* =========================
+ * 阊门转场前：滚动逐词（字）浮现
+ * ========================= */
+.scroll-reveal-words {
+  position: relative;
+  z-index: 2;
+  background: #f6cd45;
+  color: #ea580c;
+}
+
+/* 仅承担滚动距离；文字叠在黄带上（低于 #cm-transition z-index:3 的阊门 UI） */
+.scroll-reveal-words__target {
+  position: relative;
+  width: 100%;
+}
+
+/*
+ * 未 handoff：fixed 铺满视口 flex 居中 ——「卡片消失后」在屏幕中央浮现、随滚动逐字
+ * handoff 时：absolute，位置为测量值；阊门段离开视口后恢复 fixed 居中（可逆）
+ */
+.scroll-reveal-words__pin {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: clamp(16px, 3vh, 36px) clamp(12px, 3vw, 24px);
+  pointer-events: none;
+}
+
+.scroll-reveal-words__pin.is-handoff {
+  position: absolute;
+  display: block;
+  align-items: stretch;
+  justify-content: flex-start;
+  inset: auto;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+.scroll-reveal-words__pin.is-handoff .scroll-reveal-words__inner {
+  margin: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.scroll-reveal-words__inner {
+  margin: 0 auto;
+  width: min(96vw, 72rem);
+  max-width: none;
+  padding-inline: clamp(8px, 2vw, 16px);
+  box-sizing: border-box;
+  /* 约半屏：按视口缩放字高，使两三行中文块接近 45–55vh */
+  font-size: clamp(2rem, min(11vw, 12.5vh), 7rem);
+  font-weight: 900;
+  line-height: 1.22;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.scroll-reveal-words__wave {
+  display: inline-block;
+  vertical-align: baseline;
+  animation: scroll-reveal-wave-float 2.75s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes scroll-reveal-wave-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.07em);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal-words__wave {
+    animation: none;
+  }
+}
+
+.scroll-reveal-words__word {
+  display: inline-block;
+  vertical-align: baseline;
+  transform-origin: 50% 100%;
+}
+
+.scroll-reveal-words__static {
+  display: block;
+}
+
+body.is-river-page .scroll-reveal-words {
+  display: none;
+}
+
+/* =========================
  * 河流页模式：
  * 幕布合拢进入河流后，把首屏/胶片段从滚动叙事中摘掉
  * ========================= */

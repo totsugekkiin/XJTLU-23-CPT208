@@ -16,11 +16,47 @@ const WAVE_DIR = 1; // -1/1：翻转抬臂方向
 const WAVE_SWING_RAD = 0.65; // 挥动幅度（rad）
 const WAVE_LIFT_RAD = 1.85; // 抬臂基准角（rad）
 
-async function tryReplacePartWithSprite({
+/** 与 createDesktopPet 默认参数顺序一致：躯干→双臂→双腿→头 */
+export const DEFAULT_PET_TEXTURE_URLS = Object.freeze([
+  "images/pet/torso.png",
+  "images/pet/leftarm.png",
+  "images/pet/rightarm.png",
+  "images/pet/leftleg.png",
+  "images/pet/rightleg.png",
+  "images/pet/head.png",
+]);
+
+function loadPetPartTextures(PIXI, urls) {
+  if (!PIXI?.Assets) {
+    return Promise.resolve(urls.map(() => null));
+  }
+  return Promise.all(
+    urls.map(async (url) => {
+      if (!url) return null;
+      try {
+        return await PIXI.Assets.load(url);
+      } catch (err) {
+        console.warn("[desktop-pet] 部位贴图加载失败，将回退占位绘制。", err);
+        return null;
+      }
+    })
+  );
+}
+
+/**
+ * 在 bootstrap 尽早调用，与首屏其它脚本并行拉取桌宠 PNG（Pixi Assets 会去重缓存）。
+ * createDesktopPet 若使用相同默认 URL 会复用该 Promise。
+ */
+export function startPetTexturePreload(PIXI) {
+  if (!PIXI?.Assets || globalThis.__PET_TEX_PRELOAD_PROMISE__) return;
+  globalThis.__PET_TEX_PRELOAD_PROMISE__ = loadPetPartTextures(PIXI, [...DEFAULT_PET_TEXTURE_URLS]);
+}
+
+function applyPartSprite({
   PIXI,
   container,
   oldGraphics,
-  url,
+  texture,
   pivot,
   childOffset = { x: 0, y: 0 },
   desiredWidth,
@@ -29,13 +65,9 @@ async function tryReplacePartWithSprite({
   scaleYMul = 1,
   zIndex = undefined,
 }) {
-  if (!url) return { ok: false, reason: "no-url" };
-  if (!container) return { ok: false, reason: "no-container" };
+  if (!container || !texture) return { ok: false, reason: "no-texture" };
 
   try {
-    const texture = PIXI.Assets ? await PIXI.Assets.load(url) : null;
-    if (!texture) return { ok: false, reason: "no-assets-api" };
-
     const sprite = new PIXI.Sprite(texture);
     sprite.pivot.set(pivot.x, pivot.y);
     sprite.position.set(childOffset?.x ?? 0, childOffset?.y ?? 0);
@@ -44,7 +76,6 @@ async function tryReplacePartWithSprite({
     const s = (desiredWidth / texW) * scaleMul;
     sprite.scale.set(s * scaleXMul, s * scaleYMul);
 
-    // 关键：替换成 Sprite 后继承/指定层级，避免“裙摆盖不住腿”等遮挡问题。
     if (zIndex !== undefined) {
       sprite.zIndex = zIndex;
     } else if (oldGraphics && typeof oldGraphics.zIndex === "number") {
@@ -55,39 +86,8 @@ async function tryReplacePartWithSprite({
     container.addChild(sprite);
     return { ok: true, sprite };
   } catch (err) {
-    console.warn("[desktop-pet] 部位贴图加载失败，将回退占位绘制。", err);
-    return { ok: false, reason: "load-failed", error: err };
-  }
-}
-
-async function tryReplaceHeadWithSprite({
-  PIXI,
-  rig,
-  url,
-  neckPivot,
-  desiredHeadWidth,
-}) {
-  if (!url) return { ok: false, reason: "no-url" };
-  if (!rig?.head) return { ok: false, reason: "no-head-node" };
-
-  try {
-    const texture = PIXI.Assets ? await PIXI.Assets.load(url) : null;
-    if (!texture) return { ok: false, reason: "no-assets-api" };
-
-    const sprite = new PIXI.Sprite(texture);
-    sprite.pivot.set(neckPivot.x, neckPivot.y);
-    sprite.position.set(0, 0);
-
-    const texW = texture.width || sprite.width || 1;
-    const s = desiredHeadWidth / texW;
-    sprite.scale.set(s);
-
-    if (rig.graphics?.head) rig.graphics.head.visible = false;
-    rig.head.addChild(sprite);
-    return { ok: true, sprite };
-  } catch (err) {
-    console.warn("[desktop-pet] 头部贴图加载失败，将回退占位头。", err);
-    return { ok: false, reason: "load-failed", error: err };
+    console.warn("[desktop-pet] 部位贴图挂接失败，将回退占位绘制。", err);
+    return { ok: false, reason: "apply-failed", error: err };
   }
 }
 
@@ -203,11 +203,29 @@ export async function createDesktopPet({
   fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/pet/index.js:entry',message:'createDesktopPet entry',data:{hasPixi:!!PIXI,hasHost:!!host,hasHitzone:!!hitzone,scale,prefersReducedMotion,hasOnHeadClick:typeof onHeadClick==='function'},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
-  const app = await createPetApp(PIXI, host);
+  const partTextureUrls = [
+    torsoTextureUrl,
+    leftArmTextureUrl,
+    rightArmTextureUrl,
+    leftLegTextureUrl,
+    rightLegTextureUrl,
+    headTextureUrl,
+  ];
+  const useSharedPreload =
+    typeof globalThis.__PET_TEX_PRELOAD_PROMISE__ !== "undefined" &&
+    partTextureUrls.length === DEFAULT_PET_TEXTURE_URLS.length &&
+    partTextureUrls.every((u, i) => u === DEFAULT_PET_TEXTURE_URLS[i]);
+
+  const texturesPromise = useSharedPreload
+    ? globalThis.__PET_TEX_PRELOAD_PROMISE__
+    : loadPetPartTextures(PIXI, partTextureUrls);
+
+  const [app, textures] = await Promise.all([createPetApp(PIXI, host), texturesPromise]);
+
   const rig = createPetRig(PIXI);
+  rig.root.visible = false;
   rig.root.scale.set(scale);
   app.stage.addChild(rig.root);
-  // 贴图异步加载前就会渲染：默认 (0,0) 会在左上角/上沿露一截，先对齐锚点再加载
   {
     const a = getAnchorPoint();
     rig.root.position.set(a.x, a.y);
@@ -235,13 +253,20 @@ export async function createDesktopPet({
     rig.graphics?.rightArm?.position?.set?.(-(rightShoulderJointOffset.x || 0), -(rightShoulderJointOffset.y || 0));
   }
 
-  // 贴图替换：如果对应 PNG 存在，就替换占位 Graphics；否则保持默认绘制。
-  // desiredWidth 使用 rig 本地坐标系下的尺寸（不包含 rig.root 的 scale）。
-  await tryReplacePartWithSprite({
+  const [
+    texTorso,
+    texLeftArm,
+    texRightArm,
+    texLeftLeg,
+    texRightLeg,
+    texHead,
+  ] = textures;
+
+  applyPartSprite({
     PIXI,
     container: rig.torso,
     oldGraphics: rig.graphics?.torso,
-    url: torsoTextureUrl,
+    texture: texTorso,
     pivot: torsoHipPivot,
     desiredWidth: RIG_METRICS.torsoWidth,
     scaleMul: torsoScaleMul,
@@ -249,11 +274,11 @@ export async function createDesktopPet({
     scaleYMul: torsoScaleYMul,
     zIndex: 2,
   });
-  await tryReplacePartWithSprite({
+  applyPartSprite({
     PIXI,
     container: rig.leftArm,
     oldGraphics: rig.graphics?.leftArm,
-    url: leftArmTextureUrl,
+    texture: texLeftArm,
     pivot: leftShoulderPivot,
     childOffset: {
       x: -(leftShoulderJointOffset?.x || 0),
@@ -263,11 +288,11 @@ export async function createDesktopPet({
     scaleMul: armScaleMul ?? limbScaleMul,
     zIndex: 6,
   });
-  await tryReplacePartWithSprite({
+  applyPartSprite({
     PIXI,
     container: rig.rightArm,
     oldGraphics: rig.graphics?.rightArm,
-    url: rightArmTextureUrl,
+    texture: texRightArm,
     pivot: rightShoulderPivot,
     childOffset: {
       x: -(rightShoulderJointOffset?.x || 0),
@@ -277,36 +302,38 @@ export async function createDesktopPet({
     scaleMul: armScaleMul ?? limbScaleMul,
     zIndex: 6,
   });
-  await tryReplacePartWithSprite({
+  applyPartSprite({
     PIXI,
     container: rig.leftLeg,
     oldGraphics: rig.graphics?.leftLeg,
-    url: leftLegTextureUrl,
+    texture: texLeftLeg,
     pivot: leftHipPivot,
     desiredWidth: RIG_METRICS.legWidth,
     scaleMul: legScaleMul ?? limbScaleMul,
     zIndex: 1,
   });
-  await tryReplacePartWithSprite({
+  applyPartSprite({
     PIXI,
     container: rig.rightLeg,
     oldGraphics: rig.graphics?.rightLeg,
-    url: rightLegTextureUrl,
+    texture: texRightLeg,
     pivot: rightHipPivot,
     desiredWidth: RIG_METRICS.legWidth,
     scaleMul: legScaleMul ?? limbScaleMul,
     zIndex: 1,
   });
-  await tryReplacePartWithSprite({
+  applyPartSprite({
     PIXI,
     container: rig.head,
     oldGraphics: rig.graphics?.head,
-    url: headTextureUrl,
+    texture: texHead,
     pivot: headNeckPivot,
     desiredWidth: RIG_METRICS.headRadius * 2,
     scaleMul: headScaleMul,
     zIndex: 4,
   });
+
+  rig.root.visible = true;
 
   rig.torso.eventMode = "dynamic";
   rig.torso.cursor = "grab";
