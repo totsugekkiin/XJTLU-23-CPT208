@@ -1,10 +1,28 @@
 import React, { useEffect, useRef, useState } from "react";
+import AMapLoader from "@amap/amap-jsapi-loader";
 
 const AMAP_SECURITY_JS_CODE = "7b80e9ec4e6400788e44a7c44fb9046c";
 const AMAP_KEY = "a8729c788702c9611d7b0fd190f52632";
-const AMAP_SRC = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}`;
 
-// [AI 新增/修改] 双线路数据源
+/** 苏州阊门文化带一带（略偏阊门站点），作为默认中心 */
+const SUZHOU_DEFAULT_CENTER = [120.6052, 31.3151];
+
+/**
+ * 地图观感（蓝色天际/雾感）相关：
+ * - `viewMode: "3D"` + 较大 `pitch` 时，WebGL 天空层容易呈现偏蓝的雾化天际线；
+ * - 改为 `"2D"` 或把 `pitch` 调到 0～30，可明显减弱；
+ * - 若保留 3D，可尝试 `skyColor`（仅 3D 生效）改成偏灰/米色，减轻蓝色感。
+ */
+const MAP_VIEW_OPTIONS = {
+  viewMode: "2D",
+  pitch: 0,
+  // 若仍想用 3D，可改为例如：
+  // viewMode: "3D",
+  // pitch: 35,
+  // skyColor: "#e8e5df",
+};
+
+// 双线路数据源：points 顺序即为途经顺序（首点为起点，末点为终点，中间为途经点）
 const routeData = {
   waterAlley: {
     id: "waterAlley",
@@ -29,31 +47,6 @@ const routeData = {
   },
 };
 
-function ensureAmapScriptLoaded() {
-  return new Promise((resolve, reject) => {
-    if (window.AMap && typeof window.AMap.Map === "function") {
-      resolve(true);
-      return;
-    }
-
-    window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_JS_CODE };
-
-    const existing = document.querySelector(`script[src="${AMAP_SRC}"]`);
-    if (existing) {
-      existing.addEventListener("load", () => resolve(true), { once: true });
-      existing.addEventListener("error", () => reject(new Error("AMap 脚本加载失败")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = AMAP_SRC;
-    script.async = true;
-    script.addEventListener("load", () => resolve(true), { once: true });
-    script.addEventListener("error", () => reject(new Error("AMap 脚本加载失败")), { once: true });
-    document.head.appendChild(script);
-  });
-}
-
 function formatAmapErr(err) {
   if (!err) return "未知错误";
   if (typeof err === "string") return err;
@@ -64,144 +57,77 @@ function formatAmapErr(err) {
   return parts.length ? parts.join(" / ") : "未知错误";
 }
 
-function formatWalkingFailure(status, result) {
-  const pieces = [];
-  if (status) pieces.push(String(status));
-  const info = result?.info ? String(result.info) : null;
-  const infocode = result?.infocode ? String(result.infocode) : null;
-  if (info) pieces.push(info);
-  if (infocode) pieces.push(`code=${infocode}`);
-  return pieces.length ? pieces.join(" · ") : "未知失败原因";
+function appendCoordRing(ring, lng, lat) {
+  const last = ring[ring.length - 1];
+  if (last && last[0] === lng && last[1] === lat) return;
+  ring.push([lng, lat]);
 }
 
-function parseWalkingWebServiceResult(result) {
-  const route = result?.route;
-  const paths = Array.isArray(route?.paths) ? route.paths : [];
-  const firstPath = paths[0] || null;
-  const steps = Array.isArray(firstPath?.steps) ? firstPath.steps : [];
-  const distance = firstPath?.distance != null ? Number(firstPath.distance) : null;
-  const duration = firstPath?.duration != null ? Number(firstPath.duration) : null;
-
-  const coords = [];
-  for (const step of steps) {
-    const pl = typeof step?.polyline === "string" ? step.polyline : "";
-    if (!pl) continue;
-    const pairs = pl.split(";");
-    for (const pair of pairs) {
-      const [lngStr, latStr] = pair.split(",");
-      const lng = Number(lngStr);
-      const lat = Number(latStr);
-      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat]);
+/** 将步行方案中各路段的 path 展平为折线坐标（经纬度数组） */
+function flattenWalkStepsToRing(steps) {
+  const ring = [];
+  for (const step of steps || []) {
+    const path = step?.path;
+    if (!path) continue;
+    const arr = Array.isArray(path) ? path : [];
+    for (const pt of arr) {
+      let lng;
+      let lat;
+      if (pt && typeof pt.lng === "number" && typeof pt.lat === "number") {
+        lng = pt.lng;
+        lat = pt.lat;
+      } else if (pt && typeof pt.getLng === "function" && typeof pt.getLat === "function") {
+        lng = pt.getLng();
+        lat = pt.getLat();
+      } else continue;
+      appendCoordRing(ring, lng, lat);
     }
   }
-
-  const instructions = steps
-    .map((s) => (typeof s?.instruction === "string" ? s.instruction.trim() : ""))
-    .filter(Boolean);
-
-  const ok = String(result?.status ?? "") === "1" && String(result?.infocode ?? "") === "10000" && coords.length >= 2;
-  return { ok, coords, distance, duration, instructions };
+  return ring;
 }
 
 /**
  * 路线推荐区 - 布艺拼贴手机版 (Felt Patchwork Style)
+ * 步行路径由高德 `AMap.Walking` 分段规划（途经点顺序固定）；Walking 不支持单次查询多途经点，故按段合并绘制。
  */
 export function RouteSection({ showBackButton = false, standalone = false, heightVh = 100 } = {}) {
   const sectionClass = standalone ? "felt-section felt-section--standalone" : "felt-section";
-  const mapRef = useRef(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [activeRouteId, setActiveRouteId] = useState("waterAlley"); // [AI 新增/修改] 默认选中经典水巷线
+
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  /** 仅用于发起步行查询；不绑定 map，避免多次 search 时互相覆盖线路 */
+  const walkingInstanceRef = useRef(null);
+  /** 手动绘制的折线/标注，需在切换路线或卸载时移除 */
+  const routeOverlaysRef = useRef([]);
+  /** Loader 返回的 AMap 命名空间，用于构造 LngLat 等，不放入 useState */
+  const amapRef = useRef(null);
+
+  const [activeRouteId, setActiveRouteId] = useState("waterAlley");
   const [routeTip, setRouteTip] = useState("加载中…");
-  const amapMapRef = useRef(null); // [AI 新增/修改]
-  const overlaysRef = useRef([]); // 手动绘制覆盖物（fallback 用）
+  /** 仅控制加载蒙层与文案，不存放地图/路线几何数据 */
+  const [mapReady, setMapReady] = useState(false);
 
-  const jsonp = (url, params = {}, { timeoutMs = 9000 } = {}) =>
-    new Promise((resolve, reject) => {
-      const cb = `__amap_jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
-      const qs = new URLSearchParams({ ...params, callback: cb });
-      const src = `${url}${url.includes("?") ? "&" : "?"}${qs.toString()}`;
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = true;
-
-      const cleanup = () => {
-        try {
-          delete window[cb];
-        } catch {
-          window[cb] = undefined;
-        }
-        script.remove?.();
-      };
-
-      const t = window.setTimeout(() => {
-        cleanup();
-        reject(new Error("jsonp_timeout"));
-      }, Math.max(1000, timeoutMs));
-
-      window[cb] = (data) => {
-        window.clearTimeout(t);
-        cleanup();
-        resolve(data);
-      };
-
-      script.onerror = () => {
-        window.clearTimeout(t);
-        cleanup();
-        reject(new Error("jsonp_load_failed"));
-      };
-
-      document.head.appendChild(script);
-    });
-
-  const drawFallback = (map, pts, { strokeColor = "#cc5628" } = {}) => {
-    if (!map || !Array.isArray(pts) || pts.length < 2) return false;
-    try {
-      const path = pts.map((p) => [Number(p?.[0]), Number(p?.[1])]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
-      if (path.length < 2) return false;
-
-      const line = new window.AMap.Polyline({
-        path,
-        strokeColor,
-        strokeOpacity: 0.95,
-        strokeWeight: 8,
-        strokeStyle: "solid",
-        lineJoin: "round",
-        lineCap: "round",
-        isOutline: true,
-        outlineColor: "rgba(255,255,255,0.9)",
-        outlineWeight: 2,
-        zIndex: 120,
-      });
-      line.setMap(map);
-      overlaysRef.current.push(line);
-
-      const mkStart = new window.AMap.Marker({
-        position: path[0],
-        anchor: "bottom-center",
-        title: "起点",
-        zIndex: 130,
-      });
-      mkStart.setMap(map);
-      overlaysRef.current.push(mkStart);
-
-      const mkEnd = new window.AMap.Marker({
-        position: path[path.length - 1],
-        anchor: "bottom-center",
-        title: "终点",
-        zIndex: 130,
-      });
-      mkEnd.setMap(map);
-      overlaysRef.current.push(mkEnd);
-
-      map.setFitView(overlaysRef.current);
-      return true;
-    } catch (e) {
-      console.error("fallback draw failed:", e);
-      return false;
+  const clearRouteOverlays = () => {
+    const map = mapInstanceRef.current;
+    const list = routeOverlaysRef.current;
+    if (!map || !list?.length) {
+      routeOverlaysRef.current = [];
+      return;
     }
+    try {
+      list.forEach((ov) => {
+        try {
+          ov?.setMap?.(null);
+        } catch {
+          // ignore
+        }
+      });
+    } catch {
+      // ignore
+    }
+    routeOverlaysRef.current = [];
   };
 
-  // 绘制并切换路线：支持 string routeId；若误传事件对象则从 data-route-id 兜底解析
   const drawRoute = (routeIdOrEvent) => {
     let routeId = null;
     if (typeof routeIdOrEvent === "string") {
@@ -214,112 +140,181 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
     if (!routeId) return;
 
-    const map = amapMapRef.current;
+    const AMapNs = amapRef.current;
+    const walking = walkingInstanceRef.current;
+    const map = mapInstanceRef.current;
     const cfg = routeData[routeId];
 
-    // [安全检查] 确保 cfg 存在
-    if (!map || !cfg) {
-      console.warn("未找到路线配置或地图实例未就绪", routeId);
+    if (!AMapNs || !walking || !map || !cfg) {
+      console.warn("未找到路线配置或地图/步行服务未就绪", routeId);
       setRouteTip("地图未就绪：请等待加载完成后再试（或刷新页面）");
       return;
     }
 
-    // 提前缓存 name，防止异步回调时 cfg 状态异常
     const currentRouteName = cfg.name || "未知线路";
 
     setActiveRouteId(routeId);
     setRouteTip("正在规划路线…");
 
-    // 清除旧覆盖物
-    try {
-      if (overlaysRef.current) {
-        overlaysRef.current.forEach((ov) => ov?.setMap?.(null));
-        overlaysRef.current = [];
-      }
-    } catch (e) {
-      console.error(e);
+    const pts = cfg.points || [];
+    if (pts.length < 2) {
+      setRouteTip(`路线「${currentRouteName}」坐标不足，无法规划`);
+      return;
     }
 
-    const pts = cfg.points || [];
-    if (pts.length < 2) return;
+    clearRouteOverlays();
+    try {
+      walking.clear();
+    } catch (e) {
+      console.warn("[Walking] clear:", e);
+    }
 
-    const toLngLat = (p) => new window.AMap.LngLat(Number(p?.[0]), Number(p?.[1]));
-    const origin = toLngLat(pts[0]);
-    const destination = toLngLat(pts[pts.length - 1]);
-    const waypointLngLats = pts.slice(1, -1).map((p) => toLngLat(p));
+    const toLngLat = (p) => new AMapNs.LngLat(Number(p?.[0]), Number(p?.[1]));
 
-    const segs = [origin, ...waypointLngLats, destination];
-    const allCoords = [];
-    const allInstructions = [];
-    let totalDistance = 0;
-    let totalDuration = 0;
+    // 业务参数：起点、终点、途经点（顺序已定；Walking 需按段查询后合并）
+    const startLngLat = toLngLat(pts[0]);
+    const endLngLat = toLngLat(pts[pts.length - 1]);
+    const waypoints = pts.length > 2 ? pts.slice(1, -1).map(toLngLat) : [];
 
-    const run = async () => {
-      for (let i = 0; i < segs.length - 1; i++) {
-        const a = segs[i];
-        const b = segs[i + 1];
-        const res = await jsonp("https://restapi.amap.com/v3/direction/walking", {
-          key: AMAP_KEY,
-          origin: `${a.lng},${a.lat}`,
-          destination: `${b.lng},${b.lat}`,
-        }, { timeoutMs: 6500 });
+    const searchSegment = (origin, destination) =>
+      new Promise((resolve, reject) => {
+        walking.search(origin, destination, (status, result) => {
+          if (status !== "complete") {
+            const info = result?.info ? String(result.info) : String(status);
+            reject(new Error(info));
+            return;
+          }
+          const route = result?.routes?.[0];
+          if (!route) {
+            reject(new Error("no_route"));
+            return;
+          }
+          resolve(route);
+        });
+      });
 
-        const parsed = parseWalkingWebServiceResult(res);
-        if (!parsed.ok) {
-          const reason = formatWalkingFailure(res?.status, res);
-          throw new Error(`walking_failed:${reason}`);
+    (async () => {
+      let totalDistance = 0;
+      let totalDuration = 0;
+      const mergedRing = [];
+
+      try {
+        for (let i = 0; i < pts.length - 1; i += 1) {
+          const origin = toLngLat(pts[i]);
+          const destination = toLngLat(pts[i + 1]);
+          const route = await searchSegment(origin, destination);
+          const d = route.distance != null ? Number(route.distance) : 0;
+          const t = route.time != null ? Number(route.time) : 0;
+          if (Number.isFinite(d)) totalDistance += d;
+          if (Number.isFinite(t)) totalDuration += t;
+          const ring = flattenWalkStepsToRing(route.steps);
+          for (const c of ring) {
+            appendCoordRing(mergedRing, c[0], c[1]);
+          }
         }
 
-        if (parsed.coords.length) allCoords.push(...parsed.coords);
-        if (parsed.instructions.length) allInstructions.push(...parsed.instructions);
-        if (typeof parsed.distance === "number" && Number.isFinite(parsed.distance)) totalDistance += parsed.distance;
-        if (typeof parsed.duration === "number" && Number.isFinite(parsed.duration)) totalDuration += parsed.duration;
+        if (mergedRing.length < 2) {
+          setRouteTip(`规划失败：${currentRouteName}（未得到有效步行路径）`);
+          return;
+        }
+
+        const line = new AMapNs.Polyline({
+          path: mergedRing,
+          strokeColor: "#cc5628",
+          strokeOpacity: 0.95,
+          strokeWeight: 8,
+          strokeStyle: "solid",
+          lineJoin: "round",
+          lineCap: "round",
+          isOutline: true,
+          outlineColor: "rgba(255,255,255,0.9)",
+          outlineWeight: 2,
+          zIndex: 120,
+        });
+        line.setMap(map);
+        routeOverlaysRef.current.push(line);
+
+        const mkStart = new AMapNs.Marker({
+          position: startLngLat,
+          anchor: "bottom-center",
+          title: "起点",
+          zIndex: 130,
+        });
+        mkStart.setMap(map);
+        routeOverlaysRef.current.push(mkStart);
+
+        const mkEnd = new AMapNs.Marker({
+          position: endLngLat,
+          anchor: "bottom-center",
+          title: "终点",
+          zIndex: 130,
+        });
+        mkEnd.setMap(map);
+        routeOverlaysRef.current.push(mkEnd);
+
+        waypoints.forEach((lngLat, idx) => {
+          const mkVia = new AMapNs.Marker({
+            position: lngLat,
+            anchor: "bottom-center",
+            title: `途经点 ${idx + 1}`,
+            zIndex: 125,
+          });
+          mkVia.setMap(map);
+          routeOverlaysRef.current.push(mkVia);
+        });
+
+        try {
+          map.setFitView(routeOverlaysRef.current);
+        } catch {
+          // ignore
+        }
+
+        const km = totalDistance > 0 ? (totalDistance / 1000).toFixed(2) : null;
+        const min = totalDuration > 0 ? Math.round(totalDuration / 60) : null;
+        setRouteTip(
+          `步行路线已生成：${currentRouteName}${km ? ` · ${km}km` : ""}${min != null ? ` · 约${min}分钟` : ""}`
+        );
+      } catch (err) {
+        console.error("[Walking] search failed:", err);
+        setRouteTip(`规划失败：${currentRouteName} · ${formatAmapErr(err)}`);
       }
-
-      const ok2 = drawFallback(map, allCoords, { strokeColor: "#cc5628" });
-      const km = totalDistance > 0 ? (totalDistance / 1000).toFixed(2) : null;
-      const min = totalDuration > 0 ? Math.round(totalDuration / 60) : null;
-      const head = allInstructions.slice(0, 2).join("；");
-      setRouteTip(
-        ok2
-          ? `路线已生成：${currentRouteName}${km ? ` · ${km}km` : ""}${min != null ? ` · ${min}min` : ""}${head ? ` · ${head}` : ""}`
-          : `路线已生成：${currentRouteName}（但绘制失败，请刷新重试）`
-      );
-    };
-
-    // 运行：失败则用绿色超时线/预览线兜底
-    run().catch((err) => {
-      console.error("[route] webservice walking failed:", err);
-      const ok = drawFallback(map, pts, { strokeColor: "#234e35" });
-      setRouteTip(ok ? `规划失败，已使用本地连线预览：${currentRouteName}` : `规划失败：${formatAmapErr(err)}`);
-    });
+    })();
   };
 
   useEffect(() => {
     let cancelled = false;
-    /** @type {any} */
-    let map = null;
     let resizeObs = null;
     let io = null;
 
     const init = async () => {
-      if (!mapRef.current) return;
+      if (!mapContainerRef.current) return;
+
+      window._AMapSecurityConfig = { securityJsCode: AMAP_SECURITY_JS_CODE };
+
+      let AMapNs;
       try {
-        await ensureAmapScriptLoaded();
+        AMapNs = await AMapLoader.load({
+          key: AMAP_KEY,
+          version: "2.0",
+          plugins: ["AMap.Walking"],
+        });
       } catch (e) {
-        console.error("[amap] script load failed:", e);
-        setRouteTip(`地图脚本加载失败：${formatAmapErr(e)}（请检查网络/是否被广告拦截器拦截）`);
+        console.error("[amap] loader failed:", e);
+        setRouteTip(`地图加载失败：${formatAmapErr(e)}（请检查网络或密钥配置）`);
         return;
       }
-      if (cancelled || !mapRef.current) return;
 
+      if (cancelled || !mapContainerRef.current) return;
+
+      amapRef.current = AMapNs;
+
+      let map;
       try {
-        map = new window.AMap.Map(mapRef.current, {
-          center: [120.604, 31.314],
+        map = new AMapNs.Map(mapContainerRef.current, {
+          center: SUZHOU_DEFAULT_CENTER,
           zoom: 15,
-          viewMode: "3D",
-          pitch: 45,
           resizeEnable: true,
+          ...MAP_VIEW_OPTIONS,
         });
       } catch (e) {
         console.error("[amap] map init failed:", e);
@@ -327,51 +322,98 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         return;
       }
 
-      amapMapRef.current = map; // [AI 新增/修改] 保存 map 实例供 drawRoute 使用
+      if (cancelled) {
+        try {
+          map.destroy();
+        } catch {
+          // ignore
+        }
+        return;
+      }
 
-      // 容器从隐藏/尺寸变化恢复时，强制 resize，避免白屏
+      mapInstanceRef.current = map;
+
+      let walking;
+      try {
+        walking = new AMapNs.Walking({});
+      } catch (e) {
+        console.error("[amap] Walking init failed:", e);
+        setRouteTip(`步行导航插件初始化失败：${formatAmapErr(e)}`);
+        try {
+          map.destroy();
+        } catch {
+          // ignore
+        }
+        mapInstanceRef.current = null;
+        return;
+      }
+
+      walkingInstanceRef.current = walking;
+
       const tryResize = () => {
         try {
-          map?.resize?.();
+          mapInstanceRef.current?.resize?.();
         } catch {
           // ignore
         }
       };
       tryResize();
-      if ("ResizeObserver" in window) {
+      if ("ResizeObserver" in window && mapContainerRef.current) {
         resizeObs = new ResizeObserver(() => tryResize());
-        resizeObs.observe(mapRef.current);
+        resizeObs.observe(mapContainerRef.current);
       }
-      if ("IntersectionObserver" in window) {
+      if ("IntersectionObserver" in window && mapContainerRef.current) {
         io = new IntersectionObserver(
           (entries) => {
             if (entries?.[0]?.isIntersecting) tryResize();
           },
           { threshold: 0.01 }
         );
-        io.observe(mapRef.current);
+        io.observe(mapContainerRef.current);
       }
 
       setMapReady(true);
       setRouteTip("请选择一条推荐路线");
-      window.requestAnimationFrame(() => map?.resize?.());
+      window.requestAnimationFrame(() => tryResize());
 
-      // [AI 新增/修改] 首次进入默认绘制“经典水巷线”
       drawRoute("waterAlley");
     };
 
     init();
+
     return () => {
       cancelled = true;
       try {
         io?.disconnect?.();
         resizeObs?.disconnect?.();
-        map?.destroy?.();
       } catch {
         // ignore
       }
-      map = null;
-      amapMapRef.current = null; // [AI 新增/修改]
+      try {
+        routeOverlaysRef.current?.forEach?.((ov) => {
+          try {
+            ov?.setMap?.(null);
+          } catch {
+            // ignore
+          }
+        });
+      } catch {
+        // ignore
+      }
+      routeOverlaysRef.current = [];
+      try {
+        walkingInstanceRef.current?.clear?.();
+      } catch {
+        // ignore
+      }
+      try {
+        mapInstanceRef.current?.destroy?.();
+      } catch {
+        // ignore
+      }
+      walkingInstanceRef.current = null;
+      mapInstanceRef.current = null;
+      amapRef.current = null;
       setMapReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -457,6 +499,14 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           z-index: 20;
         }
 
+        /* 原独立标题挪入地图后，用占位条保留顶部留白（不误触地图）；略矮以便地图区更高 */
+        .felt-top-spacer {
+          flex-shrink: 0;
+          height: 30px;
+          width: 100%;
+          pointer-events: none;
+        }
+
         .felt-back-btn {
           position: absolute;
           top: 16px;
@@ -478,6 +528,46 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           margin-bottom: 12px;
           display: flex;
           justify-content: flex-end;
+        }
+
+        /* 地图 stitch 框外的胶带（不进 felt-map-board，避免算在框内「那一行」里） */
+        .felt-map-board-wrap {
+          flex: 1;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          margin-bottom: 12px;
+          position: relative;
+          z-index: 10;
+        }
+
+        .felt-map-route-label {
+          flex-shrink: 0;
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 4px;
+          padding-right: 2px;
+          pointer-events: none;
+        }
+
+        .felt-map-route-label .felt-tag-tape {
+          position: relative;
+          right: auto;
+          bottom: auto;
+        }
+
+        /* 叠在地图右上角：Route Planner（非下方路线卡片） */
+        .felt-header--on-map {
+          position: absolute;
+          top: 12px;
+          right: 10px;
+          z-index: 36;
+          margin: 0;
+          pointer-events: none;
+        }
+
+        .felt-header--on-map .felt-main-title {
+          font-size: 26px;
         }
 
         .felt-title-box {
@@ -517,8 +607,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           background: #faf5ee;
           display: flex;
           flex-direction: column;
-          padding: 8px;
-          margin-bottom: 16px;
+          padding: 6px;
         }
 
         .felt-map-info {
@@ -527,7 +616,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           gap: 10px;
           font-size: 12px;
           font-weight: bold;
-          margin-bottom: 6px;
+          margin-bottom: 4px;
           color: var(--felt-green);
         }
 
@@ -563,7 +652,6 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           font: inherit;
         }
 
-        /* [AI 新增/修改] 选中态：尽量保持原有布艺风格，只做轻微强调 */
         .felt-card.is-active .felt-card-body {
           transform: translateY(-1px);
           box-shadow: 3px 6px 12px rgba(0, 0, 0, 0.18);
@@ -699,18 +787,14 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         </button>
       ) : null}
 
-      <header className="felt-header">
-        <div className="felt-title-box">
-          <h1 className="felt-main-title">
-            Route
-            <br />
-            <span>Planner</span>
-          </h1>
+      <div className="felt-top-spacer" aria-hidden="true" />
+
+      <div className="felt-map-board-wrap">
+        <div className="felt-map-route-label">
           <div className="felt-tag-tape patch stitch">推荐路线</div>
         </div>
-      </header>
 
-      <div className="felt-map-board patch stitch stitch-dark">
+        <div className="felt-map-board patch stitch stitch-dark">
         <div className="x-fix" style={{ top: "4px", left: "6px" }}>
           x
         </div>
@@ -726,11 +810,21 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
         <div className="felt-map-info">
           <span>📍 苏州 · 阊门区域</span>
-          <span style={{ color: "var(--felt-dark)" }}>{mapReady ? "定位成功" : "定位中..."}</span>
+          <span style={{ color: "var(--felt-dark)" }}>{mapReady ? "地图已就绪" : "加载中..."}</span>
         </div>
 
         <div className="felt-map-canvas stitch stitch-dark">
-          <div id="map" ref={mapRef} className="felt-map" aria-label="高德地图容器" />
+          <header className="felt-header felt-header--on-map" aria-label="Route Planner">
+            <div className="felt-title-box">
+              <h1 className="felt-main-title">
+                Route
+                <br />
+                <span>Planner</span>
+              </h1>
+            </div>
+          </header>
+
+          <div id="map" ref={mapContainerRef} className="felt-map" aria-label="高德地图容器" />
 
           <div className={`loading-cloth stitch ${mapReady ? "fade" : ""}`}>
             <div style={{ fontSize: "24px", animation: "clothSpin 3s linear infinite" }}>🧶</div>
@@ -740,6 +834,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           <div className="felt-routeTip" aria-live="polite">
             {routeTip}
           </div>
+        </div>
         </div>
       </div>
 
@@ -803,4 +898,3 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
     </section>
   );
 }
-

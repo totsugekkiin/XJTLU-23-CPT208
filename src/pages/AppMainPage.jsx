@@ -454,7 +454,7 @@ export function AppMainPage() {
         </div>
       </div>
 
-      {/* 河流阶段结束后，紧贴进入地图界面（正常网页下滑） */}
+      {/* 仅河流页模式显示（CSS）；胶片段滚动时不占位 */}
       <section className="route-after-river" id="route-section" aria-label="推荐路线">
         <RouteSection heightVh={100} />
       </section>

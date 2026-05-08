@@ -79,13 +79,13 @@ body.is-river-page .cm-mask-transition {
   display: none;
 }
 
-/* 地图段：始终可见（避免退出河流页后“地图消失”） */
+/* 推荐路线：胶片段下方不占位、不出现；进入河流页后再显示在河流段下方 */
 .route-after-river {
-  display: block;
+  display: none;
 }
 
-/* 地图顶部遮盖：与河流同色（从“渐变”改为纯色） */
 body.is-river-page .route-after-river {
+  display: block;
   position: relative;
   background-color: rgba(6, 28, 45, 0.92);
 }

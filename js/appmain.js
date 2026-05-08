@@ -407,7 +407,11 @@ export function bootstrapAppMain() {
 
     if (action === "route") {
       setMenuOpen(false);
-      document.getElementById("route-section")?.scrollIntoView({ behavior: smooth, block: "start" });
+      if (document.body.classList.contains("is-river-page")) {
+        document.getElementById("route-section")?.scrollIntoView({ behavior: smooth, block: "start" });
+      } else {
+        window.location.href = "map.html";
+      }
       return;
     }
 
