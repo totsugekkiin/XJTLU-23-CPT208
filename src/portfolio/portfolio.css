@@ -1,0 +1,30 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;700;900&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-felt-green: #2d4a3e;
+  --color-felt-orange: #d15a24;
+  --color-felt-cream: #f4f1ea;
+  --color-felt-dark: #1a1a1a;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#f4f1ea] text-[#1a1a1a] overflow-x-hidden;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    background-image: radial-gradient(#d1ccc0 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
+
+@layer utilities {
+  .felt-stitch {
+    @apply border-2 border-dashed border-black/20;
+  }
+
+  .felt-shadow {
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.1);
+  }
+}

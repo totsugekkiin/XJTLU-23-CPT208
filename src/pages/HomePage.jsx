@@ -80,6 +80,11 @@ export function HomePage() {
               [PERSONA!]
             </a>
           </li>
+          <li>
+            <a href="portfolio.html" className="nav-item">
+              [PORTFOLIO]
+            </a>
+          </li>
         </ul>
       </nav>
 
