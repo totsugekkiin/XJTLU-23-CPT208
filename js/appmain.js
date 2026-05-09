@@ -194,6 +194,7 @@ export function bootstrapAppMain() {
 
       const enterRiverPage = () => {
         if (riverPage.exiting) return;
+        cancelWelcome({ closeBubble: true });
         // 记录进入河流前“胶片段最底部附近”的 scrollY，退出时回到这里
         const cmSection = document.getElementById("cm-transition");
         const cmWrap = document.getElementById("cm-mask-scroll");
@@ -338,6 +339,21 @@ export function bootstrapAppMain() {
       throw err;
     }
 
+    if (isJson && payload?.type === "route_plan" && Array.isArray(payload.places) && payload.places.length >= 2) {
+      const detail = {
+        routeName: typeof payload.routeName === "string" && payload.routeName.trim() ? payload.routeName.trim() : "桌宠推荐路线",
+        places: payload.places.map((place) => (typeof place === "string" ? place.trim() : "")).filter(Boolean),
+        reply,
+      };
+
+      window.dispatchEvent(new CustomEvent("pet-route-plan", { detail }));
+
+      const smooth = prefersReducedMotion ? "auto" : "smooth";
+      window.setTimeout(() => {
+        document.getElementById("route-section")?.scrollIntoView({ behavior: smooth, block: "start" });
+      }, 120);
+    }
+
     console.log("AI 回复:", reply);
     return reply;
   }
@@ -423,19 +439,19 @@ export function bootstrapAppMain() {
 
     if (action === "hero") {
       setMenuOpen(false);
-      document.getElementById("hero")?.scrollIntoView({ behavior: smooth, block: "start" });
+      window.location.href = "index.html";
       return;
     }
 
     if (action === "pet") {
       setMenuOpen(false);
-      document.getElementById("pet-hitzone")?.focus({ preventScroll: false });
+      context.heroPetDockBtn?.click();
       return;
     }
 
     if (action === "explore") {
       setMenuOpen(false);
-      context.heroGoBtn?.click();
+      window.location.href = "appMain.html";
       return;
     }
 
@@ -475,7 +491,101 @@ export function bootstrapAppMain() {
   let pet = null;
   let comic = null;
   let onDockClick = null;
+  let welcomeStartTimer = null;
+  let welcomeTimer = null;
+  let onWelcomeScroll = null;
+  let welcomeActive = false;
   let petInitCancelled = false;
+  const welcomeText =
+    "欢迎来到阊门探索之旅，我是您的向导林黛玉。在游览过程中，您可以随时点击我进行对话与互动；若我不在当前页面，请点击左上角的圆形按钮，即可随时将我唤回屏幕。";
+
+  /** 进入路线推荐区时，让桌宠出现在屏幕中下偏右并讲解两条路线的区别 */
+  const ROUTE_INTRO_TEXT =
+    "这里为您准备了两条游览路线：第一条「经典水巷线」从阊门出发，经七里山塘到荣阳楼，主打慢行赏桥巷与游船古韵，更适合白日里悠然踱步；第二条「夜游氛围线」从阊门绕至石路步行街、南浩街，再回到七里山塘夜景，灯火映水巷、市井伴小吃，更适合夜色里寻热闹烟火。";
+  const ROUTE_DOCK_POINT = { xPercent: 0.78, yPercent: 0.72 };
+  let routeIntroObserver = null;
+  let routeIntroActive = false;
+  let routeIntroPendingEnter = false;
+
+  function runRouteIntroEnter() {
+    if (!pet || !comic) {
+      routeIntroPendingEnter = true;
+      return;
+    }
+    routeIntroPendingEnter = false;
+    cancelWelcome({ closeBubble: true });
+    pet.dockAtPoint?.(ROUTE_DOCK_POINT);
+    comic.say?.(ROUTE_INTRO_TEXT);
+  }
+
+  function runRouteIntroLeave() {
+    routeIntroPendingEnter = false;
+    comic?.close?.();
+    if (!pet) return;
+    if (document.body.classList.contains("is-river-page")) {
+      pet.fsm?.setState?.(pet.states?.SCROLL_EXIT);
+    } else {
+      pet.fsm?.setState?.(pet.states?.IDLE);
+    }
+  }
+
+  if (routeSectionEl && "IntersectionObserver" in window) {
+    /**
+     * 触发逻辑：只有当路线段「基本完整滚到视口里」(>=90%) 才让桌宠登场，
+     * 避免刚露头就提前触发；离场用较低阈值 (<=45%) 做迟滞，防止边缘抖动反复触发。
+     */
+    const ROUTE_ENTER_RATIO = 0.9;
+    const ROUTE_LEAVE_RATIO = 0.45;
+    routeIntroObserver = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (!e) return;
+        // 河流页进入瞬间，route-after-river 刚从 display:none 切到 block，
+        // 布局还没稳定时 IO 会先于 is-scroll-locked 谎报 ratio=1、offsetTop=0。
+        // 三重门槛：① 不在锁滚动期；② route 段在文档里真实位置已经稳定（offsetTop > 一屏高，
+        // 排除布局未就绪的“假 0”）；③ 用户实际滚动位置已经接近 route 段。
+        const isScrollLocked = document.body.classList.contains("is-scroll-locked");
+        const routeOffsetTop = routeSectionEl.offsetTop;
+        const layoutSettled = routeOffsetTop > window.innerHeight;
+        const routeEnterScrollY = Math.max(0, routeOffsetTop - window.innerHeight * 0.25);
+        const hasReachedRouteScroll = window.scrollY >= routeEnterScrollY;
+        if (isScrollLocked) return;
+        if (e.isIntersecting && e.intersectionRatio >= ROUTE_ENTER_RATIO && layoutSettled && hasReachedRouteScroll) {
+          if (routeIntroActive) return;
+          routeIntroActive = true;
+          runRouteIntroEnter();
+        } else if (!e.isIntersecting || e.intersectionRatio < ROUTE_LEAVE_RATIO) {
+          if (!routeIntroActive) return;
+          routeIntroActive = false;
+          runRouteIntroLeave();
+        }
+      },
+      { threshold: [0, 0.45, 0.7, 0.9, 1] }
+    );
+    routeIntroObserver.observe(routeSectionEl);
+  }
+
+  function canStartWelcome() {
+    return !petInitCancelled && !document.body.classList.contains("is-river-page") && Math.max(0, window.scrollY || 0) <= 8;
+  }
+
+  function cancelWelcome({ closeBubble = false } = {}) {
+    if (welcomeStartTimer !== null) {
+      window.clearTimeout(welcomeStartTimer);
+      welcomeStartTimer = null;
+    }
+    if (welcomeTimer !== null) {
+      window.clearTimeout(welcomeTimer);
+      welcomeTimer = null;
+    }
+    if (onWelcomeScroll) {
+      window.removeEventListener("scroll", onWelcomeScroll);
+      onWelcomeScroll = null;
+    }
+    pet?.stopWave?.({ returnState: pet?.states?.IDLE });
+    if (closeBubble && welcomeActive) comic?.close?.();
+    welcomeActive = false;
+  }
 
   if (petHost && petHitzone) {
     (async () => {
@@ -518,6 +628,42 @@ export function bootstrapAppMain() {
       context.heroPetDockBtn?.addEventListener("click", onDockClick);
 
       comic = createPetComicChat({ pet, sendToAI, prefersReducedMotion });
+
+      // 若桌宠/对话框就绪前用户已经滚到了路线段，则补发一次入场动作
+      if (routeIntroActive && routeIntroPendingEnter) {
+        runRouteIntroEnter();
+      }
+
+      const startWelcome = () => {
+        welcomeStartTimer = null;
+        if (!canStartWelcome()) return;
+        cancelWelcome({ closeBubble: true });
+        welcomeActive = true;
+        pet?.wave?.({ durationMs: 7000, returnState: pet?.states?.IDLE });
+        comic?.say?.(welcomeText);
+
+        onWelcomeScroll = () => {
+          cancelWelcome({ closeBubble: true });
+        };
+        window.addEventListener("scroll", onWelcomeScroll, { passive: true, once: true });
+
+        welcomeTimer = window.setTimeout(() => {
+          cancelWelcome({ closeBubble: true });
+        }, 7000);
+      };
+
+      if (globalThis.__CHANGMEN_PRELOADER_DONE__) {
+        welcomeStartTimer = window.setTimeout(startWelcome, 120);
+      } else {
+        window.addEventListener(
+          "changmen-preloader-done",
+          () => {
+            if (!canStartWelcome()) return;
+            welcomeStartTimer = window.setTimeout(startWelcome, 120);
+          },
+          { once: true }
+        );
+      }
       // #region agent log
       console.log("[dbg ee6ebc] createPetComicChat returned", { comicNull: comic == null, hasOnHeadClick: !!comic?.onHeadClick });
       fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:comic-created',message:'createPetComicChat returned',data:{comicNull:comic==null,hasOnHeadClick:!!comic?.onHeadClick},timestamp:Date.now()})}).catch(()=>{});
@@ -535,12 +681,14 @@ export function bootstrapAppMain() {
       window.removeEventListener("keydown", onKeydown);
       document.removeEventListener("click", onDocumentClickCapture, true);
       context.heroPill?.removeEventListener("click", onHeroPillClick);
+      cancelWelcome({ closeBubble: false });
       chatEls.menuClose?.removeEventListener("click", onMenuCloseClick);
       guideMapEls.close?.removeEventListener("click", onGuideMapCloseClick);
       guideMapEls.root?.removeEventListener("click", onGuideMapBackdropClick);
       menuItemHandlers.forEach(([btn, handler]) => btn.removeEventListener("click", handler));
       revealObserver?.disconnect?.();
       routeSectionObserver?.disconnect?.();
+      routeIntroObserver?.disconnect?.();
       if (rafId !== null) cancelAnimationFrame(rafId);
       onDockClick && context.heroPetDockBtn?.removeEventListener("click", onDockClick);
       comic?.destroy?.();

@@ -1,5 +1,7 @@
 /* appMain page styles (single-hero version) */
 
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;700&display=swap");
+
 /* ???????????? */
 body {
   margin: 0;
@@ -864,6 +866,141 @@ body.is-river-page .route-after-river::before {
   fill: #5a67b8;
 }
 
+/* 「艺术长卷」：卷轴展开 / 笔墨 / 钤印（React motion，见 AncientScrollBrushAnimation） */
+.ancient-scroll-brush {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 248px);
+  max-height: 86%;
+  min-height: 120px;
+  margin: 0 auto;
+}
+
+.ancient-scroll-brush__inner {
+  position: relative;
+  width: min(100%, 220px);
+  aspect-ratio: 1;
+  max-height: min(168px, 72%);
+  margin: 0 auto;
+}
+
+.ancient-scroll-brush__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.svg-motif--scroll {
+  overflow: visible;
+}
+
+.svg-motif--scroll .motif-scroll-roll rect {
+  stroke: none;
+}
+
+.svg-motif--scroll .motif-scroll-roll--left {
+  transform-origin: 50px 80px;
+  animation: motifScrollRailLeft 3.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.svg-motif--scroll .motif-scroll-roll--right {
+  /* 裁剪 rect：x=60，宽 w ⇒ 可视右缘 60+w；右轴 translateX = w + 54 */
+  animation: motifScrollRail 3.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.svg-motif--scroll .motif-scroll-clip {
+  animation: motifScrollReveal 3.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.svg-motif--scroll .motif-scroll-water {
+  animation: motifScrollInk 3.8s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes motifScrollReveal {
+  0%,
+  10% {
+    width: 28px;
+  }
+  42% {
+    width: 152px;
+  }
+  58% {
+    width: 152px;
+  }
+  90%,
+  100% {
+    width: 28px;
+  }
+}
+
+@keyframes motifScrollRailLeft {
+  0%,
+  10% {
+    transform: translate(0, 0);
+  }
+  42%,
+  58% {
+    transform: translate(5px, 0);
+  }
+  90%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes motifScrollRail {
+  0%,
+  10% {
+    transform: translate(82px, 79px);
+  }
+  42%,
+  58% {
+    transform: translate(206px, 79px);
+  }
+  90%,
+  100% {
+    transform: translate(82px, 79px);
+  }
+}
+
+@keyframes motifScrollInk {
+  0%,
+  10% {
+    opacity: 0.88;
+  }
+  42%,
+  58% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0.88;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svg-motif--scroll .motif-scroll-clip {
+    animation: none !important;
+    width: 152px !important;
+  }
+
+  .svg-motif--scroll .motif-scroll-roll--right {
+    animation: none !important;
+    transform: translate(206px, 79px) !important;
+  }
+
+  .svg-motif--scroll .motif-scroll-roll--left {
+    animation: none !important;
+    transform: translate(5px, 0) !important;
+  }
+
+  .svg-motif--scroll .motif-scroll-water {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
 .hero h1,
 .hero-card__title {
   font-size: 2.7rem;
@@ -929,6 +1066,14 @@ body.is-river-page .route-after-river::before {
   align-items: center;
   justify-content: center;
   margin-top: -14px; /* GO ??? */
+}
+
+.hero-card__go-text {
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 /* ???????? */
@@ -2652,3 +2797,93 @@ body {
 /* =========================================================
  * ?????????????????????????????
  * --------------------------------------------------------- */
+
+/* =========================
+ * 阊门城门加载转场（acid preloader）
+ * ========================= */
+
+.changmen-gate-preloader {
+  --changmen-gate-yellow: #f6cd45;
+  --changmen-gate-blue: #11324f;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--changmen-gate-yellow);
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--changmen-gate-blue);
+  pointer-events: auto;
+}
+
+.changmen-gate-preloader__noise {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 2;
+}
+
+.changmen-gate-preloader__content {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.changmen-gate-preloader__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.changmen-gate-preloader__gate-svg {
+  width: min(500px, 75vw);
+  height: auto;
+  margin-bottom: -4vw;
+}
+
+.changmen-gate-preloader__portal {
+  transform-origin: bottom;
+}
+
+.changmen-gate-preloader__title {
+  font-family: Anton, "Arial Narrow", sans-serif;
+  font-size: clamp(3.2rem, 15vw, 10rem);
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  margin: 0;
+  color: var(--changmen-gate-blue);
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.changmen-gate-preloader__counter {
+  font-family: Anton, "Arial Narrow", sans-serif;
+  font-size: 1.5rem;
+  color: var(--changmen-gate-blue);
+  margin-top: 1rem;
+  letter-spacing: 0.1em;
+}
+
+.changmen-gate-preloader__curtain {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  background-color: var(--changmen-gate-blue);
+  z-index: 10;
+  pointer-events: none;
+}

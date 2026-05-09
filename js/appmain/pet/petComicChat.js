@@ -175,6 +175,17 @@ export function createPetComicChat({
     if (!prefersReducedMotion) applyPop(els.agentBubble);
   };
 
+  const say = (text) => {
+    isActive = true;
+    els.ui.classList.remove("is-hidden");
+    els.ui.setAttribute("aria-hidden", "false");
+    els.bar.classList.remove("is-open");
+    setHidden(els.bar, true);
+    showAgent(text);
+    syncPositions();
+    if (raf === null) raf = requestAnimationFrame(tick);
+  };
+
   const onBackgroundPointerDownCapture = (e) => {
     if (!isActive) return;
     const target = e.target instanceof Node ? e.target : null;
@@ -237,6 +248,7 @@ export function createPetComicChat({
   const api = {
     open,
     close,
+    say,
     toggle() {
       if (isActive) close();
       else open();

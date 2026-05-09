@@ -1,8 +1,24 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect } from "react";
 import { RouteSection } from "../components/RouteSection.jsx";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
+import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
+import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
 
 export function AppMainPage() {
+  useLayoutEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    return () => {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -30,6 +46,7 @@ export function AppMainPage() {
 
   return (
     <>
+      <ChangmenGatePreloader />
       <section className="hero" id="hero">
         <div className="cloud-field" aria-hidden="true">
           <span className="cloud cloud--a" style={{ "--cx": "4%", "--cy": "3%", "--cs": 1.05, "--co": 0.95, "--cd": "-0.2s" }} />
@@ -113,9 +130,7 @@ export function AppMainPage() {
               <h1 className="hero-card__title">阊门</h1>
               <p className="hero-card__description">从城门到水巷，开启一段的古城探索。</p>
               <div className="hero-card__actions">
-                <button className="btn hero-card__cta" id="hero-go-btn" type="button">
-                  GO
-                </button>
+                <span className="hero-card__go-text">GO</span>
               </div>
               <div className="hero-scroll-hint hero-card__scroll-hint" aria-hidden="true">
                 <span className="hint-stem hero-card__hint-stem" />
@@ -216,34 +231,23 @@ export function AppMainPage() {
                 </svg>
               </div>
               <div className="stack-card__foot">
-                <p className="hero-card__description">占位文案：替换为你想展示的简短说明。</p>
+                <p className="hero-card__description">
+                  《红楼梦》称阊门一带为「最是红尘中一二等富贵风流之地」。这里不仅是曹雪芹笔下繁华的起点，更是江南烟火与古典气韵的交汇之处。
+                </p>
               </div>
             </section>
 
             <section className="stack-card stack-card--indigo" data-card-index="4">
               <div className="stack-card__head">
-                <h2 className="hero-card__title hero-card__title--sub">齿轮同频</h2>
+                <h2 className="hero-card__title hero-card__title--sub">艺术长卷</h2>
               </div>
               <div className="stack-card__stage">
-                <svg className="stack-card__svg svg-motif svg-motif--gear" viewBox="0 0 220 160" aria-hidden="true" role="img">
-                  <g className="motif-gear-group motif-spin">
-                    <circle className="motif-gear-ring" cx="110" cy="82" r="34" />
-                    <circle className="motif-gear-hole" cx="110" cy="82" r="14" />
-                    <rect className="motif-tooth" x="106" y="34" width="8" height="16" rx="3" />
-                    <rect className="motif-tooth" x="106" y="114" width="8" height="16" rx="3" />
-                    <rect className="motif-tooth" x="150" y="78" width="16" height="8" rx="3" />
-                    <rect className="motif-tooth" x="54" y="78" width="16" height="8" rx="3" />
-                    <rect className="motif-tooth" x="138" y="46" width="8" height="16" rx="3" transform="rotate(45 142 54)" />
-                    <rect className="motif-tooth" x="74" y="102" width="8" height="16" rx="3" transform="rotate(45 78 110)" />
-                    <rect className="motif-tooth" x="74" y="46" width="8" height="16" rx="3" transform="rotate(-45 78 54)" />
-                    <rect className="motif-tooth" x="138" y="102" width="8" height="16" rx="3" transform="rotate(-45 142 110)" />
-                  </g>
-                  <circle className="motif-dot motif-float motif-delay-1" cx="58" cy="48" r="5" />
-                  <circle className="motif-dot motif-float motif-delay-2" cx="166" cy="116" r="6" />
-                </svg>
+                <AncientScrollBrushAnimation />
               </div>
               <div className="stack-card__foot">
-                <p className="hero-card__description">占位文案：替换为你想展示的简短说明。</p>
+                <p className="hero-card__description">
+                  它是《姑苏繁华图》中浓墨重彩的一笔。凝固在长卷上的水乡盛景，正等待你缓缓展开，探寻画中之城。
+                </p>
               </div>
             </section>
           </div>
@@ -287,81 +291,109 @@ export function AppMainPage() {
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2021</div>
-                    <img src="https://picsum.photos/seed/cm1/600/400" alt="起源" />
+                    <div className="cm-filmstrip__year">公元前514年</div>
+                    <img src="https://picsum.photos/seed/cm1/600/400" alt="阖闾建城与破楚门" />
                     <div className="cm-filmstrip__info">
-                      <h3>起源 Origin</h3>
-                      <p>一切开始的地方。我们在黑暗中寻找红色光芒，构建核心语言与框架。</p>
+                      <h3>阖闾建城 Helü&apos;s Capital</h3>
+                      <p>
+                        伍子胥奉吴王阖闾之命建吴国都城。阊门为八大城门之一，因其方位朝向楚国，最初被命名为「破楚门」，象征吴国欲破楚的军事雄心。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2022</div>
-                    <img src="https://picsum.photos/seed/cm2/600/400" alt="探索" />
+                    <div className="cm-filmstrip__year">公元12世纪-13世纪</div>
+                    <img
+                      src="images/pingjiang-tu.png"
+                      alt="南宋《平江图》：阊门一带水陆城门并列与水网格局"
+                      style={{ objectFit: "contain", backgroundColor: "#0d0d0d" }}
+                    />
                     <div className="cm-filmstrip__info">
-                      <h3>探索 Discovery</h3>
-                      <p>打破常规界限。尝试将交互与空间结合，创造沉浸式数字体验环境。</p>
+                      <h3>南宋时期 Southern Song</h3>
+                      <p>
+                        随着大运河的繁荣，阊门一带成为重要的水陆交通枢纽。在南宋《平江图》中，清晰地刻画了阊门水陆城门并列、水网密布的城市格局。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2023</div>
-                    <img src="https://picsum.photos/seed/cm3/600/400" alt="重构" />
+                    <div className="cm-filmstrip__year">公元14世纪-17世纪</div>
+                    <img
+                      src="images/ming-suzhou-changmen-map.png"
+                      alt="明清时期苏州城厢图局部：阊门、山塘河与城外水网商贸"
+                      style={{ objectFit: "contain", backgroundColor: "#0d0d0d" }}
+                    />
                     <div className="cm-filmstrip__info">
-                      <h3>重构 Refactor</h3>
-                      <p>化繁为简。剥离多余的装饰，让内容本身成为视觉的主角。</p>
+                      <h3>明代 Ming Dynasty</h3>
+                      <p>
+                        苏州城墙得以重修。阊门外的南濠、七里山塘一带商业极度繁荣，成为丝绸、粮食等物资的集散中心，并在此孕育了中国最早的资本主义萌芽。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2024</div>
-                    <img src="https://picsum.photos/seed/cm4/600/400" alt="绽放" />
+                    <div className="cm-filmstrip__year">公元18世纪</div>
+                    <img
+                      src="images/changmen-film-4.png"
+                      alt="清代康乾时期阊门繁华与《姑苏繁华图》意象"
+                      style={{ objectFit: "contain", backgroundColor: "#0d0d0d" }}
+                    />
                     <div className="cm-filmstrip__info">
-                      <h3>绽放 Bloom</h3>
-                      <p>多平台、多设备全面适配，将我们的设计理念推向更广阔的世界。</p>
+                      <h3>清代康乾时期 Kangxi–Qianlong</h3>
+                      <p>
+                        阊门的繁华达到历史顶峰，商贾云集，千帆竞发。曹雪芹在《红楼梦》中称其为「最是红尘中一二等富贵风流之地」，《姑苏繁华图》也对其进行了重彩描绘。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2025</div>
-                    <img src="https://picsum.photos/seed/cm5/600/400" alt="未来" />
+                    <div className="cm-filmstrip__year">公元1860年前后</div>
+                    <img src="images/changmen-film-5.png" alt="晚清庚申之劫与阊门战事" />
                     <div className="cm-filmstrip__info">
-                      <h3>未来 Future</h3>
-                      <p>持续探索前沿技术与艺术设计的融合点，永远保持好奇与敬畏。</p>
+                      <h3>晚清时期 Late Qing</h3>
+                      <p>
+                        太平天国运动波及苏州，清军与太平军在阊门激战。史称「庚申之劫」，阊门外繁华的商业街区和古建筑群在战火中遭到毁灭性破坏。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2026</div>
-                    <img src="https://picsum.photos/seed/cm6/600/400" alt="回响" />
+                    <div className="cm-filmstrip__year">公元1912年-1949年</div>
+                    <img src="images/changmen-film-6.png" alt="民国时期阊门拆墙筑路与铁路兴起" />
                     <div className="cm-filmstrip__info">
-                      <h3>回响 Echo</h3>
-                      <p>把走过的路重新连线，让记忆与当下在同一条时间轴上回声相遇。</p>
+                      <h3>民国时期 Republican China</h3>
+                      <p>
+                        为适应近代交通发展，阊门部分城墙被拆除以修筑马路。火车站的建立使传统水运逐渐让位于铁路，西方建筑风格融入，城市开始近现代转型。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2027</div>
-                    <img src="https://picsum.photos/seed/cm7/600/400" alt="街巷" />
+                    <div className="cm-filmstrip__year">公元1949年-2000年</div>
+                    <img src="images/changmen-film-7.png" alt="20世纪中后期阊门老城区与市井烟火" />
                     <div className="cm-filmstrip__info">
-                      <h3>街巷 Lanes</h3>
-                      <p>沿着水巷与石桥向前，把“可走的故事”嵌进每一次滑动与停留。</p>
+                      <h3>20世纪中后期 Late 20th Century</h3>
+                      <p>
+                        随着工业化推进和城市重心转移，水运彻底衰落。阊门逐渐褪去商业霸主地位，转变为以居住和传统手工业为主的老城区，沉淀下浓厚的市井烟火气。
+                      </p>
                     </div>
                   </div>
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
-                    <div className="cm-filmstrip__year">2028</div>
-                    <img src="https://picsum.photos/seed/cm8/600/400" alt="再出发" />
+                    <div className="cm-filmstrip__year">公元2006年至今</div>
+                    <img src="images/changmen-film-8.png" alt="当代阊门城楼重建与文化地标" />
                     <div className="cm-filmstrip__info">
-                      <h3>再出发 Restart</h3>
-                      <p>把交互做得更轻、更快、更稳；让每个人都能从这里重新启程。</p>
+                      <h3>当代 Contemporary</h3>
+                      <p>
+                        苏州加大古城保护力度，2006年阊门城楼及水陆城门得以重建恢复。结合现代灯光与数字化展示技术，阊门重焕生机，成为重要的文化地标。
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -558,9 +590,6 @@ export function AppMainPage() {
 
           <div className="guide-menu__columns">
             <div className="guide-menu__col">
-              <button className="guide-menu__link" type="button" data-action="overview">
-                导览概览
-              </button>
               <button className="guide-menu__link" type="button" data-action="timeline">
                 影像时间轴
               </button>
@@ -571,9 +600,6 @@ export function AppMainPage() {
             <div className="guide-menu__col">
               <button className="guide-menu__link" type="button" data-action="route">
                 推荐路线
-              </button>
-              <button className="guide-menu__link" type="button" data-action="spots">
-                景点列表
               </button>
               <button className="guide-menu__link" type="button" data-action="pet">
                 智能伴游

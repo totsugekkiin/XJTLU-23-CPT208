@@ -365,6 +365,7 @@ export async function createDesktopPet({
   let scrollTargetActive = false;
   let targetVisible = false;
   let waveUntil = 0;
+  let waveReturnState = null;
 
   const anchors = {
     head: { x: pos.x, y: pos.y },
@@ -386,16 +387,42 @@ export async function createDesktopPet({
     };
   };
 
+  /**
+   * DOCKING 状态的目标点；为 null 时使用默认右下角，
+   * 否则按 { xPercent, yPercent } 或 { x, y } 解析为视口内一个安全坐标。
+   */
+  let customDockSpec = null;
+
   /** 根节点为脚底中心：把整只宠物收进视口右下角留白内 */
   const getViewportCornerPoint = () => {
     const m = 20;
     const hw = bounds.halfWidth * scale;
     const footBottom = bounds.bottom * scale;
-    const maxX = window.innerWidth - m - hw;
     const minX = hw + m;
+    const maxX = window.innerWidth - m - hw;
+    const minY = m + 40;
+    const maxY = window.innerHeight - m - footBottom;
+
+    if (customDockSpec) {
+      let rawX;
+      let rawY;
+      if (Number.isFinite(customDockSpec.x) && Number.isFinite(customDockSpec.y)) {
+        rawX = customDockSpec.x;
+        rawY = customDockSpec.y;
+      } else {
+        const xp = Number.isFinite(customDockSpec.xPercent) ? customDockSpec.xPercent : 1;
+        const yp = Number.isFinite(customDockSpec.yPercent) ? customDockSpec.yPercent : 1;
+        rawX = window.innerWidth * xp;
+        rawY = window.innerHeight * yp;
+      }
+      const x = maxX < minX ? window.innerWidth * 0.5 : clamp(rawX, minX, maxX);
+      const y = clamp(rawY, minY, Math.max(minY, maxY));
+      return { x, y };
+    }
+
     const x = maxX < minX ? window.innerWidth * 0.5 : maxX;
-    const y = Math.min(window.innerHeight - m - footBottom, window.innerHeight - m - 8);
-    return { x, y: Math.max(m + 40, y) };
+    const y = Math.min(maxY, window.innerHeight - m - 8);
+    return { x, y: Math.max(minY, y) };
   };
 
   /** 根节点 y：使整体完全移到视口上沿之外（贴图腿/裙摆 scale 远大于 bounds.bottom，需大 legPad） */
@@ -506,6 +533,7 @@ export async function createDesktopPet({
     if (!inHead) return;
     // 点击头部：挥手 + 对话一起触发（不干扰拖拽态）
     waveUntil = performance.now() + WAVE_DURATION_MS;
+    waveReturnState = null;
     fsm.setState(PET_STATES.WAVING);
     onHeadClick?.({ x: e.clientX, y: e.clientY, anchors: { ...anchors } });
   };
@@ -538,19 +566,45 @@ export async function createDesktopPet({
 
   /**
    * 滚动检测挂在 window「scroll」上（与 Pixi ticker 解耦）。
-   * 「一下滚」：任意一次 scroll 即离场（拖拽 / 挥手 / 固定放置态除外）。
+   * 「一下滚」：任意一次 scroll 即离场（拖拽中 / 挥手中除外）。
+   * 拖拽松手后的 PLACED 也要响应滚动，这样用户拖过桌宠后继续上下滑仍会飘走。
    */
   let lastScrollPulseAt = performance.now();
   const scrollPetArmAt = performance.now() + 450;
+  const initialScrollReturnY = 8;
   /** SCROLL_EXIT 内冻结水平目标，避免随主卡锚点横向跟滚导致轨迹抖动 / 假「回屏」 */
   let scrollExitFrozenX = null;
+  const isAtInitialScroll = () => Math.max(0, window.scrollY || 0) <= initialScrollReturnY;
 
   const onWindowScrollForPet = () => {
     const n = performance.now();
     lastScrollPulseAt = n;
+    // DOCKING / PLACED 是「显式落点」状态，不应被滚动事件覆盖，
+    // 与 tick() 里 river-page 分支的保护规则保持一致，避免 IO 调用 dockAtPoint
+    // 后被同帧 micro-scroll 事件踩回 SCROLL_EXIT。
+    if (isAtInitialScroll()) {
+      scrollExitFrozenX = null;
+      scrollTargetActive = false;
+      if (
+        !fsm.is(PET_STATES.DRAGGING) &&
+        !fsm.is(PET_STATES.WAVING) &&
+        !fsm.is(PET_STATES.DOCKING) &&
+        !fsm.is(PET_STATES.PLACED)
+      ) {
+        fsm.setState(PET_STATES.IDLE);
+      }
+      return;
+    }
     if (fsm.is(PET_STATES.SCROLL_EXIT)) return;
     if (n < scrollPetArmAt) return;
-    if (fsm.is(PET_STATES.DRAGGING) || fsm.is(PET_STATES.WAVING) || fsm.is(PET_STATES.PLACED)) return;
+    if (
+      fsm.is(PET_STATES.DRAGGING) ||
+      fsm.is(PET_STATES.WAVING) ||
+      fsm.is(PET_STATES.DOCKING) ||
+      fsm.is(PET_STATES.PLACED)
+    ) {
+      return;
+    }
     fsm.setState(PET_STATES.SCROLL_EXIT);
   };
   window.addEventListener("scroll", onWindowScrollForPet, { passive: true });
@@ -558,6 +612,7 @@ export async function createDesktopPet({
   const tick = (ticker) => {
     const dt = Math.max(0.0001, Math.min(ticker.deltaTime, 2.5));
     const now = performance.now();
+    const isRiverPage = document.body.classList.contains("is-river-page");
 
     let scrollProgress = 0;
     if (homingScrollProgress != null && heroEl) {
@@ -575,8 +630,18 @@ export async function createDesktopPet({
     targetVisible = ioTargetActive || scrollTargetActive;
 
     const idleSinceScroll = now - lastScrollPulseAt;
+    if (!isRiverPage && isAtInitialScroll() && !fsm.is(PET_STATES.DRAGGING) && !fsm.is(PET_STATES.WAVING)) {
+      scrollExitFrozenX = null;
+      scrollTargetActive = false;
+      targetVisible = false;
+      if (!fsm.is(PET_STATES.IDLE)) fsm.setState(PET_STATES.IDLE);
+    }
 
-    if (fsm.is(PET_STATES.SCROLL_EXIT) && idleSinceScroll >= scrollHideReturnMs) {
+    if (isRiverPage && !fsm.is(PET_STATES.DRAGGING) && !fsm.is(PET_STATES.WAVING) && !fsm.is(PET_STATES.DOCKING)) {
+      if (!fsm.is(PET_STATES.SCROLL_EXIT)) fsm.setState(PET_STATES.SCROLL_EXIT);
+    }
+
+    if (!isRiverPage && fsm.is(PET_STATES.SCROLL_EXIT) && idleSinceScroll >= scrollHideReturnMs) {
       scrollExitFrozenX = null;
       fsm.setState(PET_STATES.IDLE);
     }
@@ -598,7 +663,11 @@ export async function createDesktopPet({
     if (fsm.is(PET_STATES.WAVING)) {
       // 保持当前位置（不追随 anchor/target），只播放动作
       if (now >= waveUntil) {
-        if (autoReturnOnRelease) {
+        if (waveReturnState) {
+          const nextState = waveReturnState;
+          waveReturnState = null;
+          fsm.setState(nextState);
+        } else if (autoReturnOnRelease) {
           fsm.setState(targetVisible ? PET_STATES.HOMING : PET_STATES.IDLE);
         } else {
           desired.x = pos.x;
@@ -710,7 +779,34 @@ export async function createDesktopPet({
     rig,
     fsm,
     states: PET_STATES,
+    wave({ durationMs = WAVE_DURATION_MS, returnState = PET_STATES.IDLE } = {}) {
+      waveUntil = performance.now() + Math.max(0, durationMs);
+      waveReturnState = returnState;
+      fsm.setState(PET_STATES.WAVING);
+    },
+    stopWave({ returnState = PET_STATES.IDLE } = {}) {
+      waveUntil = 0;
+      waveReturnState = null;
+      if (fsm.is(PET_STATES.WAVING)) fsm.setState(returnState);
+    },
     dockToViewportCorner() {
+      customDockSpec = null;
+      fsm.setState(PET_STATES.DOCKING);
+    },
+    /**
+     * 把桌宠停靠到视口里一个自定义点。
+     * 接受 { xPercent, yPercent }（0~1，相对视口）或 { x, y }（像素）。
+     * 不传或传 null 时等价于 dockToViewportCorner（右下角）。
+     */
+    dockAtPoint(spec) {
+      if (spec && typeof spec === "object") {
+        const hasPx = Number.isFinite(spec.x) && Number.isFinite(spec.y);
+        const hasPct =
+          Number.isFinite(spec.xPercent) || Number.isFinite(spec.yPercent);
+        customDockSpec = hasPx || hasPct ? { ...spec } : null;
+      } else {
+        customDockSpec = null;
+      }
       fsm.setState(PET_STATES.DOCKING);
     },
     getAnchors() {
