@@ -1962,6 +1962,26 @@ body {
   transform: rotate(5deg);
 }
 
+.river-island__frame--credit .river-island__img-credit {
+  position: absolute;
+  right: clamp(5px, 1.8vw, 12px);
+  bottom: clamp(5px, 1.5vw, 10px);
+  left: auto;
+  max-width: min(96%, 220px);
+  margin: 0;
+  padding: 3px 6px;
+  font-size: clamp(8px, 1.8vw, 10px);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(230, 230, 230, 0.95);
+  background: rgba(18, 24, 32, 0.42);
+  border-radius: 4px;
+  text-align: right;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
 .river-island__viz-stack {
   display: flex;
   flex-direction: column;

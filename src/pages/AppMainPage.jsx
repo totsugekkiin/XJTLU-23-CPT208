@@ -498,12 +498,15 @@ export function AppMainPage() {
             <div className="river-island__shore">
               <div className="river-island__viz-stack">
                 <p className="river-island__viz-intro">明清时期的阊门建筑图</p>
-                <div className="river-island__frame">
+                <div className="river-island__frame river-island__frame--credit">
                   <img
                     className="river-island__img river-island__img--color"
                     src="images/river-changmen-3d-reconstruction.png"
-                    alt="阊门古城水网与城墙三维数字复原鸟瞰：河道、城垣、街市与帆船"
+                    alt="阊门古城水网与城墙三维数字复原鸟瞰：河道、城垣、街市与帆船（复原图由@古城阳面制作）"
                   />
+                  <p className="river-island__img-credit">
+                    复原图，由@古城阳面 制作
+                  </p>
                 </div>
               </div>
             </div>
