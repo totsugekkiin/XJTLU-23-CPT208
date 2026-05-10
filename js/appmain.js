@@ -36,9 +36,6 @@ export function bootstrapAppMain() {
     return;
   }
   globalThis.__APPMAIN_BOOTSTRAPPED__ = true;
-  // #region agent log
-  fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:bootstrapGuard',message:'appmain.js bootstrap start',data:{},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (globalThis.PIXI?.Assets) {
@@ -97,8 +94,11 @@ export function bootstrapAppMain() {
   const onScroll = () => {
     if (rafId !== null) return;
     rafId = requestAnimationFrame(() => {
-      document.body.classList.toggle("is-scrolled", window.scrollY > 24);
+      const y = window.scrollY;
+      document.body.classList.toggle("is-scrolled", y > 24);
       cardStackController.updateByScroll();
+      // 合并河流页“向上滑退出”逻辑到同一帧，避免再注册一个 scroll 监听器
+      handleRiverPageExitScroll(y);
       rafId = null;
     });
   };
@@ -145,9 +145,6 @@ export function bootstrapAppMain() {
     onClosed() {
       if (!riverScene) return;
       // 幕布合拢后：幕布本身作为“地面”，河流从幕布上流下（不跳转、不切页面结构）
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:onClosed',message:'curtain closed -> startFlow',data:{scrollY:Math.round(window.scrollY),prefersReducedMotion},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const gsap = window.gsap;
 
       // ====== 幕布合拢后：短暂锁定滚动，直到河流蔓延触底 ======
@@ -205,13 +202,21 @@ export function bootstrapAppMain() {
           riverPage.cmBottomScrollY = window.scrollY;
         }
 
+        // 关键：先把 spacer 撑到河流场景高度，再切换 is-river-page 与 scrollIntoView，
+        // 避免 spacer 还是 0 高度时 route-after-river 的暗蓝色背景（与河流同色）
+        // 紧贴 spacer 顶部露出整屏，造成“河流瞬间已经全部出现”的错觉。
+        const spacer = document.getElementById("river-scroll-spacer");
+        const sceneH = Number(riverScene?.state?.sceneHeight) || 0;
+        if (spacer && sceneH > 0) {
+          spacer.style.height = `${Math.floor(sceneH)}px`;
+        }
+
         document.body.classList.add("is-river-page");
         riverPage.active = true;
         riverPage.exitArmed = false;
         riverPage.preScrollY = window.scrollY;
         // 进入河流“页面”后，让滚动叙事从 river-scroll-spacer 开始
         // 注意：这里必须用 auto，避免平滑滚动过程中 scrollMaskZoom 继续驱动幕布回开
-        const spacer = document.getElementById("river-scroll-spacer");
         spacer?.scrollIntoView({ behavior: "auto", block: "start" });
         // 记录“河流页顶部”的 scrollY，用于检测用户向上滑到顶并退出
         riverPage.riverTopY = spacer ? spacer.offsetTop : window.scrollY;
@@ -277,9 +282,8 @@ export function bootstrapAppMain() {
     riverPage.exiting = false;
   };
 
-  const onScrollForRiverPageExit = () => {
+  const handleRiverPageExitScroll = (y) => {
     if (!riverPage.active) return;
-    const y = window.scrollY;
     const dy = y - (riverPage.lastScrollY ?? y);
     riverPage.lastScrollY = y;
 
@@ -294,7 +298,6 @@ export function bootstrapAppMain() {
       exitRiverPage();
     }
   };
-  window.addEventListener("scroll", onScrollForRiverPageExit, { passive: true });
 
   setupScrollMaskZoom({
     prefersReducedMotion,
@@ -589,10 +592,6 @@ export function bootstrapAppMain() {
 
   if (petHost && petHitzone) {
     (async () => {
-      // #region agent log
-      console.log("[dbg ee6ebc] starting createDesktopPet", { hasHost: !!petHost, hasHitzone: !!petHitzone, hasAnchor: !!petAnchorEl, hasTarget: !!petTargetEl });
-      fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:pet-init',message:'starting createDesktopPet',data:{hasHost:!!petHost,hasHitzone:!!petHitzone,hasAnchor:!!petAnchorEl,hasTarget:!!petTargetEl},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const created = await createDesktopPet({
         host: petHost,
         hitzone: petHitzone,
@@ -603,10 +602,6 @@ export function bootstrapAppMain() {
         prefersReducedMotion,
         scale: 2,
         onHeadClick() {
-          // #region agent log
-          console.log("[dbg ee6ebc] pet onHeadClick fired", { comicReady: !!comic });
-          fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain.js:onHeadClick',message:'pet onHeadClick fired',data:{comicReady:!!comic},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           comic?.onHeadClick?.();
         },
       });
@@ -615,10 +610,6 @@ export function bootstrapAppMain() {
         return;
       }
       pet = created;
-      // #region agent log
-      console.log("[dbg ee6ebc] createDesktopPet resolved", { petNull: pet == null, hasGetAnchors: !!pet?.getAnchors });
-      fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain.js:pet-created',message:'createDesktopPet resolved',data:{petNull:pet==null,hasGetAnchors:!!pet?.getAnchors},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (!pet) return;
 
       onDockClick = (ev) => {
@@ -664,10 +655,6 @@ export function bootstrapAppMain() {
           { once: true }
         );
       }
-      // #region agent log
-      console.log("[dbg ee6ebc] createPetComicChat returned", { comicNull: comic == null, hasOnHeadClick: !!comic?.onHeadClick });
-      fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain.js:comic-created',message:'createPetComicChat returned',data:{comicNull:comic==null,hasOnHeadClick:!!comic?.onHeadClick},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     })().catch((err) => {
       console.error("[desktop-pet] 初始化失败", err);
     });
@@ -694,7 +681,6 @@ export function bootstrapAppMain() {
       comic?.destroy?.();
       pet?.destroy?.();
       riverScene?.stopAndHide?.();
-      window.removeEventListener("scroll", onScrollForRiverPageExit);
     },
   };
 }

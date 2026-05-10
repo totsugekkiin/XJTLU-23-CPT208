@@ -198,10 +198,6 @@ export async function createDesktopPet({
     };
   };
 
-  // #region agent log
-  console.log("[dbg ee6ebc] createDesktopPet entry", { hasPixi: !!PIXI, hasHost: !!host, hasHitzone: !!hitzone, scale, prefersReducedMotion, hasOnHeadClick: typeof onHeadClick === "function" });
-  fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/pet/index.js:entry',message:'createDesktopPet entry',data:{hasPixi:!!PIXI,hasHost:!!host,hasHitzone:!!hitzone,scale,prefersReducedMotion,hasOnHeadClick:typeof onHeadClick==='function'},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const partTextureUrls = [
     torsoTextureUrl,
@@ -508,10 +504,6 @@ export async function createDesktopPet({
     downX = e.clientX;
     downY = e.clientY;
     downPointerId = e.pointerId ?? null;
-    // #region agent log
-    console.log("[dbg ee6ebc] hitzone pointerdown", { x: e.clientX, y: e.clientY, pointerId: e.pointerId });
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/pet/index.js:pointerdown',message:'hitzone pointerdown',data:{x:e.clientX,y:e.clientY,pointerId:e.pointerId},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   };
 
   const handleClickUp = (e) => {
@@ -526,10 +518,6 @@ export async function createDesktopPet({
     if (dx * dx + dy * dy > 64) return; // 8px
     if (interaction?.isDragging?.()) return;
     const inHead = isPointInHead(e.clientX, e.clientY);
-    // #region agent log
-    console.log("[dbg ee6ebc] hitzone pointerup click-eval", { x: e.clientX, y: e.clientY, dt: Math.round(dt), move2: Math.round(dx * dx + dy * dy), isDragging: !!interaction?.isDragging?.(), inHead, anchorHead: { x: Math.round(anchors.head.x), y: Math.round(anchors.head.y) }, scale });
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/pet/index.js:pointerup',message:'hitzone pointerup click-eval',data:{x:e.clientX,y:e.clientY,dt:Math.round(dt),move2:Math.round(dx*dx+dy*dy),isDragging:!!interaction?.isDragging?.(),inHead,anchorHead:{x:Math.round(anchors.head.x),y:Math.round(anchors.head.y)},scale},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!inHead) return;
     // 点击头部：挥手 + 对话一起触发（不干扰拖拽态）
     waveUntil = performance.now() + WAVE_DURATION_MS;
@@ -609,6 +597,17 @@ export async function createDesktopPet({
   };
   window.addEventListener("scroll", onWindowScrollForPet, { passive: true });
 
+  // 缓存 --hero-scroll-length-px，避免每帧 getComputedStyle（强制 layout）
+  let cachedHeroScrollLengthPx = 3400;
+  const refreshHeroScrollLength = () => {
+    if (!heroEl) return;
+    cachedHeroScrollLengthPx = parseCssNumber(
+      window.getComputedStyle(heroEl).getPropertyValue("--hero-scroll-length-px"),
+      3400
+    );
+  };
+  refreshHeroScrollLength();
+
   const tick = (ticker) => {
     const dt = Math.max(0.0001, Math.min(ticker.deltaTime, 2.5));
     const now = performance.now();
@@ -616,11 +615,7 @@ export async function createDesktopPet({
 
     let scrollProgress = 0;
     if (homingScrollProgress != null && heroEl) {
-      const sl = parseCssNumber(
-        window.getComputedStyle(heroEl).getPropertyValue("--hero-scroll-length-px"),
-        6000
-      );
-      scrollProgress = Math.max(0, window.scrollY) / Math.max(1, sl);
+      scrollProgress = Math.max(0, window.scrollY) / Math.max(1, cachedHeroScrollLengthPx);
       const release =
         homingScrollRelease ?? Math.max(0, homingScrollProgress - 0.1);
       if (scrollProgress >= homingScrollProgress) scrollTargetActive = true;
@@ -770,6 +765,7 @@ export async function createDesktopPet({
   app.ticker.add(tick);
 
   const onWindowResize = () => {
+    refreshHeroScrollLength();
     updateHitzone();
   };
   window.addEventListener("resize", onWindowResize, { passive: true });

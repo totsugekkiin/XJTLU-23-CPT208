@@ -41,9 +41,6 @@ export function createPetComicChat({
     close: root.getElementById("pet-inputbar-close"),
   };
 
-  // #region agent log
-  fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9fbb39'},body:JSON.stringify({sessionId:'9fbb39',runId:'pre-fix',hypothesisId:'H0',location:'js/appmain/pet/petComicChat.js:init',message:'init DOM refs',data:{href:globalThis.location?.href??null,prefersReducedMotion,agentBubbleCount:root.querySelectorAll?.('#pet-bubble-agent')?.length??null,userBubbleCount:root.querySelectorAll?.('#pet-bubble-user')?.length??null,hasAgentBubble:!!els.agentBubble,hasAgentText:!!els.agentText,hasUserBubble:!!els.userBubble,hasUserText:!!els.userText},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   if (!pet || typeof sendToAI !== "function") {
     console.warn("[pet-comic-chat] missing pet or sendToAI");
@@ -51,9 +48,6 @@ export function createPetComicChat({
   }
   if (!els.ui || !els.bar || !els.input || !els.send || !els.agentBubble || !els.userBubble) {
     console.warn("[pet-comic-chat] missing DOM nodes");
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H3',location:'js/appmain/pet/petComicChat.js:missing-dom',message:'missing DOM nodes for pet comic chat',data:{hasUi:!!els.ui,hasBar:!!els.bar,hasInput:!!els.input,hasSend:!!els.send,hasAgentBubble:!!els.agentBubble,hasUserBubble:!!els.userBubble},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return { destroy() {} };
   }
 
@@ -91,9 +85,6 @@ export function createPetComicChat({
       dbgSyncN += 1;
       const agentCs = els.agentBubble ? getComputedStyle(els.agentBubble) : null;
       const userCs = els.userBubble ? getComputedStyle(els.userBubble) : null;
-      // #region agent log
-      fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9fbb39'},body:JSON.stringify({sessionId:'9fbb39',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/pet/petComicChat.js:syncPositions',message:'anchor+transform snapshot',data:{n:dbgSyncN,head:{x:Math.round(headX),y:Math.round(headY)},user:{x:Math.round(userX),y:Math.round(userY)},agentInline:{left:els.agentBubble?.style?.left??null,top:els.agentBubble?.style?.top??null,transform:els.agentBubble?.style?.transform??null,classIsPop:els.agentBubble?.classList?.contains('is-pop')??null},agentComputed:{transform:agentCs?.transform??null,animationName:agentCs?.animationName??null,animationDuration:agentCs?.animationDuration??null},userInline:{left:els.userBubble?.style?.left??null,top:els.userBubble?.style?.top??null,transform:els.userBubble?.style?.transform??null,classIsPop:els.userBubble?.classList?.contains('is-pop')??null},userComputed:{transform:userCs?.transform??null,animationName:userCs?.animationName??null,animationDuration:userCs?.animationDuration??null}},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
     }
   };
 
@@ -138,10 +129,6 @@ export function createPetComicChat({
     window.setTimeout(() => {
       els.input.focus({ preventScroll: true });
     }, 120);
-    // #region agent log
-    console.log("[dbg ee6ebc] comic chat opened");
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H4',location:'js/appmain/pet/petComicChat.js:open',message:'comic chat opened',data:{},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   };
 
   const close = () => {
@@ -157,10 +144,6 @@ export function createPetComicChat({
       raf = null;
     }
     setKeyboardOffset(0);
-    // #region agent log
-    console.log("[dbg ee6ebc] comic chat closed");
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ee6ebc'},body:JSON.stringify({sessionId:'ee6ebc',runId:'pre-fix',hypothesisId:'H4',location:'js/appmain/pet/petComicChat.js:close',message:'comic chat closed',data:{},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   };
 
   const showUser = (text) => {

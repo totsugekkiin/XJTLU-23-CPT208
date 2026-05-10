@@ -129,9 +129,6 @@ export function createRiverScene({
     if (visibleForBlank <= 0.5) {
       if (!hasLoggedBlank && isActive && (riverAnimState === "flowing" || riverAnimState === "done")) {
         hasLoggedBlank = true;
-        // #region agent log
-        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:drawRiver(blank)',message:'visibleEndY<=0.5 while active',data:{riverAnimState,scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),visibleEndY:Math.round(visibleForBlank),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
       }
       return;
     }
@@ -502,9 +499,6 @@ export function createRiverScene({
     flow.riverFlowY = 0;
     scroll.startY = window.scrollY;
     hasLoggedBlank = false;
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:startFlow',message:'startFlow called',data:{duration,ease,scrollY:Math.round(window.scrollY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH),hasSpacer:!!spacer},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     fx.continuousRippleRadius = 0;
     fx.particles = [];
     fx.lastParticleAt = 0;
@@ -513,9 +507,6 @@ export function createRiverScene({
     setActive(true);
     ensureRaf();
     if (spacer) spacer.style.height = `${Math.floor(view.sceneH)}px`;
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:startFlow(spacer)',message:'spacer height set',data:{spacerH:spacer?spacer.style.height:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     if (flowTween) flowTween.kill();
     flowTween = gsap.to(flow, {
@@ -543,9 +534,6 @@ export function createRiverScene({
         if (now - lastFlowLogAt > 700) {
           lastFlowLogAt = now;
           const scrollDelta = Math.max(0, window.scrollY - scroll.startY);
-          // #region agent log
-          fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H2',location:'js/appmain/riverScene.js:flowTween(onUpdate)',message:'flow progress tick',data:{scrollY:Math.round(window.scrollY),scrollStartY:Math.round(scroll.startY),scrollDelta:Math.round(scrollDelta),riverFlowY:Math.round(flow.riverFlowY),vh:Math.round(view.h),sceneH:Math.round(view.sceneH)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
         }
       },
       onComplete: () => {
@@ -560,9 +548,6 @@ export function createRiverScene({
         }
         riverAnimState = "done";
         flowTween = null;
-        // #region agent log
-        fetch('http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8f7e40'},body:JSON.stringify({sessionId:'8f7e40',runId:'pre-fix',hypothesisId:'H1',location:'js/appmain/riverScene.js:flowTween(onComplete)',message:'flow complete',data:{scrollY:Math.round(window.scrollY),riverFlowY:Math.round(flow.riverFlowY),sceneH:Math.round(view.sceneH)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
       },
     });
 

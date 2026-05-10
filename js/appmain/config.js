@@ -1,7 +1,7 @@
 export const layoutConfig = {
   padX: 30,
   cardMaxWidth: 460,
-  scrollLengthPx: 6000,
+  scrollLengthPx: 3400,
   primary: {
     maxWidth: 350,
     heightRatio: 1,
@@ -72,8 +72,8 @@ export const cardsConfig = [
 
 export const motionConfig = {
   stages: {
-    dockEnd: 0.34,
-    switchEnd: 0.44,
+    dockEnd: 0.3,
+    switchEnd: 0.52,
     releaseEnd: 1,
   },
   switch: {
@@ -96,7 +96,7 @@ export const motionConfig = {
 
 /** 桌宠：飞向目标区的滚动触发（相对 #hero 的 --hero-scroll-length-px，与 motionConfig.stages 同刻度 0~1） */
 export const petConfig = {
-  /** 达到该进度即开始 HOMING；设得比 dockEnd（0.34）小越多越早（约在重叠卡片动画之前） */
+  /** 达到该进度即开始 HOMING；须小于 dockEnd（0.30），越早越先飞向目标区 */
   homingScrollProgress: 0.16,
   /** 上滑低于该进度则取消目标态（滞回，避免边界抖动） */
   homingScrollRelease: 0.1,

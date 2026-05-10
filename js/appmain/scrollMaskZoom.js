@@ -11,10 +11,20 @@ const ZOOM_THRESHOLD = 0.2;
 const MAX_MASK_SCALE = 40;
 const ROTATE_Y_MAX = 28;
 const TRANSLATE_Z_MAX = 220;
-const LERP_ALPHA = 0.12;
+const LERP_ALPHA_DESKTOP = 0.12;
+const LERP_ALPHA_MOBILE = 0.28;
+const MOBILE_MAX_WIDTH = 768;
+// lerp 收敛阈值：差值小于此值视为已到位，可停止续帧
+const SETTLE_EPSILON_PX = 0.5;
+const SETTLE_EPSILON_DEG = 0.05;
 
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 const lerp = (from, to, alpha) => from + (to - from) * alpha;
+const isMobileViewport = () =>
+  typeof window !== "undefined" &&
+  (window.innerWidth <= MOBILE_MAX_WIDTH ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches));
 
 export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } = {}) {
   if (typeof window === "undefined") return null;
@@ -64,9 +74,34 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
   let rafId = null;
   let currentTrackX = 0;
   let hasEnded = false;
-  let zDbgThrottle = { t: 0, bucket: -99 };
+  // 当前生效的 lerp 系数（resize 时会跟随屏宽刷新）
+  let lerpAlpha = isMobileViewport() ? LERP_ALPHA_MOBILE : LERP_ALPHA_DESKTOP;
+
+  // 缓存几何，避免 scroll 时反复读 offsetTop / offsetHeight / innerWidth 触发 forced reflow
+  const geom = {
+    sectionTop: 0,
+    scrollLength: 1,
+    vw: 0,
+    vh: 0,
+    halfVw: 0,
+    isPortrait: false,
+    orbitRadiusX: 0,
+    orbitRadiusY: 0,
+    titleSplitDistance: 0,
+  };
 
   const measure = () => {
+    // 缓存基础几何（在 resize / 图片 load 时刷新）
+    geom.vw = window.innerWidth;
+    geom.vh = window.innerHeight;
+    geom.halfVw = geom.vw / 2;
+    geom.isPortrait = geom.vh > geom.vw;
+    geom.orbitRadiusX = geom.vw * 0.7;
+    geom.orbitRadiusY = geom.isPortrait ? geom.vh * 0.85 : geom.vh * 0.35;
+    geom.titleSplitDistance = geom.vh * 0.8;
+    geom.sectionTop = section.offsetTop;
+    geom.scrollLength = Math.max(1, scrollWrap.offsetHeight - geom.vh);
+
     if (!hTrack) return;
 
     // 清除 transform 以取基准尺寸
@@ -75,12 +110,13 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
       el.style.transform = "none";
     });
 
-    maxTranslateX = Math.max(0, hTrack.scrollWidth - window.innerWidth);
-    entryOffsetPx = window.innerWidth * 0.6;
+    maxTranslateX = Math.max(0, hTrack.scrollWidth - geom.vw);
+    entryOffsetPx = geom.vw * 0.6;
 
+    // 一次性读 trackRect，避免每个 item 都触发同步 layout
+    const trackRect = hTrack.getBoundingClientRect();
     itemData = items.map((el) => {
       const rect = el.getBoundingClientRect();
-      const trackRect = hTrack.getBoundingClientRect();
       return {
         el,
         rawCenter: rect.left - trackRect.left + rect.width / 2,
@@ -91,9 +127,7 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
   };
 
   const update = () => {
-    const sectionTop = section.offsetTop;
-    const scrollLength = Math.max(1, scrollWrap.offsetHeight - window.innerHeight);
-    const progress = clamp01((window.scrollY - sectionTop) / scrollLength);
+    const progress = clamp01((window.scrollY - geom.sectionTop) / geom.scrollLength);
     if (typeof onProgress === "function") {
       try {
         onProgress(progress);
@@ -101,64 +135,6 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
         console.error("[scrollMaskZoom] onProgress 回调执行失败", e);
       }
     }
-
-    // #region agent log
-    {
-      const b = Math.floor(progress * 15) / 15;
-      const now = Date.now();
-      if (progress > 0.02 && progress < 0.995 && (now - zDbgThrottle.t > 380 || b !== zDbgThrottle.bucket)) {
-        zDbgThrottle = { t: now, bucket: b };
-        const hero = document.getElementById("hero");
-        const cm = document.getElementById("cm-transition");
-        const dock = document.getElementById("hero-pet-dock-btn");
-        const pill = document.getElementById("hero-guide-btn");
-        const guide = document.getElementById("guide-menu");
-        const sz = (el) => (el ? getComputedStyle(el).zIndex : "none");
-        const probe = (el) => {
-          if (!el) return null;
-          const r = el.getBoundingClientRect();
-          if (r.width < 1 && r.height < 1) return { empty: true };
-          let x = Math.round(r.left + r.width / 2);
-          let y = Math.round(r.top + r.height / 2);
-          x = Math.max(0, Math.min(window.innerWidth - 1, x));
-          y = Math.max(0, Math.min(window.innerHeight - 1, y));
-          const hit = document.elementFromPoint(x, y);
-          return {
-            x,
-            y,
-            id: hit?.id || "",
-            tag: hit?.tagName || "",
-            cls: typeof hit?.className === "string" ? hit.className.slice(0, 120) : "",
-          };
-        };
-        const guideOpen = !!(guide && guide.classList.contains("is-open"));
-        const panel = guide?.querySelector(".guide-menu__panel");
-        fetch("http://127.0.0.1:7502/ingest/f422e225-c59a-490e-b033-9726b77ea0c6", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0b45e0" },
-          body: JSON.stringify({
-            sessionId: "0b45e0",
-            runId: "post-fix",
-            hypothesisId: "A",
-            location: "js/appmain/scrollMaskZoom.js:update",
-            message: "cm scroll transition stacking probe",
-            data: {
-              progress: Number(progress.toFixed(4)),
-              heroZ: sz(hero),
-              cmZ: sz(cm),
-              maskLayerZ: sz(maskLayer),
-              guideOpen,
-              guideZ: guide ? sz(guide) : null,
-              dockProbe: probe(dock),
-              pillProbe: probe(pill),
-              guidePanelProbe: guideOpen && panel ? probe(panel) : null,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-    }
-    // #endregion
 
     // panProgress：zoom 之后的“横移阶段”进度（给胶片轨道与双星公转共用）
     const panProgress =
@@ -173,7 +149,7 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
     // 阊门上下两半：随 zoomProgress 分离
     const splitProgress = clamp01((zoomProgress - 0.7) / 0.3);
     if (titleTop && titleBottom) {
-      const distance = window.innerHeight * 0.8 * splitProgress;
+      const distance = geom.titleSplitDistance * splitProgress;
       const titleOpacity = 1 - splitProgress;
       titleTop.style.transform = `translateY(${-distance}px)`;
       titleTop.style.opacity = String(titleOpacity);
@@ -185,9 +161,8 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
     if (bgSun && bgMoon) {
       const cycles = 3;
       const angle = panProgress * Math.PI * 2 * cycles;
-      const isPortrait = window.innerHeight > window.innerWidth;
-      const orbitRadiusX = window.innerWidth * 0.7;
-      const orbitRadiusY = isPortrait ? window.innerHeight * 0.85 : window.innerHeight * 0.35;
+      const orbitRadiusX = geom.orbitRadiusX;
+      const orbitRadiusY = geom.orbitRadiusY;
 
       const sunX = Math.cos(angle) * orbitRadiusX;
       const sunY = Math.sin(angle) * orbitRadiusY;
@@ -224,9 +199,14 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
     }
 
     // 阶段 B：胶片入场 + 横移 + 3D
+    // settled：本帧所有 lerp 是否都已贴近目标。未贴近时主动续 RAF，
+    // 避免 iOS Safari 滚动时 scroll 事件稀疏导致的“卡住—一帧补齐—飞过去”观感。
+    let settled = true;
     if (hTrack && itemData.length > 0) {
       const targetTrackX = entryOffsetPx * (1 - panProgress) - panProgress * maxTranslateX;
-      currentTrackX = lerp(currentTrackX, targetTrackX, LERP_ALPHA);
+      const nextTrackX = lerp(currentTrackX, targetTrackX, lerpAlpha);
+      if (Math.abs(targetTrackX - nextTrackX) > SETTLE_EPSILON_PX) settled = false;
+      currentTrackX = nextTrackX;
       hTrack.style.transform = `translate3d(${currentTrackX}px, 0, 0)`;
 
       if (filmstrip) {
@@ -234,7 +214,7 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
         filmstrip.style.opacity = String(filmOpacity);
       }
 
-      const windowCenterX = window.innerWidth / 2;
+      const windowCenterX = geom.halfVw;
       itemData.forEach((data) => {
         const currentCenterX = data.rawCenter + currentTrackX;
         const offset = currentCenterX - windowCenterX;
@@ -243,8 +223,16 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
         const targetTranslateZ =
           -TRANSLATE_Z_MAX + normalizedOffset * normalizedOffset * TRANSLATE_Z_MAX;
 
-        data.currentRotateY = lerp(data.currentRotateY, targetRotateY, LERP_ALPHA);
-        data.currentTranslateZ = lerp(data.currentTranslateZ, targetTranslateZ, LERP_ALPHA);
+        const nextRotateY = lerp(data.currentRotateY, targetRotateY, lerpAlpha);
+        const nextTranslateZ = lerp(data.currentTranslateZ, targetTranslateZ, lerpAlpha);
+        if (
+          Math.abs(targetRotateY - nextRotateY) > SETTLE_EPSILON_DEG ||
+          Math.abs(targetTranslateZ - nextTranslateZ) > SETTLE_EPSILON_PX
+        ) {
+          settled = false;
+        }
+        data.currentRotateY = nextRotateY;
+        data.currentTranslateZ = nextTranslateZ;
         data.el.style.transform = `translateZ(${data.currentTranslateZ}px) rotateY(${data.currentRotateY}deg)`;
       });
     }
@@ -259,17 +247,26 @@ export function setupScrollMaskZoom({ prefersReducedMotion, onEnd, onProgress } 
         }
       }
     }
+
+    return settled;
   };
 
-  const onScroll = () => {
+  const scheduleFrame = () => {
     if (rafId !== null) return;
     rafId = window.requestAnimationFrame(() => {
-      update();
       rafId = null;
+      const settled = update();
+      // 未收敛则继续追，直到与目标重合（手指停下后画面也能平滑收尾）
+      if (!settled) scheduleFrame();
     });
   };
 
+  const onScroll = () => {
+    scheduleFrame();
+  };
+
   const onResize = () => {
+    lerpAlpha = isMobileViewport() ? LERP_ALPHA_MOBILE : LERP_ALPHA_DESKTOP;
     measure();
     currentTrackX = 0;
     update();

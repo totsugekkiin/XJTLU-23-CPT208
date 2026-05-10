@@ -12,7 +12,7 @@
         --panelBorder: rgba(255, 255, 255, 0.14);
         --txt: rgba(255, 255, 255, 0.92);
         --muted: rgba(255, 255, 255, 0.72);
-        --acid: #b8ff2c;
+        --accent: #b8ff2c;
         --danger: #ff2d55;
         --danger2: #ff3b30;
         --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -33,7 +33,7 @@
         inset: 0;
       }
 
-      /* 覆盖层 UI（扁平/酸性风） */
+      /* HUD overlay UI */
       .hud {
         position: fixed;
         inset: 0;
@@ -76,7 +76,7 @@
         width: 10px;
         height: 10px;
         border-radius: 999px;
-        background: var(--acid);
+        background: var(--accent);
         box-shadow: 0 0 0 3px rgba(184, 255, 44, 0.16),
           0 0 20px rgba(184, 255, 44, 0.22);
       }
@@ -196,7 +196,7 @@
       }
 
       .spotBtn:hover .spotBtn__pin {
-        background: var(--acid);
+        background: var(--accent);
         box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.82),
           0 0 0 10px rgba(184, 255, 44, 0.22),
           0 18px 32px rgba(0, 0, 0, 0.35);
@@ -281,7 +281,7 @@
         transform: none;
       }
 
-      /* 自定义 HTML Marker（扁平化圆点） */
+      /* Custom HTML marker (round dot) */
       .cm-marker {
         width: 18px;
         height: 18px;

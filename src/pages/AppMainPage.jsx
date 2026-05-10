@@ -1,10 +1,36 @@
-import React, { useEffect, useLayoutEffect } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { RouteSection } from "../components/RouteSection.jsx";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
 
 export function AppMainPage() {
+  // 路线区段（含高德地图）首屏被 CSS display:none 隐藏。
+  // 直接 mount 会让首屏就请求高德 SDK + 初始化 WebGL，浪费资源、加剧卡顿。
+  // 这里改为只在用户实际进入“河流页”后再挂载，挂载后保留（避免反复初始化地图）。
+  const [shouldMountRoute, setShouldMountRoute] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.body.classList.contains("is-river-page")) {
+      setShouldMountRoute(true);
+      return;
+    }
+    if (typeof MutationObserver === "undefined") {
+      // 兜底：若无 MutationObserver，过段时间再挂载
+      const t = window.setTimeout(() => setShouldMountRoute(true), 4000);
+      return () => window.clearTimeout(t);
+    }
+    const obs = new MutationObserver(() => {
+      if (document.body.classList.contains("is-river-page")) {
+        setShouldMountRoute(true);
+        obs.disconnect();
+      }
+    });
+    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
   useLayoutEffect(() => {
     const previousScrollRestoration = window.history.scrollRestoration;
     if ("scrollRestoration" in window.history) {
@@ -493,9 +519,10 @@ export function AppMainPage() {
         </div>
       </div>
 
-      {/* 仅河流页模式显示（CSS）；胶片段滚动时不占位 */}
+      {/* 仅河流页模式显示（CSS）；胶片段滚动时不占位
+          且仅当用户实际进入河流页后才挂载，避免首屏就初始化高德地图浪费 CPU/网络 */}
       <section className="route-after-river" id="route-section" aria-label="推荐路线">
-        <RouteSection heightVh={100} />
+        {shouldMountRoute ? <RouteSection heightVh={100} /> : null}
       </section>
 
       <div id="pet-layer" className="pet-layer" aria-hidden="true">
