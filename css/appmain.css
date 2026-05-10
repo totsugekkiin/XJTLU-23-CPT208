@@ -1958,6 +1958,76 @@ body {
   transform: rotate(-7deg);
 }
 
+.river-island[data-island-index="3"] .river-island__frame {
+  transform: rotate(5deg);
+}
+
+.river-island__viz-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.river-island__viz-intro {
+  margin: 0;
+  padding: 0 2px;
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-align: center;
+  color: rgba(12, 32, 52, 0.92);
+  line-height: 1.35;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.95),
+    0 0 12px rgba(255, 255, 255, 0.65);
+  pointer-events: none;
+}
+
+/* 大块数字复原 / 鸟瞰图：显著大于普通岛屿配图（宽度在 viz-stack 上，图块占满） */
+.river-island--large-viz.river-island--text-on-left .river-island__viz-stack {
+  grid-column: 3;
+  justify-self: end;
+  margin-right: clamp(8px, 2vw, 22px);
+  margin-left: 6px;
+  width: min(calc(520px * var(--pc-scale)), 66vw, 880px);
+  max-width: min(94vw, 880px);
+}
+
+.river-island--large-viz.river-island--text-on-right .river-island__viz-stack {
+  grid-column: 1;
+  justify-self: start;
+  margin-left: clamp(8px, 2vw, 22px);
+  margin-right: 6px;
+  width: min(calc(520px * var(--pc-scale)), 66vw, 880px);
+  max-width: min(94vw, 880px);
+}
+
+.river-island--large-viz .river-island__viz-stack .river-island__frame {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+/* 仅剩配图 + 简短图注时：整列居中，不再占用左右岸文字格 */
+.river-island--large-viz.river-island--viz-only .river-island__shore {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+.river-island--large-viz.river-island--viz-only.river-island--text-on-left .river-island__viz-stack,
+.river-island--large-viz.river-island--viz-only.river-island--text-on-right .river-island__viz-stack {
+  grid-column: 1;
+  justify-self: center;
+  margin-left: clamp(8px, 2vw, 22px);
+  margin-right: clamp(8px, 2vw, 22px);
+}
+
+.river-island__img--color {
+  filter: none;
+}
+
 .river-island__img {
   display: block;
   width: 100%;
@@ -1970,6 +2040,12 @@ body {
   .river-island--text-on-left .river-island__frame,
   .river-island--text-on-right .river-island__frame {
     width: min(148px, 38vw, 100%);
+  }
+
+  .river-island--large-viz.river-island--text-on-left .river-island__viz-stack,
+  .river-island--large-viz.river-island--text-on-right .river-island__viz-stack {
+    width: min(92vw, 440px);
+    max-width: 94vw;
   }
 
   .river-island__title {

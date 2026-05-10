@@ -494,6 +494,21 @@ export function AppMainPage() {
             </div>
           </div>
 
+          <div className="river-island river-island--large-viz river-island--viz-only" data-island-index="3">
+            <div className="river-island__shore">
+              <div className="river-island__viz-stack">
+                <p className="river-island__viz-intro">明清时期的阊门建筑图</p>
+                <div className="river-island__frame">
+                  <img
+                    className="river-island__img river-island__img--color"
+                    src="images/river-changmen-3d-reconstruction.png"
+                    alt="阊门古城水网与城墙三维数字复原鸟瞰：河道、城垣、街市与帆船"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <div id="boat-container" aria-hidden="true">

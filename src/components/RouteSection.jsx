@@ -778,6 +778,22 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           border-radius: 4px;
           box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.12);
         }
+
+        .felt-map-attrib {
+          position: absolute;
+          right: 10px;
+          bottom: 44px;
+          z-index: 36;
+          margin: 0;
+          font-size: 9px;
+          line-height: 1.25;
+          font-weight: 500;
+          color: rgba(140, 140, 140, 0.72);
+          letter-spacing: 0.04em;
+          pointer-events: none;
+          user-select: none;
+          text-shadow: 0 0 1px rgba(255, 255, 255, 0.9);
+        }
       `}</style>
 
       {showBackButton ? (
@@ -824,6 +840,10 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           </header>
 
           <div id="map" ref={mapContainerRef} className="felt-map" aria-label="高德地图容器" />
+
+          <p className="felt-map-attrib" aria-hidden="true">
+            图片来源于网络
+          </p>
 
           <div className={`loading-cloth stitch ${mapReady ? "fade" : ""}`}>
             <div style={{ fontSize: "24px", animation: "clothSpin 3s linear infinite" }}>🧶</div>
