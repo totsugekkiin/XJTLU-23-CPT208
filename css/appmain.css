@@ -2,6 +2,12 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;700&display=swap");
 
+/* PC 适配：由断点覆盖 --pc-scale；子布局用 calc(... * var(--pc-scale)) 联动 */
+:root {
+  --pc-scale: 1;
+  --pc-content-max: none;
+}
+
 /* Page-level base: background, text color, fallback fonts */
 body {
   margin: 0;
@@ -40,14 +46,14 @@ body > * {
 /* Hero section (top viewport) */
 .hero {
   --hero-pad-x: 30px;
-  --hero-card-max-width: 460px;
+  --hero-card-max-width: calc(460px * var(--pc-scale));
   --hero-card-size: min(calc(100vw - (var(--hero-pad-x) * 2)), var(--hero-card-max-width));
   /*
    * Primary stack-card sizing:
    *   width: capped at --primary-card-max-width and viewport-aware
    *   height-ratio: aspect ratio relative to width (1 = square)
    */
-  --primary-card-max-width: 350px;
+  --primary-card-max-width: calc(350px * var(--pc-scale));
   --primary-card-width: min(calc(100vw - (var(--hero-pad-x) * 2)), var(--primary-card-max-width));
   --primary-card-height-ratio: 1;
   --primary-card-height: calc(var(--primary-card-width) * var(--primary-card-height-ratio));
@@ -398,8 +404,9 @@ body.is-river-page .route-after-river::before {
   padding: 0;
   text-align: center;
   position: fixed;
-  left: max(var(--hero-pad-x), calc((100vw - var(--hero-card-max-width)) / 3));
-  right: max(var(--hero-pad-x), calc((100vw - var(--hero-card-max-width)) / 3));
+  /* 用 --hero-card-size 与 /2 水平居中；勿用 /3 + max-width ——会把容器拉到 (100vw + 2×max)/3，堆叠卡片被撑满过大 */
+  left: max(var(--hero-pad-x), calc((100vw - var(--hero-card-size)) / 2));
+  right: max(var(--hero-pad-x), calc((100vw - var(--hero-card-size)) / 2));
   bottom: calc(var(--hero-card-hidden-size) * -1);
   z-index: 30;
   margin: 0;
@@ -1616,8 +1623,9 @@ body {
 }
 
 .cm-filmstrip__item {
-  width: 520px;
-  padding: 64px 42px 118px 42px;
+  width: calc(520px * var(--pc-scale));
+  padding: calc(64px * var(--pc-scale)) calc(42px * var(--pc-scale))
+    calc(118px * var(--pc-scale)) calc(42px * var(--pc-scale));
   background-color: #0a0a0a;
   border-top: 3px solid #2a2a2a;
   border-bottom: 3px solid #2a2a2a;
@@ -1626,7 +1634,7 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   transform-origin: center center;
-  margin: 0 18px;
+  margin: 0 calc(18px * var(--pc-scale));
 }
 
 .cm-filmstrip__item::before,
@@ -1635,7 +1643,7 @@ body {
   position: absolute;
   left: 0;
   width: 100%;
-  height: 20px;
+  height: calc(20px * var(--pc-scale));
   background-image: repeating-linear-gradient(
     90deg,
     transparent, transparent 14px,
@@ -1643,12 +1651,17 @@ body {
   );
 }
 
-.cm-filmstrip__item::before { top: 14px; }
-.cm-filmstrip__item::after { bottom: 14px; }
+.cm-filmstrip__item::before {
+  top: calc(14px * var(--pc-scale));
+}
+
+.cm-filmstrip__item::after {
+  bottom: calc(14px * var(--pc-scale));
+}
 
 .cm-filmstrip__segment {
   position: absolute;
-  bottom: 62px;
+  bottom: calc(62px * var(--pc-scale));
   left: 0;
   width: 100%;
   height: 2px;
@@ -1657,10 +1670,10 @@ body {
 
 .cm-filmstrip__dot {
   position: absolute;
-  bottom: 62px;
+  bottom: calc(62px * var(--pc-scale));
   left: 50%;
-  width: 14px;
-  height: 14px;
+  width: calc(14px * var(--pc-scale));
+  height: calc(14px * var(--pc-scale));
   border-radius: 50%;
   background-color: #e31221;
   box-shadow: 0 0 14px rgba(227, 18, 33, 0.9);
@@ -1672,7 +1685,7 @@ body {
   position: absolute;
   left: 50%;
   color: #e31221;
-  font-size: 1.35rem;
+  font-size: clamp(1.08rem, calc(1.35rem * var(--pc-scale)), 1.95rem);
   font-weight: 900;
   letter-spacing: 1px;
   animation: cmFilmstripFloat 3s ease-in-out infinite;
@@ -1688,7 +1701,7 @@ body {
 
 .cm-filmstrip__item img {
   width: 100%;
-  height: 320px;
+  height: clamp(220px, calc(320px * var(--pc-scale)), 480px);
   object-fit: cover;
   border-radius: 4px;
   filter: grayscale(80%) sepia(20%);
@@ -1703,12 +1716,12 @@ body {
 }
 
 .cm-filmstrip__info {
-  margin-top: 22px;
+  margin-top: calc(22px * var(--pc-scale));
 }
 
 .cm-filmstrip__info h3 {
-  margin: 0 0 10px 0;
-  font-size: 1.55rem;
+  margin: 0 0 calc(10px * var(--pc-scale)) 0;
+  font-size: clamp(1.2rem, calc(1.55rem * var(--pc-scale)), 2rem);
   color: #fff;
   font-family: "Helvetica Neue", Arial, sans-serif;
 }
@@ -1717,7 +1730,7 @@ body {
   margin: 0;
   color: #999;
   line-height: 1.55;
-  font-size: 1rem;
+  font-size: clamp(0.9rem, calc(1rem * var(--pc-scale)), 1.2rem);
   font-family: "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -1867,7 +1880,7 @@ body {
   justify-self: end;
   margin-right: clamp(8px, 2vw, 22px);
   margin-left: 6px;
-  width: min(210px, 28vw, 100%);
+  width: min(calc(210px * var(--pc-scale)), 32vw, 100%);
 }
 
 .river-island--text-on-right .river-island__land {
@@ -1883,7 +1896,7 @@ body {
   justify-self: start;
   margin-left: clamp(8px, 2vw, 22px);
   margin-right: 6px;
-  width: min(210px, 28vw, 100%);
+  width: min(calc(210px * var(--pc-scale)), 32vw, 100%);
 }
 
 .river-island__land {
@@ -2168,7 +2181,7 @@ body {
   padding: 0 4px;
   font-family: Impact, "Arial Narrow", "Arial Black", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-weight: 800;
-  font-size: clamp(1.35rem, 4.2vw, 1.85rem);
+  font-size: clamp(1.35rem, 4.2vw, calc(1.85rem * var(--pc-scale)));
   line-height: 1.12;
   letter-spacing: 0.02em;
   color: #ff4500;
@@ -2204,7 +2217,7 @@ body {
   background: transparent;
   color: #000;
   font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 1.02rem;
+  font-size: clamp(0.95rem, 0.92rem + 0.35vw, calc(1.02rem * var(--pc-scale) + 0.12rem));
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: 0.02em;
@@ -2887,4 +2900,61 @@ body {
   background-color: var(--changmen-gate-blue);
   z-index: 10;
   pointer-events: none;
+}
+
+/* =========================================================
+ * Appmain：PC / 大屏断点（与 :root --pc-scale 联动）
+ * --------------------------------------------------------- */
+
+@media (min-width: 1280px) {
+  :root {
+    --pc-scale: 1.05;
+  }
+
+  /* 大屏主卡/stack 容器上限，避免单靠 --pc-scale 仍显过大 */
+  .hero {
+    --primary-card-max-width: min(calc(350px * var(--pc-scale)), 360px);
+    --hero-card-max-width: min(calc(460px * var(--pc-scale)), 400px);
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --pc-scale: 1.18;
+  }
+
+  .hero {
+    --hero-pad-x: 56px;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --pc-scale: 1.32;
+  }
+
+  .hero {
+    --hero-pad-x: 80px;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    --pc-scale: 1.5;
+    --pc-content-max: 2200px;
+  }
+
+  /* 河流舞台仍铺满视口：riverScene 以 window.innerWidth 计量，收窄 stage 会破坏船/河道对齐 */
+  .hero,
+  .cm-mask-transition {
+    max-width: var(--pc-content-max);
+    margin-inline: auto;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-height: 740px) and (min-width: 1280px) {
+  :root {
+    --pc-scale: 0.92;
+  }
 }

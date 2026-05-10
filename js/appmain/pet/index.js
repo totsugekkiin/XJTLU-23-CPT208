@@ -1,4 +1,9 @@
-import { createPetApp } from "./petApp.js";
+import {
+  createPetApp,
+  PET_DEFAULT_SCALE,
+  PET_DEFAULT_SCALE_LARGE_PC,
+  PET_LARGE_PC_MIN_WIDTH_PX,
+} from "./petApp.js";
 import { createPetRig } from "./petRig.js";
 import { getRigBounds, RIG_METRICS } from "./petGraphics.js";
 import { createSpring, createVelocitySampler } from "./petMotion.js";
@@ -103,7 +108,7 @@ function applyPartSprite({
  * @param {number=}      params.homingScrollProgress  hero 滚动进度阈值（0~1），达到则飞向目标。
  * @param {number=}      params.homingScrollRelease   滞回下限，进度低于此则收回目标态。
  * @param {boolean}      params.prefersReducedMotion
- * @param {number=}      params.scale          占位符整体缩放，默认 2。
+ * @param {number=}      params.scale          占位符整体缩放；不传时约 `PET_DEFAULT_SCALE`，视口≥1920px 时约 `PET_DEFAULT_SCALE_LARGE_PC`（见 petApp.js）。
  * @param {string=}      params.headTextureUrl 头部 PNG 路径，默认 images/pet/head.png
  * @param {{x:number,y:number}=} params.headNeckPivot 头 PNG 内的脖子关节点像素坐标
  * @param {number=}      params.headScaleMul   头贴图额外倍率（适配整画布导出空白），默认 3.2
@@ -133,7 +138,7 @@ export async function createDesktopPet({
   /** 离场后无 scroll 事件达到该毫秒数则回场（Lenis 下间隔较大，默认与 petConfig 一致） */
   scrollHideReturnMs = 2800,
   prefersReducedMotion = false,
-  scale = 2,
+  scale: inputScale,
   onHeadClick = null,
   // 拖拽松手后是否自动归位到 anchor/target；false 表示“拖到哪就停哪”
   autoReturnOnRelease = false,
@@ -183,6 +188,13 @@ export async function createDesktopPet({
     console.warn("[desktop-pet] 缺少 host 或 hitzone 节点。");
     return null;
   }
+
+  const scale =
+    inputScale == null
+      ? typeof window !== "undefined" && window.innerWidth >= PET_LARGE_PC_MIN_WIDTH_PX
+        ? PET_DEFAULT_SCALE_LARGE_PC
+        : PET_DEFAULT_SCALE
+      : inputScale;
 
   const getAnchorPoint = () => {
     if (!anchorEl) {

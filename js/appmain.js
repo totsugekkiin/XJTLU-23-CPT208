@@ -600,7 +600,6 @@ export function bootstrapAppMain() {
         heroEl: context.hero,
         ...petConfig,
         prefersReducedMotion,
-        scale: 2,
         onHeadClick() {
           comic?.onHeadClick?.();
         },

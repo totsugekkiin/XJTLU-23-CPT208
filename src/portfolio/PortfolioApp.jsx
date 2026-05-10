@@ -118,21 +118,27 @@ export default function PortfolioApp() {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <a
-                  href="#"
+                  href="https://changgate.vercel.app/"
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-3 px-4 py-3 rounded bg-white text-[#1a1a1a] felt-shadow felt-stitch text-xs font-bold hover:bg-[#2d4a3e] hover:text-white transition-colors"
                 >
                   <Globe size={18} className="shrink-0" />
                   <span className="text-left leading-snug">High-fi / Hosted Website</span>
                 </a>
                 <a
-                  href="#"
+                  href="https://github.com/totsugekkiin/XJTLU-23-CPT208"
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-3 px-4 py-3 rounded bg-white text-[#1a1a1a] felt-shadow felt-stitch text-xs font-bold hover:bg-[#2d4a3e] hover:text-white transition-colors"
                 >
                   <GitFork size={18} className="shrink-0" />
                   <span className="text-left leading-snug">GitHub / Source Code</span>
                 </a>
                 <a
-                  href="#"
+                  href="https://www.figma.com/site/4gy7f2MvbMXyQow0V27y6R/Chang_Gate_A1-6?node-id=0-1&p=f"
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-3 px-4 py-3 rounded bg-white text-[#1a1a1a] felt-shadow felt-stitch text-xs font-bold hover:bg-[#2d4a3e] hover:text-white transition-colors"
                 >
                   <PenTool size={18} className="shrink-0" />
@@ -318,10 +324,10 @@ export default function PortfolioApp() {
                     <BookOpen size={14} className="text-[#d15a24]" /> 4 Papers
                   </h4>
                   <ol className="text-[11px] leading-snug space-y-2 font-mono list-decimal list-outside pl-4">
-                    <li>王心言. 历史文化遗产的媒介记忆重构与数字传播创新研究——以河南殷商文化遗产为例[J]. 商丘师范学院学报, 2025, 41(8): 102–108.</li>
-                    <li>徐海军. 历史文化遗产的当代叙事：保护、传承与创新——基于中国文化报宣传报道实践的思考[J]. 中国记者, 2025(7): 37–40.</li>
-                    <li>苏州古城墙系列工程[J]. 风景园林, 2022(S1): 147–149.</li>
-                    <li>张胜美. 城市触媒理论引导下阊门历史文化街区保护与更新[J]. 山西建筑, 2024(2): 79–81.</li>
+                    <li>Wang Xinyan. Research on media memory reconstruction and digital communication innovation of historical and cultural heritage: A case study of Henan Yin-Shang cultural heritage[J]. Journal of Shangqiu Normal University, 2025, 41(8): 102–108.</li>
+                    <li>Xu Haijun. Contemporary narratives of historical and cultural heritage: Protection, inheritance, and innovation: Reflections based on publicity and reporting practices in China Culture Daily[J]. Chinese Journalist, 2025(7): 37–40.</li>
+                    <li>Suzhou Ancient City Wall Series Projects[J]. Landscape Architecture, 2022(S1): 147–149.</li>
+                    <li>Zhang Shengmei. Conservation and renewal of Changmen Historical and Cultural Block guided by urban catalyst theory[J]. Shanxi Architecture, 2024(2): 79–81.</li>
                   </ol>
                 </div>
                 <div>
@@ -330,25 +336,25 @@ export default function PortfolioApp() {
                   </h4>
                   <ol className="text-[11px] leading-snug space-y-2 font-mono list-decimal list-outside pl-4">
                     <li>
-                      苏州博物馆网页{" "}
+                      Suzhou Museum Website{" "}
                       <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://www.szmuseum.com/" target="_blank" rel="noreferrer">
                         szmuseum.com
                       </a>
                     </li>
                     <li>
-                      苏州园林·拙政园{" "}
+                      Suzhou Gardens · Humble Administrator&apos;s Garden{" "}
                       <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://web.lotsmall.cn/index?m_id=1939" target="_blank" rel="noreferrer">
                         web.lotsmall.cn
                       </a>
                     </li>
                     <li>
-                      运河十景·枫桥夜泊{" "}
+                      Ten Views of the Grand Canal · Night Mooring at Maple Bridge{" "}
                       <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://yhsj.jssvc.edu.cn/fengqiaoyebo/fengqiaoyebojianjie/" target="_blank" rel="noreferrer">
                         yhsj.jssvc.edu.cn
                       </a>
                     </li>
                     <li>
-                      山塘街介绍{" "}
+                      Shantang Street Introduction{" "}
                       <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://www.gerenjianli.com/area/suzhou/014rcplc.htm" target="_blank" rel="noreferrer">
                         gerenjianli.com
                       </a>{" "}
@@ -697,7 +703,7 @@ export default function PortfolioApp() {
               </div>
 
               <a
-                href="https://www.figma.com/site/4gy7f2MvbMXyQow0V27y6R/white?node-id=0-1&t=lVyeH2e06NkvCmu3-1"
+                href="https://www.figma.com/site/4gy7f2MvbMXyQow0V27y6R/Chang_Gate_A1-6?node-id=0-1&p=f"
                 target="_blank"
                 rel="noreferrer"
                 className="mt-2 block w-full py-2 bg-[#1a1a1a] text-white text-center rounded felt-shadow text-xs font-bold tracking-widest hover:bg-[#d15a24] transition-colors"
@@ -1127,7 +1133,7 @@ export default function PortfolioApp() {
               </p>
 
               <a
-                href="https://xjtlu-23-cpt-208.vercel.app/"
+                href="https://changgate.vercel.app/"
                 target="_blank"
                 rel="noreferrer"
                 className="block w-full py-3 px-4 bg-white text-[#1a1a1a] text-center rounded felt-shadow felt-stitch text-sm font-black uppercase tracking-wider hover:bg-[#1a1a1a] hover:text-white transition-colors"
@@ -1135,26 +1141,8 @@ export default function PortfolioApp() {
                 Open Live Site →
               </a>
               <p className="mt-2 text-[10px] font-mono opacity-80 text-center break-all">
-                xjtlu-23-cpt-208.vercel.app
+                changgate.vercel.app
               </p>
-
-              <div className="mt-5 pt-4 border-t border-dashed border-white/30 grid grid-cols-2 gap-3 text-[10px]">
-                <div>
-                  <p className="font-mono font-bold uppercase opacity-80 mb-1">Source</p>
-                  <a
-                    href="https://github.com/totsugekkiin/XJTLU-23-CPT208"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-bold underline break-all"
-                  >
-                    github.com/totsugekkiin/XJTLU-23-CPT208
-                  </a>
-                </div>
-                <div>
-                  <p className="font-mono font-bold uppercase opacity-80 mb-1">Best viewed</p>
-                  <p className="font-bold leading-snug">Desktop Chrome / Edge · 1280px+</p>
-                </div>
-              </div>
             </FeltCard>
 
             <FeltCard className="md:col-span-7" rotate={0.5}>
@@ -1410,15 +1398,211 @@ export default function PortfolioApp() {
               </div>
             </FeltCard>
 
+            <FeltCard color="cream" rotate={-0.3} className="relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#2d4a3e] opacity-5 -mr-16 -mt-16 rounded-full" />
+              <h3 className="text-xl font-bold mb-4">AI Tools &amp; Skill Usage</h3>
+              <p className="text-sm leading-relaxed text-gray-600">
+                In this project, I used Cursor and Gemini as my main development tools, especially for UI/UX design
+                and frontend interaction details. I also introduced Cursor Skill to help check whether the page had a
+                clear visual hierarchy, whether the interaction hints were obvious enough, and whether the experience
+                across different modules felt coherent. However, the suggestions from Skill were not copied directly.
+                Instead, they were used as references during the design and implementation process, and I made the
+                final decisions based on the project theme, user testing feedback, and the actual rendered result of
+                the website.
+              </p>
+            </FeltCard>
+
+            <FeltCard color="orange" rotate={0.4} className="relative overflow-hidden">
+              <div className="absolute -top-10 -right-8 h-28 w-28 rounded-full bg-[#2563eb] opacity-15" />
+              <div className="absolute -bottom-12 -left-10 h-32 w-32 rounded-full bg-[#2d4a3e] opacity-15" />
+              <div className="relative z-10">
+                <p className="text-[10px] font-mono font-black uppercase tracking-[0.24em] text-white/80 mb-2">
+                  Example Prompt
+                </p>
+                <h3 className="text-2xl md:text-3xl font-black uppercase leading-none mb-3 text-white">
+                  Example Prompt
+                </h3>
+                <p className="text-xs leading-relaxed text-white/90 mb-4 max-w-2xl">
+                  This is one of the detailed prompts used to guide AI-assisted UI/UX exploration. The original prompt
+                  was written in Chinese and translated into English for this portfolio.
+                </p>
+                <div className="max-h-72 overflow-y-auto rounded-3xl bg-white/95 p-4 felt-stitch text-[#1a1a1a]">
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+{`[Role Setting]
+You are now a senior frontend engineer and motion designer who specializes in modern UI/UX design and advanced frontend animation interactions, especially GSAP.
+
+[Task Goal]
+Please help me refactor the current webpage code and completely transform its visual style and interaction experience into "Playful Geometric Scrollytelling." Please strictly follow the visual and technical specifications below.
+
+[Visual Guidelines]
+
+Flat Vector Aesthetic: Completely remove any code properties that create a three-dimensional or textured feeling. All graphics and color blocks must use solid color fills.
+
+High-Contrast Playful Palette: Use bright, high-saturation, high-contrast color combinations.
+
+Keep the colors of existing components unchanged.
+
+Accent and graphic colors: pure red, ultramarine blue, grass green, and bright orange.
+
+Organic & Rounded Geometry: Avoid sharp right angles in decorative elements, card containers, buttons, and other page components. Use many rectangles with large border-radius values, pure circles, or SVG shapes with irregular smooth curves that feel like clouds or gummies.
+
+Chunky Typography: Use very bold and visually impactful sans-serif typefaces for headings, similar to Futura, Montserrat, or extremely heavy display fonts. Treat large text as part of the composition itself, and even allow text to be partially cropped at the screen edges.
+
+Organic Image Masking: If the code contains real-life photos (<img>), do not display them in traditional rectangles. Use CSS clip-path or SVG masks to crop images into organic shapes such as arches or rounded irregular polygons.
+
+[Animation & Interaction Guidelines]
+
+Use GSAP with the ScrollTrigger plugin and native CSS animations to implement the following core motion mechanisms:
+
+Multi-layer Parallax: Apply different scroll speeds to background SVG geometric shapes and foreground elements using yPercent or y with ScrollTrigger scrub, creating a sense of depth along the Z axis.
+
+Sticky Card Stacking: Modify the content display area so that when users scroll down, the current card is pinned in the center of the screen using ScrollTrigger's pin: true property, while subsequent cards slide in from below and cover the previous card one by one, creating a card-dealing stacking effect.
+
+Wipe Transitions: During major section changes, use a huge absolutely positioned solid-color SVG geometric shape that slides up from the bottom of the screen as a natural scene transition mask.
+
+Looping Micro-animations: Add CSS @keyframes animations to small decorative elements on the page, such as stars, dots, and flowers, to create continuous gentle floating, slow rotation, or pulsing scale effects, so the page still feels alive even when the user is not scrolling.`}
+                  </pre>
+                </div>
+              </div>
+            </FeltCard>
+
             <FeltCard color="cream" rotate={0.2} className="relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-[#d15a24] opacity-5 -mr-16 -mt-16 rounded-full" />
               <h3 className="text-xl font-bold mb-4">Final Reflection</h3>
-              <p className="text-sm leading-relaxed text-gray-600">
-                This project highlighted the delicate balance between historical accuracy and user agency.
-                By using Generative AI for content synthesis, we saved time but had to implement a strict
-                human-in-the-loop verification process. Ethically, we prioritized giving voice to
-                marginalized canal boat communities who rarely appear in traditional archives.
+              <div className="space-y-5 text-sm leading-relaxed text-gray-600">
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#2d4a3e] mb-2">
+                    Ethical Reflection
+                  </p>
+                  <p>
+                    In this project, we tried to transform the cultural history of Chang Gate from a static display
+                    into a more immersive and participatory digital experience. Through timeline storytelling, the
+                    river scene, route recommendations, and the &quot;Lin Daiyu&quot; AI guide, the design helps younger
+                    visitors understand local history more actively and shows that cultural heritage communication
+                    does not have to rely only on written explanation. However, this approach also brings social and
+                    ethical responsibilities: historical content must avoid excessive entertainment or misleading
+                    interpretation, and AI-generated responses cannot be treated directly as authoritative historical
+                    sources. Therefore, we used Generative AI mainly as a content-support and interaction tool, while
+                    controlling accuracy and privacy risks through human review, source comparison, and a server-side
+                    proxy. Overall, the project taught us that technology can make cultural experiences more engaging,
+                    but designers still need to remain responsible for historical authenticity, user understanding,
+                    and data security.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#d15a24] mb-2">
+                    AI-Assisted Technical Reflection
+                  </p>
+                  <p>
+                    After spending a lot of time &quot;vibecoding,&quot; I realized that relying purely on AI-assisted
+                    workflows for frontend development still creates significant struggles. Tools such as Gemini and
+                    Cursor helped me start the project very quickly and build a structurally decent static interface,
+                    but they also gave me false expectations about what AI could actually handle. When my requirements
+                    became more specific, especially for complex micro-interactions and continuous transitions such as
+                    the city-wall transition before the historical timeline, the AI was often trapped by the rigid
+                    framework it had created earlier. Instead of performing a proper global refactor, it tended to add
+                    patches on top of existing code, which made animations stiff or sometimes broke the intended effect.
+                  </p>
+                  <p className="mt-3">
+                    Another major limitation is that AI can read the code but cannot truly see the rendered visual
+                    result. It may consider a task complete because the syntax is correct, while the real page still
+                    contains visual problems such as overflowing text, incorrect z-index layering, or broken responsive
+                    breakpoints. Since my frontend foundation is still developing, building complex interactive pages
+                    such as map-based experiences and dynamic guide systems forced me to write very dense prompts to
+                    control component lifecycles, animation timing, and CSS behavior precisely.
+                  </p>
+                  <p className="mt-3">
+                    I also found that AI does not naturally plan long-term architecture as my ideas evolve. To implement
+                    features quickly, it sometimes passes data through the wrong layers or hardcodes logic, which makes
+                    later changes fragile. A small fix for an overlapping component could unexpectedly damage the global
+                    flex layout. Ultimately, AI is excellent at compressing the first 0 to 80% of setup time and creating
+                    the feeling that &quot;development is easy.&quot; However, to finish the final 20% of highly stylized
+                    customization and fine-tuning, I learned that I still need a solid technical foundation. Otherwise,
+                    I may spend several times longer repairing the architectural and logical gaps created by AI than I
+                    would have spent writing the code manually from the beginning.
+                  </p>
+                </div>
+              </div>
+            </FeltCard>
+          </div>
+        </section>
+
+        <section id="references" className="pb-24">
+          <div className="max-w-4xl mx-auto">
+            <FeltCard color="cream" rotate={-0.2} className="relative overflow-hidden">
+              <div className="absolute -top-12 -right-10 h-32 w-32 rounded-full bg-[#d15a24] opacity-10" />
+              <h2 className="text-2xl font-black uppercase mb-4">References</h2>
+              <p className="text-xs leading-relaxed text-gray-600 mb-5">
+                The following AI tools and models were used as development, writing, and interaction references during
+                the project. Their outputs were reviewed and adapted by the team rather than copied directly.
               </p>
+              <h3 className="text-sm font-black uppercase mb-3 text-[#d15a24]">AI Tools &amp; Models</h3>
+              <ul className="space-y-3 text-xs leading-relaxed text-gray-700">
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Google. (2026). <i>Gemini 3 Pro</i>. Used for frontend implementation suggestions and UI/UX
+                  exploration.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Anysphere. (2026). <i>Cursor IDE</i>. Used as the main AI-assisted development environment for code
+                  editing, debugging, and project navigation.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  OpenAI. (2026). <i>GPT-5.5</i>. Used for technical reflection drafting, English translation, and
+                  portfolio content refinement.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Anthropic. (2026). <i>Claude Opus 4.7</i>. Used for alternative reasoning, code review suggestions,
+                  and frontend interaction planning.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Zhipu AI. (2026). <i>GLM-4-Flash</i>. Used as the large language model behind the in-app &quot;Lin
+                  Daiyu&quot; AI guide interaction.
+                </li>
+              </ul>
+              <h3 className="text-sm font-black uppercase mt-6 mb-3 text-[#2d4a3e]">Papers &amp; Websites</h3>
+              <ol className="space-y-3 text-xs leading-relaxed text-gray-700 list-decimal list-outside pl-4">
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  王心言. 历史文化遗产的媒介记忆重构与数字传播创新研究——以河南殷商文化遗产为例[J]. 商丘师范学院学报, 2025, 41(8): 102–108.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  徐海军. 历史文化遗产的当代叙事：保护、传承与创新——基于中国文化报宣传报道实践的思考[J]. 中国记者, 2025(7): 37–40.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  苏州古城墙系列工程[J]. 风景园林, 2022(S1): 147–149.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  张胜美. 城市触媒理论引导下阊门历史文化街区保护与更新[J]. 山西建筑, 2024(2): 79–81.
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Suzhou Museum Website. Retrieved from{" "}
+                  <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://www.szmuseum.com/" target="_blank" rel="noreferrer">
+                    https://www.szmuseum.com/
+                  </a>
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Suzhou Gardens · Humble Administrator&apos;s Garden. Retrieved from{" "}
+                  <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://web.lotsmall.cn/index?m_id=1939" target="_blank" rel="noreferrer">
+                    https://web.lotsmall.cn/index?m_id=1939
+                  </a>
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Ten Views of the Grand Canal · Night Mooring at Maple Bridge. Retrieved from{" "}
+                  <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://yhsj.jssvc.edu.cn/fengqiaoyebo/fengqiaoyebojianjie/" target="_blank" rel="noreferrer">
+                    https://yhsj.jssvc.edu.cn/fengqiaoyebo/fengqiaoyebojianjie/
+                  </a>
+                </li>
+                <li className="p-3 bg-white/70 rounded felt-stitch">
+                  Shantang Street Introduction. Retrieved from{" "}
+                  <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://www.gerenjianli.com/area/suzhou/014rcplc.htm" target="_blank" rel="noreferrer">
+                    https://www.gerenjianli.com/area/suzhou/014rcplc.htm
+                  </a>{" "}
+                  and{" "}
+                  <a className="break-all underline decoration-dotted hover:text-[#d15a24]" href="https://www.sds-vr.com/show/358" target="_blank" rel="noreferrer">
+                    https://www.sds-vr.com/show/358
+                  </a>
+                </li>
+              </ol>
             </FeltCard>
           </div>
         </section>
