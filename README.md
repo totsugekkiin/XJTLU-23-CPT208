@@ -26,7 +26,3 @@ npm run preview      # preview production build
 ## Tech stack
 
 React 18, Vite 5, Tailwind CSS v4; GSAP / Framer Motion / Motion, Lenis; PixiJS; AMap JS loader; Lucide icons. Some pages also use plain CSS under `css/` and scripts under `js/`.
-
-## AI use (if required)
-
-If your brief needs **Vibe Coding** disclosure, add an `ai-logs/` folder at the repo root with the main prompts used for core features.
