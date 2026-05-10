@@ -110,6 +110,14 @@ export default function PortfolioApp() {
                   </div>
                 ))}
               </div>
+              <a
+                href="index.html#team"
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded bg-[#1a1a1a] text-white text-xs font-black uppercase tracking-wider felt-shadow felt-stitch hover:bg-[#d15a24] transition-colors"
+              >
+                <Users size={14} />
+                <span>Meet the Team</span>
+                <ArrowRight size={14} />
+              </a>
             </FeltCard>
 
             <FeltCard color="orange" rotate={-1} className="sm:col-span-2">
@@ -145,7 +153,9 @@ export default function PortfolioApp() {
                   <span className="text-left leading-snug">Figma Low-fi Prototype</span>
                 </a>
                 <a
-                  href="#"
+                  href="https://www.bilibili.com/video/BV13B5763Ewf/"
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex items-center gap-3 px-4 py-3 rounded bg-white text-[#1a1a1a] felt-shadow felt-stitch text-xs font-bold hover:bg-[#2d4a3e] hover:text-white transition-colors"
                 >
                   <Video size={18} className="shrink-0" />
@@ -371,14 +381,191 @@ export default function PortfolioApp() {
             <FeltCard color="cream" rotate={-2}>
               <Users className="mb-2 text-[#d15a24]" />
               <h3 className="text-lg font-bold mb-2">Stakeholders</h3>
-              <div className="space-y-4">
-                <div className="p-3 bg-white/50 rounded felt-stitch">
-                  <p className="text-xs font-bold font-mono">PRIMARY: Student Lu</p>
-                  <p className="text-[10px]">Wants bite-sized facts for research projects.</p>
+              <p className="text-[11px] font-mono uppercase tracking-widest text-gray-500 mb-4">
+                Three target user personas for Chang Gate
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-3 bg-white/60 rounded felt-stitch flex flex-col gap-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-black">Zhang Yue</p>
+                      <p className="text-[10px] text-gray-600">Young College Student Tourist</p>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold text-[#d15a24] whitespace-nowrap">80%</span>
+                  </div>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-[#2d4a3e]">
+                    Type: Social &amp; Leisure
+                  </p>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Background</p>
+                    <p className="text-[10px] leading-snug text-gray-700">
+                      22-year-old college student visiting Chang Gate for the first time with friends. Part of the
+                      largest visitor group, prefers a relaxed outing. Limited attention span for long texts; wants an
+                      effortless, photo-friendly tour.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Goals</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Quickly grasp core history</li>
+                      <li>Find popular photo spots</li>
+                      <li>Complete the tour without getting lost</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Needs</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Short story-based explanations</li>
+                      <li>Recommended photo spots</li>
+                      <li>Simple route navigation</li>
+                      <li>Lightweight interactive experience</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Frustrations</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Boring text-based introductions</li>
+                      <li>Over-commercialized atmosphere</li>
+                      <li>Superficial visits with no real gains</li>
+                    </ul>
+                  </div>
+
+                  <div className="border-t border-dashed border-gray-300 pt-2">
+                    <p className="text-[10px] font-bold uppercase">Demography</p>
+                    <p className="text-[10px] text-gray-700">Female · 22 · Single · Student (Suzhou area)</p>
+                  </div>
+
+                  <p className="text-[10px] italic text-gray-700 leading-snug border-l-2 border-[#d15a24] pl-2">
+                    &ldquo;I just want to grasp core history quickly, find good photo spots, and complete the tour
+                    easily with friends — so I can share online without boring text.&rdquo;
+                  </p>
                 </div>
-                <div className="p-3 bg-white/50 rounded felt-stitch">
-                  <p className="text-xs font-bold font-mono">SECONDARY: Tourist Ken</p>
-                  <p className="text-[10px]">Needs location-based storytelling on the go.</p>
+
+                <div className="p-3 bg-white/60 rounded felt-stitch flex flex-col gap-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-black">Li Jianguo</p>
+                      <p className="text-[10px] text-gray-600">Middle-aged &amp; Elderly Tourist</p>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold text-[#d15a24] whitespace-nowrap">10%</span>
+                  </div>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-[#2d4a3e]">
+                    Type: Traditional &amp; Deep
+                  </p>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Background</p>
+                    <p className="text-[10px] leading-snug text-gray-700">
+                      58-year-old retiree traveling with his family. Prefers a slow, leisurely tour and wants to
+                      understand the complete history through storytelling. Faces challenges with small text,
+                      complex digital devices, and confusing routes.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Goals</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Enjoy a relaxed and safe tour</li>
+                      <li>Understand the complete history</li>
+                      <li>Find rest areas easily</li>
+                      <li>Experience the old style of Suzhou</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Needs</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Large-font / audio explanations</li>
+                      <li>Simple user interface</li>
+                      <li>Rest area reminders</li>
+                      <li>Gentle and slow tour routes</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Frustrations</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Small text is hard to read</li>
+                      <li>Complicated explanations</li>
+                      <li>No rest areas</li>
+                      <li>Confusing routes cause fatigue</li>
+                    </ul>
+                  </div>
+
+                  <div className="border-t border-dashed border-gray-300 pt-2">
+                    <p className="text-[10px] font-bold uppercase">Demography</p>
+                    <p className="text-[10px] text-gray-700">Male · 58 · Married · Retired (from other cities)</p>
+                  </div>
+
+                  <p className="text-[10px] italic text-gray-700 leading-snug border-l-2 border-[#d15a24] pl-2">
+                    &ldquo;Complex tech is too much for me. I just want a slow, safe tour to understand the complete
+                    history and find rest areas to experience Suzhou&apos;s old style.&rdquo;
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white/60 rounded felt-stitch flex flex-col gap-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-black">Wang Lin</p>
+                      <p className="text-[10px] text-gray-600">History Enthusiast</p>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold text-[#d15a24] whitespace-nowrap">10%</span>
+                  </div>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-[#2d4a3e]">
+                    Type: Intellectual &amp; Niche
+                  </p>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Background</p>
+                    <p className="text-[10px] leading-snug text-gray-700">
+                      30-year-old professional and history enthusiast who creates cultural tourism content. Looks for
+                      deep knowledge on specific aspects of Chang Gate (canal transport, folk customs) and pursues
+                      niche content, historical details, and visual restorations for her blogging.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Goals</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>In-depth knowledge of canal transport, ancient walls, folk customs</li>
+                      <li>Find niche photo spots</li>
+                      <li>Collect historical materials</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Needs</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>In-depth historical explanations</li>
+                      <li>Visual restoration of the barbican</li>
+                      <li>Niche cultural routes</li>
+                      <li>Historical documents / old photos</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold uppercase">Frustrations</p>
+                    <ul className="text-[10px] leading-snug list-disc list-outside pl-3 text-gray-700">
+                      <li>Shallow explanations</li>
+                      <li>No historical restoration displays</li>
+                      <li>Lack of professional materials and niche routes</li>
+                    </ul>
+                  </div>
+
+                  <div className="border-t border-dashed border-gray-300 pt-2">
+                    <p className="text-[10px] font-bold uppercase">Demography</p>
+                    <p className="text-[10px] text-gray-700">Female · 30 · Married · Cultural Tourism Blogger (Suzhou)</p>
+                  </div>
+
+                  <p className="text-[10px] italic text-gray-700 leading-snug border-l-2 border-[#d15a24] pl-2">
+                    &ldquo;Shallow content isn&apos;t for me. Show me the detailed history of canal transport and
+                    ancient structures with visual restorations to help me create professional content.&rdquo;
+                  </p>
                 </div>
               </div>
             </FeltCard>

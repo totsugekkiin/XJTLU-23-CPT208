@@ -466,11 +466,8 @@ export function AppMainPage() {
           <div className="river-island" data-island-index="0">
             <div className="river-island__shore">
               <div className="river-island__land">
-                <h3 className="river-island__title">阊门介绍</h3>
-                <p className="river-island__desc">阊门古称「破楚门」，地处古城西北，历来是商贾云集、舟楫辐辏的闹市口，也是《红楼梦》里「一二等富贵风流之地」的原型意象之一。</p>
-              </div>
-              <div className="river-island__frame">
-                <img className="river-island__img" src="https://picsum.photos/seed/cmbw26a/600/600" alt="阊门介绍配图" />
+                <h3 className="river-island__title">白居易凿河十里：阊门与运河的相连</h3>
+                <p className="river-island__desc">大运河的主干道原本并不直接穿过阊门，是历代水利工程将阊门与运河主线死死绑定。最著名的史料记载来自唐代——《新唐书·白居易传》提及「自阊门至虎丘，凿河十里，夹岸修路」。唐宝历元年（825年），白居易任苏州刺史，不仅疏浚了城外航道，更开凿了连接阊门与大运河水网的山塘河，相当于大运河通往苏州古城区的「高速路匝道」。自此，运河上的客船、货船得以长驱直入，直抵阊门城下。</p>
               </div>
             </div>
           </div>
@@ -481,7 +478,7 @@ export function AppMainPage() {
                 <p className="river-island__desc">明清以来，阊门内外街市绵连、河街并行，米行、布庄、会馆林立，水路与陆路在此交汇，塑造了苏州「人家尽枕河」的市井肌理。</p>
               </div>
               <div className="river-island__frame">
-                <img className="river-island__img" src="https://picsum.photos/seed/cmbw26b/600/600" alt="阊门介绍配图" />
+                <img className="river-island__img" src="images/river-changmen-old-street.png" alt="清末民初阊门外街景：商铺林立、人力车与行人穿行" />
               </div>
             </div>
           </div>
@@ -492,7 +489,7 @@ export function AppMainPage() {
                 <p className="river-island__desc">今日阊门片区仍承古城格局：山塘起点、北码头与环古城河在此衔接，步行其间可感受水巷、石桥与老字号交织的江南日常。</p>
               </div>
               <div className="river-island__frame">
-                <img className="river-island__img" src="https://picsum.photos/seed/cmbw26c/600/600" alt="阊门介绍配图" />
+                <img className="river-island__img" src="images/river-changmen-aerial.png" alt="今日阊门片区航拍：山塘起点、北码头与环古城河水网交织的城市肌理" />
               </div>
             </div>
           </div>

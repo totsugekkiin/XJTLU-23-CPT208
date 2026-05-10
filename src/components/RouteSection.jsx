@@ -667,7 +667,6 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           background: var(--felt-green);
           color: white;
           writing-mode: vertical-rl;
-          transform: rotate(180deg);
           padding: 8px 4px;
           font-weight: bold;
           font-size: 14px;

@@ -77,7 +77,7 @@
 
 #home-nav a.app-go::after { display: none; }
 
-/* 手机：TEAM / PERSONA 略小于桌面但仍易读；用 flex+gap 拉开纵向间距 */
+/* 手机：TEAM 略小于桌面但仍易读；用 flex+gap 拉开纵向间距 */
 @media (max-width: 640px) {
   #home-nav {
     display: flex;

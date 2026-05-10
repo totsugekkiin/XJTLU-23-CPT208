@@ -5,28 +5,18 @@ export function HomePage() {
     let cancelled = false;
 
     (async () => {
-      // 复用现有场景脚本：它们会把 init 挂到 window 上
       await import("../../js/team.js");
-      await import("../../js/persona.js");
       if (cancelled) return;
 
       const homeScreen = document.getElementById("home-screen");
-      const navItems = document.querySelectorAll(".nav-item");
 
       const btnTeam = document.getElementById("btn-team");
-      const btnPersona = document.getElementById("btn-persona");
       const btnBackTeam = document.getElementById("btn-back-team");
-      const btnBackPersona = document.getElementById("btn-back-persona");
 
       const teamScreen = document.getElementById("team-screen");
       const tearTop = document.getElementById("tear-top");
       const tearBottom = document.getElementById("tear-bottom");
       const typewriters = document.querySelectorAll(".typewriter");
-
-      const personaScreen = document.getElementById("persona-screen");
-      const waterLayer = document.getElementById("water-layer");
-      const dotPattern = document.querySelector(".p3-dot-pattern");
-      const slantedBgWrapper = document.querySelector(".slanted-bg-wrapper");
 
       window.TeamScene?.init?.({
         btnTeam,
@@ -38,23 +28,14 @@ export function HomePage() {
         typewriters,
       });
 
-      window.PersonaScene?.init?.({
-        btnPersona,
-        btnBackPersona,
-        homeScreen,
-        personaScreen,
-        tearTop,
-        tearBottom,
-        navItems,
-        waterLayer,
-        dotPattern,
-        slantedBgWrapper,
-      });
+      if (window.location.hash === "#team") {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        setTimeout(() => btnTeam?.click(), 50);
+      }
     })();
 
     return () => {
       cancelled = true;
-      // 主页是 MPA，不会在页内卸载；这里先不做 teardown
     };
   }, []);
 
@@ -76,11 +57,6 @@ export function HomePage() {
             </a>
           </li>
           <li>
-            <a href="#" id="btn-persona" className="nav-item">
-              [PERSONA!]
-            </a>
-          </li>
-          <li>
             <a href="portfolio.html" className="nav-item">
               [PORTFOLIO]
             </a>
@@ -88,13 +64,8 @@ export function HomePage() {
         </ul>
       </nav>
 
-      <div className="water-transition" id="water-layer" />
-
       <button className="btn-return" id="btn-back-team">
         ◄ RETURN
-      </button>
-      <button className="btn-return" id="btn-back-persona">
-        ◄ BACK
       </button>
 
       <main className="screen" id="team-screen">
@@ -165,40 +136,11 @@ export function HomePage() {
             </div>
           </div>
         </div>
-      </main>
 
-      <main className="screen" id="persona-screen">
-        <div className="p3-dot-pattern" />
-        <div className="slanted-bg-wrapper">
-          <div className="slanted-white-wave" />
-        </div>
-
-        <div className="persona-container">
-          <div className="pendant-wrapper" style={{ opacity: 1 }}>
-            <div className="photo-frame-hard" />
-          </div>
-
-          <div className="info-card-solid" style={{ opacity: 1 }}>
-            <div className="info-content">
-              <div className="arcana-tag"> XXX / 00</div>
-              <h1 className="persona-name">XXXXXX</h1>
-
-              <div className="tag-group">
-                <span>X</span>
-                <span>X</span>
-                <span>X: ELECTRIC</span>
-              </div>
-
-              <div className="quote-box">
-                "ASDASDSADAD124S"
-                <br />
-                "ASDAXXXSDASD."
-              </div>
-            </div>
-          </div>
-        </div>
+        <a href="portfolio.html" className="btn-team-portfolio">
+          [ VIEW PROCESS PORTFOLIO &rarr; ]
+        </a>
       </main>
     </>
   );
 }
-
