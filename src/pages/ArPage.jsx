@@ -37,10 +37,16 @@ export function ArPage() {
         </div>
 
         <div id="ar-panel" className="is-hidden">
-          <div id="ar-panel-body" />
-          <button id="ar-copy-params" type="button">
-            复制参数
+          <button id="ar-panel-toggle" type="button" aria-expanded="true" aria-label="收起调参面板">
+            ◀
           </button>
+          <div id="ar-panel-inner">
+            <div className="ar-panel__header">调参面板</div>
+            <div id="ar-panel-body" />
+            <button id="ar-copy-params" type="button">
+              复制参数
+            </button>
+          </div>
         </div>
 
         <p id="ar-hint" className="is-hidden">

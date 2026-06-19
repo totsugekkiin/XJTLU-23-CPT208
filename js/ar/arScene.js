@@ -31,6 +31,7 @@ export function bootstrapArScene(rootEl) {
   const startBtn = rootEl.querySelector("#ar-start-btn");
   const errorMsg = rootEl.querySelector("#ar-error-msg");
   const panel = rootEl.querySelector("#ar-panel");
+  const panelToggle = rootEl.querySelector("#ar-panel-toggle");
   const panelBody = rootEl.querySelector("#ar-panel-body");
   const copyBtn = rootEl.querySelector("#ar-copy-params");
   const hint = rootEl.querySelector("#ar-hint");
@@ -350,6 +351,14 @@ export function bootstrapArScene(rootEl) {
   }
 
   buildPanel();
+
+  panelToggle.addEventListener("click", () => {
+    const collapsed = panel.classList.toggle("is-collapsed");
+    rootEl.classList.toggle("is-panel-collapsed", collapsed);
+    panelToggle.setAttribute("aria-expanded", String(!collapsed));
+    panelToggle.setAttribute("aria-label", collapsed ? "展开调参面板" : "收起调参面板");
+    panelToggle.textContent = collapsed ? "▶" : "◀";
+  });
 
   copyBtn.addEventListener("click", async () => {
     const text = getParamsSnapshot();
