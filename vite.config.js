@@ -12,6 +12,7 @@ export default defineConfig({
         appMain: resolve(__dirname, "appMain.html"),
         map: resolve(__dirname, "map.html"),
         portfolio: resolve(__dirname, "portfolio.html"),
+        ar: resolve(__dirname, "ar.html"),
       },
     },
   },

@@ -57,6 +57,11 @@ export function HomePage() {
             </a>
           </li>
           <li>
+            <a href="ar.html" className="nav-item">
+              [AR]
+            </a>
+          </li>
+          <li>
             <a href="portfolio.html" className="nav-item">
               [PORTFOLIO]
             </a>
