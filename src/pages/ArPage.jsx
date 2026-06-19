@@ -37,52 +37,14 @@ export function ArPage() {
         </div>
 
         <div id="ar-panel" className="is-hidden">
-          <div className="ar-panel__row">
-            <label className="ar-panel__label" htmlFor="ar-slider-y">
-              高度(Y)
-            </label>
-            <input
-              id="ar-slider-y"
-              className="ar-panel__slider"
-              type="range"
-              defaultValue={-12}
-            />
-            <span id="ar-value-y" className="ar-panel__value">
-              当前高度: -12.0m
-            </span>
-          </div>
-          <div className="ar-panel__row">
-            <label className="ar-panel__label" htmlFor="ar-slider-z">
-              距离(Z)
-            </label>
-            <input
-              id="ar-slider-z"
-              className="ar-panel__slider"
-              type="range"
-              defaultValue={-20}
-            />
-            <span id="ar-value-z" className="ar-panel__value">
-              当前距离: -20.0m
-            </span>
-          </div>
-          <div className="ar-panel__row">
-            <label className="ar-panel__label" htmlFor="ar-slider-scale">
-              比例(Scale)
-            </label>
-            <input
-              id="ar-slider-scale"
-              className="ar-panel__slider"
-              type="range"
-              defaultValue={1}
-            />
-            <span id="ar-value-scale" className="ar-panel__value">
-              当前比例: 1.0×
-            </span>
-          </div>
+          <div id="ar-panel-body" />
+          <button id="ar-copy-params" type="button">
+            复制参数
+          </button>
         </div>
 
         <p id="ar-hint" className="is-hidden">
-          测试说明：请向下俯视，使用上方滑块将古代建筑与真实地面对齐，并记录最优参数。
+          测试说明：请向下俯视，使用左侧面板将古代建筑与真实地面对齐，记录参数后点「复制参数」。
         </p>
       </div>
 
