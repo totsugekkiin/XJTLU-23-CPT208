@@ -24,10 +24,7 @@ body {
   height: 100%;
 }
 
-#loc-ar-scene.is-hidden {
-  visibility: hidden;
-  pointer-events: none;
-}
+/* 场景始终渲染，由启动遮罩盖住；勿用 visibility:hidden，否则 AR.js 无法初始化 */
 
 #loc-ar-ui {
   position: absolute;

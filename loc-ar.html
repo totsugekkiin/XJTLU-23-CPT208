@@ -6,12 +6,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>走廊 · Location AR 精度测试</title>
     <link rel="stylesheet" href="css/loc-ar.css">
+    <!-- A-Frame + AR.js：用 script 加载，避免 Vite 打包 UMD 失败 -->
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/three.js/build/ar-threex-location-only.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/aframe/build/aframe-ar.js"></script>
 </head>
 <body>
 <div id="loc-ar-app">
     <a-scene
         id="loc-ar-scene"
-        class="is-hidden"
         vr-mode-ui="enabled: false"
         embedded
         renderer="alpha: true; antialias: true"
