@@ -6,10 +6,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>走廊 · Location AR 精度测试</title>
     <link rel="stylesheet" href="css/loc-ar.css">
-    <!-- A-Frame + AR.js：用 script 加载，避免 Vite 打包 UMD 失败 -->
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/three.js/build/ar-threex-location-only.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/aframe/build/aframe-ar.js"></script>
+    <!-- 本地 vendor，避免 CDN 在国内/VPN 环境下加载失败 -->
+    <script src="vendor/aframe.min.js"></script>
+    <script src="vendor/ar-threex-location-only.js"></script>
+    <script src="vendor/aframe-ar.js"></script>
 </head>
 <body>
 <div id="loc-ar-app">
@@ -27,6 +27,7 @@
         <div id="loc-ar-start-overlay">
             <h1>走廊 · Location AR 测试</h1>
             <p>在 100 米走廊内走动，观察 4 个观测点立方体的空间稳定性。建议在室外或半室外环境使用，并允许摄像头与定位权限。</p>
+            <p id="loc-ar-boot-status" class="loc-boot-status">正在加载 AR 组件…</p>
             <button id="loc-ar-start-btn" type="button">开始测试</button>
             <p id="loc-ar-error-msg"></p>
         </div>

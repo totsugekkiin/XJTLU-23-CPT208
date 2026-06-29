@@ -19,14 +19,24 @@ loadCalibration();
 function showBootError(message) {
   const errorMsg = document.getElementById("loc-ar-error-msg");
   const startBtn = document.getElementById("loc-ar-start-btn");
+  const bootStatus = document.getElementById("loc-ar-boot-status");
   if (errorMsg) errorMsg.textContent = message;
+  if (bootStatus) bootStatus.textContent = "加载失败";
   if (startBtn) {
     startBtn.disabled = false;
     startBtn.textContent = "重试";
   }
 }
 
-function waitForAframe(timeoutMs = 15000) {
+function setBootReady() {
+  const bootStatus = document.getElementById("loc-ar-boot-status");
+  if (bootStatus) {
+    bootStatus.textContent = "AR 组件已就绪，点击开始";
+    bootStatus.classList.add("is-ready");
+  }
+}
+
+function waitForAframe(timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
     if (window.AFRAME?.registerComponent) {
       resolve();
@@ -41,13 +51,13 @@ function waitForAframe(timeoutMs = 15000) {
       }
       if (Date.now() - start > timeoutMs) {
         clearInterval(timer);
-        reject(new Error("A-Frame / AR.js 加载失败，请检查网络后刷新页面。"));
+        reject(new Error("AR 库加载失败，请刷新页面重试。"));
       }
     }, 50);
   });
 }
 
-function waitForSceneLoaded(sceneEl, timeoutMs = 20000) {
+function waitForSceneLoaded(sceneEl, timeoutMs = 25000) {
   if (sceneEl.hasLoaded) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -96,6 +106,7 @@ export function bootstrapLocAr(rootEl) {
   let anchorEntities = [];
   let lastGpsPos = null;
   let started = false;
+  let starting = false;
 
   function showError(message) {
     errorMsg.textContent = message;
@@ -115,6 +126,7 @@ export function bootstrapLocAr(rootEl) {
   }
 
   function renderStatus() {
+    if (!statusLat || !statusLng || !anchorList) return;
     statusLat.textContent = formatCoord(gpsState.lat);
     statusLng.textContent = formatCoord(gpsState.lng);
     statusAcc.textContent =
@@ -142,6 +154,7 @@ export function bootstrapLocAr(rootEl) {
   }
 
   function renderMetrics() {
+    if (!metricJitter || !metricJump || !metricDrift) return;
     const m = tracker.getMetrics();
     metricJitter.textContent =
       m.anchorScreenJitter != null ? `${m.anchorScreenJitter.toFixed(1)} px` : "—";
@@ -223,21 +236,25 @@ export function bootstrapLocAr(rootEl) {
     tracker.resetSession();
     lastGpsPos = null;
 
-    recalibrateBtn.textContent = "已校准";
-    setTimeout(() => {
-      recalibrateBtn.textContent = "重新定位";
-    }, 1500);
+    if (recalibrateBtn) {
+      recalibrateBtn.textContent = "已校准";
+      setTimeout(() => {
+        recalibrateBtn.textContent = "重新定位";
+      }, 1500);
+    }
   }
 
   async function startExperience() {
+    if (starting || started) return;
+    starting = true;
     errorMsg.textContent = "";
     startBtn.disabled = true;
     startBtn.textContent = "初始化中…";
 
     try {
       await waitForAframe();
+      setBootReady();
 
-      // 先隐藏遮罩、显示场景（保留用户点击手势链，供 AR.js 申请摄像头）
       overlay.classList.add("is-hidden");
       rootEl.classList.add("is-loc-ar-active");
 
@@ -261,18 +278,30 @@ export function bootstrapLocAr(rootEl) {
       anchorEntities = spawnAnchorEntities(sceneEl);
       unbindGpsCamera = bindGpsCamera() ?? null;
       sceneEl.addEventListener("tick", onSceneTick);
-
-      startBtn.disabled = false;
-      startBtn.textContent = "开始测试";
     } catch (err) {
       console.error("[loc-ar]", err);
       started = false;
       showError(err.message || "启动失败，请检查权限后重试。");
+    } finally {
+      starting = false;
+      if (!started) {
+        startBtn.disabled = false;
+        startBtn.textContent = "重试";
+      }
     }
   }
 
-  startBtn.addEventListener("click", startExperience);
-  recalibrateBtn.addEventListener("click", onRecalibrate);
+  function bindStartButton() {
+    const handler = (e) => {
+      e.preventDefault();
+      startExperience();
+    };
+    startBtn.addEventListener("click", handler);
+    startBtn.addEventListener("touchend", handler, { passive: false });
+  }
+
+  bindStartButton();
+  recalibrateBtn?.addEventListener("click", onRecalibrate);
   panelToggle?.addEventListener("click", () => {
     rootEl.classList.toggle("is-metrics-collapsed");
     const collapsed = rootEl.classList.contains("is-metrics-collapsed");
@@ -283,23 +312,22 @@ export function bootstrapLocAr(rootEl) {
   renderStatus();
   renderMetrics();
 
+  waitForAframe()
+    .then(() => setBootReady())
+    .catch((err) => showBootError(err.message));
+
   return () => {
     unsubGps();
     unbindGpsCamera?.();
     sceneEl?.removeEventListener("tick", onSceneTick);
     started = false;
+    starting = false;
   };
 }
 
-async function init() {
-  try {
-    await waitForAframe();
-    const root = document.getElementById("loc-ar-app");
-    if (root) bootstrapLocAr(root);
-  } catch (err) {
-    console.error("[loc-ar] boot failed", err);
-    showBootError(err.message || "初始化失败，请刷新页面。");
-  }
+function init() {
+  const root = document.getElementById("loc-ar-app");
+  if (root) bootstrapLocAr(root);
 }
 
 if (document.readyState === "loading") {
