@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>走廊 · Location AR 精度测试</title>
+    <link rel="stylesheet" href="css/loc-ar.css">
+</head>
+<body>
+<div id="loc-ar-app">
+    <a-scene
+        id="loc-ar-scene"
+        class="is-hidden"
+        vr-mode-ui="enabled: false"
+        embedded
+        renderer="alpha: true; antialias: true"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+    >
+        <a-camera gps-new-camera="gpsMinDistance: 0; positionMinAccuracy: 100"></a-camera>
+    </a-scene>
+
+    <div id="loc-ar-ui">
+        <div id="loc-ar-start-overlay">
+            <h1>走廊 · Location AR 测试</h1>
+            <p>在 100 米走廊内走动，观察 4 个观测点立方体的空间稳定性。建议在室外或半室外环境使用，并允许摄像头与定位权限。</p>
+            <button id="loc-ar-start-btn" type="button">开始测试</button>
+            <p id="loc-ar-error-msg"></p>
+        </div>
+
+        <header id="loc-status-bar" class="loc-panel">
+            <div class="loc-status__row">
+                <span class="loc-status__label">GPS</span>
+                <span id="loc-gps-lat">—</span>,
+                <span id="loc-gps-lng">—</span>
+            </div>
+            <div class="loc-status__row">
+                <span class="loc-status__label">精度</span>
+                <span id="loc-gps-acc">—</span>
+                <span class="loc-status__sep">·</span>
+                <span id="loc-gps-time">—</span>
+            </div>
+            <div class="loc-status__row loc-status__signal">
+                <span class="loc-status__label">信号</span>
+                <span id="loc-gps-signal" class="loc-signal" aria-hidden="true">
+                    <span class="loc-signal__bar"></span>
+                    <span class="loc-signal__bar"></span>
+                    <span class="loc-signal__bar"></span>
+                </span>
+                <span id="loc-gps-signal-label">—</span>
+            </div>
+        </header>
+
+        <aside id="loc-anchor-panel" class="loc-panel">
+            <div class="loc-panel__title">观测点</div>
+            <div id="loc-anchor-list"></div>
+        </aside>
+
+        <aside id="loc-metrics-panel" class="loc-panel">
+            <div class="loc-panel__header">
+                <span class="loc-panel__title">稳定性</span>
+                <button id="loc-metrics-toggle" type="button" aria-expanded="true">收起</button>
+            </div>
+            <div id="loc-metrics-body">
+                <div class="loc-metric-row">
+                    <span>屏幕抖动</span>
+                    <span id="loc-metric-jitter">—</span>
+                </div>
+                <div class="loc-metric-row">
+                    <span>GPS 跳变</span>
+                    <span id="loc-metric-jump">—</span>
+                </div>
+                <div class="loc-metric-row">
+                    <span>最大漂移</span>
+                    <span id="loc-metric-drift">—</span>
+                </div>
+            </div>
+        </aside>
+
+        <button id="loc-recalibrate-btn" type="button">重新定位</button>
+    </div>
+
+    <a id="loc-ar-back" href="index.html">← 返回</a>
+</div>
+<script type="module" src="/js/loc-ar/locArApp.js"></script>
+</body>
+</html>

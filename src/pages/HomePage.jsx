@@ -57,7 +57,7 @@ export function HomePage() {
             </a>
           </li>
           <li>
-            <a href="ar.html" className="nav-item">
+            <a href="loc-ar.html" className="nav-item">
               [AR]
             </a>
           </li>

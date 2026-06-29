@@ -1,0 +1,279 @@
+/* Location-based AR test page */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #f4f1ea;
+}
+
+#loc-ar-app {
+  position: fixed;
+  inset: 0;
+}
+
+#loc-ar-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#loc-ar-scene.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#loc-ar-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#loc-ar-ui > * {
+  pointer-events: auto;
+}
+
+#loc-ar-start-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 20;
+}
+
+#loc-ar-start-overlay.is-hidden {
+  display: none;
+}
+
+#loc-ar-start-overlay h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+#loc-ar-start-overlay p {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: rgba(244, 241, 234, 0.75);
+}
+
+#loc-ar-start-btn,
+#loc-recalibrate-btn {
+  padding: 0.8rem 1.6rem;
+  border: 2px solid #f4f1ea;
+  border-radius: 999px;
+  background: transparent;
+  color: #f4f1ea;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+#loc-ar-start-btn:hover:not(:disabled),
+#loc-recalibrate-btn:hover {
+  background: #f4f1ea;
+  color: #111;
+}
+
+#loc-ar-start-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+#loc-ar-error-msg {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.85rem;
+  color: #ff6b6b;
+}
+
+.loc-panel {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(244, 241, 234, 0.15);
+  border-radius: 0.65rem;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+#loc-status-bar {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.loc-status__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.loc-status__label {
+  color: rgba(244, 241, 234, 0.55);
+  min-width: 2rem;
+}
+
+.loc-status__sep {
+  opacity: 0.4;
+}
+
+.loc-signal {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 0.85rem;
+  margin-right: 0.25rem;
+}
+
+.loc-signal__bar {
+  width: 4px;
+  background: rgba(244, 241, 234, 0.2);
+  border-radius: 1px;
+}
+
+.loc-signal__bar:nth-child(1) { height: 35%; }
+.loc-signal__bar:nth-child(2) { height: 65%; }
+.loc-signal__bar:nth-child(3) { height: 100%; }
+
+.loc-signal__bar.is-active {
+  background: #6fcf97;
+}
+
+#loc-anchor-panel {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 4.5rem;
+  width: min(16rem, 78vw);
+  max-height: 40vh;
+  overflow: auto;
+  padding: 0.65rem 0.75rem;
+}
+
+#loc-anchor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.loc-anchor-list__empty {
+  margin: 0;
+  opacity: 0.6;
+}
+
+.loc-anchor-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.45rem;
+  align-items: center;
+}
+
+.loc-anchor-row__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  grid-row: span 2;
+}
+
+.loc-anchor-row__name {
+  font-weight: 600;
+}
+
+.loc-anchor-row__meta {
+  grid-column: 2;
+  opacity: 0.65;
+  font-size: 0.72rem;
+}
+
+#loc-metrics-panel {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 4.5rem;
+  width: min(13rem, 70vw);
+  padding: 0.55rem 0.7rem;
+}
+
+.loc-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.loc-panel__title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+#loc-metrics-toggle {
+  border: none;
+  background: transparent;
+  color: rgba(244, 241, 234, 0.7);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.loc-metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.is-metrics-collapsed #loc-metrics-body {
+  display: none;
+}
+
+#loc-recalibrate-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 12;
+}
+
+#loc-ar-back {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 30;
+  color: #f4f1ea;
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 0.35rem;
+  pointer-events: auto;
+}
+
+.is-loc-ar-active #loc-ar-start-overlay {
+  display: none;
+}

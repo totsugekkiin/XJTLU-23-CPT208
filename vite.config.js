@@ -5,6 +5,9 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  optimizeDeps: {
+    exclude: ["aframe"],
+  },
   build: {
     rollupOptions: {
       input: {
@@ -13,6 +16,7 @@ export default defineConfig({
         map: resolve(__dirname, "map.html"),
         portfolio: resolve(__dirname, "portfolio.html"),
         ar: resolve(__dirname, "ar.html"),
+        locAr: resolve(__dirname, "loc-ar.html"),
       },
     },
   },
