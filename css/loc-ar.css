@@ -7,36 +7,91 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000;
+  background: #111;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #f4f1ea;
+}
+
+/* 启动门控：最高层级，与 AR 场景完全隔离 */
+.loc-ar-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: #111;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.loc-ar-gate.is-hidden {
+  display: none;
+}
+
+.loc-ar-gate__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  max-width: 22rem;
+  text-align: center;
+}
+
+.loc-ar-gate h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.loc-ar-gate p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: rgba(244, 241, 234, 0.75);
+}
+
+#loc-ar-gate #loc-ar-back {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2147483647;
+  color: #f4f1ea;
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 0.35rem;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 #loc-ar-app {
   position: fixed;
   inset: 0;
+  z-index: 1;
 }
 
-#loc-ar-scene {
+#loc-ar-scene-host {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
-  /* 未启动前禁止场景接收触摸，避免 canvas 挡住「开始测试」按钮 */
-  pointer-events: none;
 }
 
-.is-loc-ar-active #loc-ar-scene {
-  pointer-events: auto;
+#loc-ar-scene-host a-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
-
-/* 场景始终渲染，由启动遮罩盖住；勿用 visibility:hidden，否则 AR.js 无法初始化 */
 
 #loc-ar-ui {
   position: absolute;
   inset: 0;
-  z-index: 100;
+  z-index: 10;
   pointer-events: none;
 }
 
@@ -44,43 +99,9 @@ body {
   pointer-events: auto;
 }
 
-#loc-ar-start-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  padding: 2rem;
-  text-align: center;
-  background: rgba(0, 0, 0, 0.78);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 200;
-}
-
-#loc-ar-start-overlay.is-hidden {
-  display: none;
-}
-
-#loc-ar-start-overlay h1 {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-#loc-ar-start-overlay p {
-  margin: 0;
-  max-width: 22rem;
-  font-size: 0.85rem;
-  line-height: 1.6;
-  color: rgba(244, 241, 234, 0.75);
-}
-
 #loc-ar-start-btn,
-#loc-recalibrate-btn {
+#loc-place-btn,
+#loc-reset-btn {
   padding: 0.8rem 1.6rem;
   border: 2px solid #f4f1ea;
   border-radius: 999px;
@@ -92,19 +113,34 @@ body {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  position: relative;
-  z-index: 210;
+}
+
+#loc-place-btn {
+  min-width: 9rem;
+}
+
+#loc-reset-btn {
+  padding: 0.55rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-color: rgba(244, 241, 234, 0.45);
+  color: rgba(244, 241, 234, 0.85);
 }
 
 #loc-ar-start-btn:hover:not(:disabled),
-#loc-recalibrate-btn:hover {
+#loc-place-btn:hover:not(:disabled) {
   background: #f4f1ea;
   color: #111;
 }
 
-#loc-ar-start-btn:disabled {
+#loc-reset-btn:hover {
+  background: rgba(244, 241, 234, 0.15);
+}
+
+#loc-ar-start-btn:disabled,
+#loc-place-btn:disabled {
   opacity: 0.5;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 #loc-ar-error-msg {
@@ -124,6 +160,20 @@ body {
   color: #6fcf97;
 }
 
+.loc-place-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 4.25rem;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: 18rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #ffcc66;
+  pointer-events: none;
+}
+
 .loc-panel {
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(244, 241, 234, 0.15);
@@ -132,22 +182,27 @@ body {
   -webkit-backdrop-filter: blur(6px);
 }
 
-/* 启动前隐藏数据面板，减少误触与层级干扰 */
 #loc-status-bar,
-#loc-anchor-panel,
+#loc-placement-panel,
 #loc-metrics-panel,
-#loc-recalibrate-btn {
+#loc-action-bar,
+.loc-place-hint,
+.loc-ar-back-active {
   display: none;
 }
 
 .is-loc-ar-active #loc-status-bar,
-.is-loc-ar-active #loc-anchor-panel,
-.is-loc-ar-active #loc-metrics-panel,
-.is-loc-ar-active #loc-recalibrate-btn {
+.is-loc-ar-active #loc-placement-panel,
+.is-loc-ar-active #loc-metrics-panel {
   display: block;
 }
 
-.is-loc-ar-active #loc-metrics-panel {
+.is-loc-ar-active #loc-action-bar {
+  display: flex;
+}
+
+.is-loc-ar-active .loc-place-hint,
+.is-loc-ar-active .loc-ar-back-active {
   display: block;
 }
 
@@ -199,56 +254,57 @@ body {
   background: #6fcf97;
 }
 
-#loc-anchor-panel {
+#loc-placement-panel {
   position: absolute;
   left: 0.75rem;
-  bottom: 4.5rem;
-  width: min(16rem, 78vw);
-  max-height: 40vh;
+  bottom: 5.5rem;
+  width: min(17rem, 82vw);
+  max-height: 38vh;
   overflow: auto;
   padding: 0.65rem 0.75rem;
 }
 
-#loc-anchor-list {
+#loc-placement-list {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.5rem;
   font-size: 0.78rem;
 }
 
-.loc-anchor-list__empty {
+.loc-placement-list__empty {
   margin: 0;
   opacity: 0.6;
 }
 
-.loc-anchor-row {
+.loc-placement-row {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.2rem 0.45rem;
-  align-items: center;
+  align-items: start;
 }
 
-.loc-anchor-row__dot {
+.loc-placement-row__dot {
   width: 0.55rem;
   height: 0.55rem;
-  border-radius: 50%;
-  grid-row: span 2;
+  border-radius: 2px;
+  margin-top: 0.2rem;
 }
 
-.loc-anchor-row__name {
+.loc-placement-row__name {
   font-weight: 600;
 }
 
-.loc-anchor-row__meta {
+.loc-placement-row__meta {
   grid-column: 2;
   opacity: 0.65;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 #loc-metrics-panel {
   position: absolute;
   right: 0.75rem;
-  bottom: 4.5rem;
+  bottom: 5.5rem;
   width: min(13rem, 70vw);
   padding: 0.55rem 0.7rem;
 }
@@ -289,28 +345,25 @@ body {
   display: none;
 }
 
-#loc-recalibrate-btn {
+#loc-action-bar {
   position: absolute;
   left: 50%;
   bottom: 1rem;
   transform: translateX(-50%);
-  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-#loc-ar-back {
+.loc-ar-back-active {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  z-index: 250;
   color: #f4f1ea;
   text-decoration: none;
   font-size: 0.85rem;
   padding: 0.35rem 0.5rem;
   background: rgba(0, 0, 0, 0.45);
   border-radius: 0.35rem;
-  pointer-events: auto;
-}
-
-.is-loc-ar-active #loc-ar-start-overlay {
-  display: none;
 }

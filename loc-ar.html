@@ -6,32 +6,24 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>走廊 · Location AR 精度测试</title>
     <link rel="stylesheet" href="css/loc-ar.css">
-    <!-- 本地 vendor，避免 CDN 在国内/VPN 环境下加载失败 -->
-    <script src="vendor/aframe.min.js"></script>
-    <script src="vendor/ar-threex-location-only.js"></script>
-    <script src="vendor/aframe-ar.js"></script>
 </head>
 <body>
+<!-- 启动门控层：独立于 AR 场景，确保触摸不被 canvas/video 拦截 -->
+<div id="loc-ar-gate" class="loc-ar-gate">
+    <a id="loc-ar-back" href="index.html">← 返回</a>
+    <div class="loc-ar-gate__inner">
+        <h1>走廊 · Location AR 测试</h1>
+        <p>站在走廊起点点击「开始测试」，系统将在当前位置自动标记蓝色起点球体。沿走廊走动后，点击「放置」在当前 GPS 位置放置方块（最多 4 个）。</p>
+        <p id="loc-ar-boot-status" class="loc-boot-status">点击开始后加载 AR 组件</p>
+        <button id="loc-ar-start-btn" type="button">开始测试</button>
+        <p id="loc-ar-error-msg"></p>
+    </div>
+</div>
+
 <div id="loc-ar-app">
-    <a-scene
-        id="loc-ar-scene"
-        vr-mode-ui="enabled: false"
-        embedded
-        renderer="alpha: true; antialias: true"
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
-    >
-        <a-camera gps-new-camera="gpsMinDistance: 0; positionMinAccuracy: 100"></a-camera>
-    </a-scene>
+    <div id="loc-ar-scene-host"></div>
 
     <div id="loc-ar-ui">
-        <div id="loc-ar-start-overlay">
-            <h1>走廊 · Location AR 测试</h1>
-            <p>在 100 米走廊内走动，观察 4 个观测点立方体的空间稳定性。建议在室外或半室外环境使用，并允许摄像头与定位权限。</p>
-            <p id="loc-ar-boot-status" class="loc-boot-status">正在加载 AR 组件…</p>
-            <button id="loc-ar-start-btn" type="button">开始测试</button>
-            <p id="loc-ar-error-msg"></p>
-        </div>
-
         <header id="loc-status-bar" class="loc-panel">
             <div class="loc-status__row">
                 <span class="loc-status__label">GPS</span>
@@ -55,9 +47,9 @@
             </div>
         </header>
 
-        <aside id="loc-anchor-panel" class="loc-panel">
-            <div class="loc-panel__title">观测点</div>
-            <div id="loc-anchor-list"></div>
+        <aside id="loc-placement-panel" class="loc-panel">
+            <div class="loc-panel__title">标定点</div>
+            <div id="loc-placement-list"></div>
         </aside>
 
         <aside id="loc-metrics-panel" class="loc-panel">
@@ -81,11 +73,15 @@
             </div>
         </aside>
 
-        <button id="loc-recalibrate-btn" type="button">重新定位</button>
+        <div id="loc-action-bar">
+            <button id="loc-place-btn" type="button">放置 (0/4)</button>
+            <button id="loc-reset-btn" type="button">重置标定</button>
+        </div>
+        <p id="loc-place-hint" class="loc-place-hint"></p>
+        <a id="loc-ar-back-active" class="loc-ar-back-active" href="index.html">← 返回</a>
     </div>
-
-    <a id="loc-ar-back" href="index.html">← 返回</a>
 </div>
+
 <script type="module" src="/js/loc-ar/locArApp.js"></script>
 </body>
 </html>
