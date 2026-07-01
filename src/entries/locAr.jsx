@@ -4,6 +4,6 @@ import { ArPage } from "../pages/ArPage.jsx";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <ArPage mode="loc-ar" />
+    <ArPage />
   </React.StrictMode>,
 );

@@ -25,6 +25,9 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: scale(1);
+  transform-origin: center center;
+  transition: transform 0.16s ease-out;
   z-index: 1;
   background: #111;
 }
@@ -267,17 +270,56 @@ body {
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   margin: 0;
   padding: 0.55rem 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   font-size: 0.68rem;
   line-height: 1.45;
   color: rgba(244, 241, 234, 0.85);
   background: rgba(0, 0, 0, 0.45);
   border-radius: 6px;
-  pointer-events: none;
-  transition: left 0.28s ease;
+  pointer-events: auto;
+  transition: left 0.28s ease, right 0.28s ease, width 0.28s ease;
+}
+
+#ar-hint p {
+  flex: 1;
+  margin: 0;
+}
+
+#ar-hint-toggle {
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 1px solid rgba(246, 205, 69, 0.45);
+  border-radius: 999px;
+  background: rgba(246, 205, 69, 0.12);
+  color: #f6cd45;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#ar-hint.is-collapsed {
+  left: auto;
+  right: 0.75rem;
+  width: 2.1rem;
+  padding: 0.38rem;
+  justify-content: center;
+}
+
+#ar-hint.is-collapsed p {
+  display: none;
 }
 
 #ar-app.is-panel-collapsed #ar-hint {
   left: 0.75rem;
+}
+
+#ar-app.is-panel-collapsed #ar-hint.is-collapsed {
+  left: auto;
 }
 
 #ar-hint.is-hidden {

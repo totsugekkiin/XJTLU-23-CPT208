@@ -20,15 +20,16 @@ const SLIDER_CONFIG = [
   { key: "yawOff", label: "视角偏航", min: -180, max: 180, step: 1, default: 0, unit: "°", group: "view" },
   { key: "rollOff", label: "视角侧倾", min: -90, max: 90, step: 1, default: 0, unit: "°", group: "view" },
   { key: "emissive", label: "自发光", min: 0, max: 1, step: 0.05, default: 0.2, unit: "", group: "view" },
+  { key: "cameraZoom", label: "摄像头缩放", min: 1, max: 3, step: 0.05, default: 1, unit: "×", group: "camera" },
 ];
 
 const GROUP_LABELS = {
   model: "模型位置",
   view: "视角校正",
+  camera: "摄像头画面",
 };
 
 export function bootstrapArScene(rootEl) {
-  const isLocArMode = rootEl.dataset.arMode === "loc-ar";
   const video = rootEl.querySelector("#ar-camera");
   const canvas = rootEl.querySelector("#ar-canvas");
   const overlay = rootEl.querySelector("#ar-start-overlay");
@@ -39,6 +40,7 @@ export function bootstrapArScene(rootEl) {
   const panelBody = rootEl.querySelector("#ar-panel-body");
   const copyBtn = rootEl.querySelector("#ar-copy-params");
   const hint = rootEl.querySelector("#ar-hint");
+  const hintToggle = rootEl.querySelector("#ar-hint-toggle");
   const debugPanel = rootEl.querySelector("#ar-debug");
   const debugToggle = rootEl.querySelector("#ar-debug-toggle");
   const localizeNowBtn = rootEl.querySelector("#ar-localize-now");
@@ -206,9 +208,16 @@ export function bootstrapArScene(rootEl) {
     camera.updateProjectionMatrix();
   }
 
+  function applyCameraZoom() {
+    video.style.transform = `scale(${params.cameraZoom})`;
+    video.style.transformOrigin = "center center";
+    setDebug({ cameraZoom: `${params.cameraZoom.toFixed(2)}x` });
+  }
+
   function onParamChange(key) {
     if (key === "emissive") applyEmissive();
     else if (key === "fov") applyCameraFov();
+    else if (key === "cameraZoom") applyCameraZoom();
     else if (key === "pitchOff" || key === "yawOff" || key === "rollOff") updateCameraOrientation();
     else applyModelTransform();
     updateValueDisplay(key);
@@ -466,7 +475,12 @@ export function bootstrapArScene(rootEl) {
     const target = getCaptureCanvas();
     target.width = width;
     target.height = height;
-    captureCtx.drawImage(video, 0, 0, width, height);
+    const zoom = Math.max(1, params.cameraZoom);
+    const srcWidth = video.videoWidth / zoom;
+    const srcHeight = video.videoHeight / zoom;
+    const srcX = (video.videoWidth - srcWidth) / 2;
+    const srcY = (video.videoHeight - srcHeight) / 2;
+    captureCtx.drawImage(video, srcX, srcY, srcWidth, srcHeight, 0, 0, width, height);
     const imageBase64 = target.toDataURL("image/png");
     return { imageBase64, width, height };
   }
@@ -524,7 +538,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function localizeOnce(reason = "auto") {
-    if (!isLocArMode || localizing) return;
+    if (localizing) return;
 
     localizing = true;
     const startedAt = performance.now();
@@ -618,7 +632,6 @@ export function bootstrapArScene(rootEl) {
   }
 
   function startLocalizationLoop() {
-    if (!isLocArMode) return;
     localizeOnce("start");
     localizeTimer = window.setInterval(() => localizeOnce("interval"), LOCALIZE_INTERVAL_MS);
     setDebug({ immersal: "loop running" }, "Immersal 连续识别循环已启动");
@@ -654,6 +667,7 @@ export function bootstrapArScene(rootEl) {
       await requestCameraPermission();
       await requestOrientationPermission();
       await initThree();
+      applyCameraZoom();
 
       overlay.classList.add("is-hidden");
       panel.classList.remove("is-hidden");
@@ -686,6 +700,13 @@ export function bootstrapArScene(rootEl) {
     debugToggle.setAttribute("aria-expanded", String(!collapsed));
     debugToggle.setAttribute("aria-label", collapsed ? "展开 debug 面板" : "收起 debug 面板");
     debugToggle.textContent = collapsed ? "Debug +" : "Debug";
+  });
+
+  hintToggle?.addEventListener("click", () => {
+    const collapsed = hint.classList.toggle("is-collapsed");
+    hintToggle.setAttribute("aria-expanded", String(!collapsed));
+    hintToggle.setAttribute("aria-label", collapsed ? "展开提示信息" : "最小化提示信息");
+    hintToggle.textContent = collapsed ? "+" : "-";
   });
 
   copyBtn.addEventListener("click", async () => {
