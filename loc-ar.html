@@ -4,99 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>走廊 · Immersal VPS AR</title>
-    <link rel="stylesheet" href="css/loc-ar.css">
+    <title>阊门 · Immersal AR</title>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/ar.css">
 </head>
 <body>
-<!-- 启动门控层 -->
-<div id="loc-ar-gate" class="loc-ar-gate">
-    <a id="loc-ar-back" href="index.html">← 返回</a>
-    <div class="loc-ar-gate__inner">
-        <h1>走廊 · Immersal VPS AR</h1>
-        <p>使用 Three.js + WebXR + Immersal 视觉定位。站在已建图区域点击「开始体验」，系统加载 Map ID <strong>148542</strong> 并完成定位后，在定位点自动放置 AR 内容。</p>
-        <p id="loc-ar-boot-status" class="loc-boot-status">点击开始后加载 Immersal SDK</p>
-        <button id="loc-ar-start-btn" type="button">开始体验</button>
-        <p id="loc-ar-error-msg"></p>
-    </div>
-</div>
-
-<div id="loc-ar-app">
-    <div id="loc-ar-scene-host"></div>
-
-    <div id="loc-ar-ui">
-        <header id="loc-status-bar" class="loc-panel">
-            <div class="loc-status__row">
-                <span class="loc-status__label">Map</span>
-                <span id="loc-vps-map-id">148542</span>
-            </div>
-            <div class="loc-status__row">
-                <span class="loc-status__label">状态</span>
-                <span id="loc-vps-phase">—</span>
-                <span class="loc-status__sep">·</span>
-                <span id="loc-vps-time">—</span>
-            </div>
-            <div class="loc-status__row">
-                <span class="loc-status__label">位置</span>
-                <span id="loc-vps-position">—</span>
-            </div>
-            <div class="loc-status__row">
-                <span class="loc-status__label">次数</span>
-                <span id="loc-vps-attempts">0</span>
-            </div>
-            <div class="loc-status__row">
-                <span class="loc-status__label">诊断</span>
-                <span id="loc-vps-diag">—</span>
-            </div>
-                <span class="loc-status__label">定位</span>
-                <span id="loc-vps-signal" class="loc-signal" aria-hidden="true">
-                    <span class="loc-signal__bar"></span>
-                    <span class="loc-signal__bar"></span>
-                    <span class="loc-signal__bar"></span>
-                </span>
-                <span id="loc-vps-signal-label">—</span>
-                <span class="loc-status__sep">·</span>
-                <span class="loc-status__label">WebXR</span>
-                <span id="loc-vps-webxr">—</span>
-            </div>
-        </header>
-
-        <aside id="loc-placement-panel" class="loc-panel">
-            <div class="loc-panel__title">AR 内容</div>
-            <div id="loc-placement-list"></div>
-        </aside>
-
-        <aside id="loc-metrics-panel" class="loc-panel">
-            <div class="loc-panel__header">
-                <span class="loc-panel__title">稳定性</span>
-                <button id="loc-metrics-toggle" type="button" aria-expanded="true">收起</button>
-            </div>
-            <div id="loc-metrics-body">
-                <div class="loc-metric-row">
-                    <span>屏幕抖动</span>
-                    <span id="loc-metric-jitter">—</span>
-                </div>
-                <div class="loc-metric-row">
-                    <span>位姿跳变</span>
-                    <span id="loc-metric-jump">—</span>
-                </div>
-                <div class="loc-metric-row">
-                    <span>最大漂移</span>
-                    <span id="loc-metric-drift">—</span>
-                </div>
-            </div>
-        </aside>
-
-        <div id="loc-action-bar">
-            <button id="loc-localize-btn" type="button">触发定位</button>
-            <button id="loc-localize-server-btn" type="button">云端定位</button>
-            <button id="loc-place-btn" type="button">放置 (0/4)</button>
-            <button id="loc-reset-btn" type="button">重置锚点</button>
-        </div>
-        <p id="loc-place-hint" class="loc-place-hint"></p>
-        <a id="loc-ar-back-active" class="loc-ar-back-active" href="index.html">← 返回</a>
-    </div>
-</div>
-
-<script type="module" src="/js/loc-ar/locArApp.js"></script>
+<div id="root"></div>
+<script type="module" src="/src/entries/locAr.jsx"></script>
 </body>
 </html>

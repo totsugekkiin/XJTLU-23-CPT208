@@ -284,6 +284,140 @@ body {
   display: none;
 }
 
+/* Immersal debug panel */
+#ar-debug {
+  --ar-debug-width: min(18rem, 86vw);
+  position: absolute;
+  top: max(3.1rem, env(safe-area-inset-top));
+  right: 0.5rem;
+  width: var(--ar-debug-width);
+  max-height: calc(100vh - 6.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  overflow: hidden;
+  color: rgba(244, 241, 234, 0.9);
+  background: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(246, 205, 69, 0.3);
+  border-radius: 0.65rem;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.24s ease;
+}
+
+#ar-debug.is-hidden {
+  display: none;
+}
+
+#ar-debug.is-collapsed {
+  transform: translateX(calc(var(--ar-debug-width) - 4.5rem));
+}
+
+#ar-debug.is-collapsed .ar-debug__grid,
+#ar-debug.is-collapsed #ar-debug-pose,
+#ar-debug.is-collapsed .ar-debug__actions,
+#ar-debug.is-collapsed .ar-debug__log {
+  display: none;
+}
+
+.ar-debug__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #f6cd45;
+}
+
+#ar-debug-toggle,
+#ar-localize-now,
+#ar-copy-debug {
+  border: 1px solid rgba(246, 205, 69, 0.45);
+  border-radius: 999px;
+  background: rgba(246, 205, 69, 0.12);
+  color: #f6cd45;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#ar-debug-toggle {
+  padding: 0.25rem 0.5rem;
+}
+
+.ar-debug__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.ar-debug__item {
+  min-width: 0;
+  padding: 0.35rem;
+  background: rgba(255, 255, 255, 0.055);
+  border-radius: 0.35rem;
+}
+
+.ar-debug__item span,
+.ar-debug__item strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-debug__item span {
+  margin-bottom: 0.18rem;
+  font-size: 0.55rem;
+  color: rgba(244, 241, 234, 0.55);
+}
+
+.ar-debug__item strong {
+  font-size: 0.62rem;
+  color: rgba(244, 241, 234, 0.95);
+}
+
+#ar-debug-pose {
+  max-height: 7rem;
+  margin: 0;
+  padding: 0.45rem;
+  overflow: auto;
+  font-size: 0.56rem;
+  line-height: 1.35;
+  color: rgba(244, 241, 234, 0.78);
+  background: rgba(0, 0, 0, 0.42);
+  border-radius: 0.35rem;
+}
+
+.ar-debug__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+#ar-localize-now,
+#ar-copy-debug {
+  flex: 1;
+  padding: 0.35rem 0.45rem;
+}
+
+.ar-debug__log {
+  min-height: 0;
+  max-height: 8.5rem;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  overflow: auto;
+  font-size: 0.56rem;
+  line-height: 1.45;
+  color: rgba(244, 241, 234, 0.68);
+}
+
+.ar-debug__log li + li {
+  margin-top: 0.18rem;
+}
+
 /* Back link */
 #ar-back {
   position: absolute;
@@ -305,5 +439,15 @@ body {
   #ar-hint {
     left: 0.75rem;
     font-size: 0.62rem;
+  }
+
+  #ar-debug {
+    top: max(3rem, env(safe-area-inset-top));
+    right: 0.35rem;
+    max-height: 48vh;
+  }
+
+  .ar-debug__grid {
+    grid-template-columns: 1fr;
   }
 }
