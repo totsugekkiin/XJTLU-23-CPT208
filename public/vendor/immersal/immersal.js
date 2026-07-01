@@ -214,7 +214,7 @@ class Immersal extends EventTarget {
       }
 
       try {
-        this.#locWorker = new Worker("./js/locWorker.js", {type: "module"});
+        this.#locWorker = new Worker(new URL("./locWorker.js", import.meta.url), {type: "module"});
         this.#locWorker.addEventListener("message", (e) => {
           const {type} = e.data;
           if (type === "Init") {
@@ -429,8 +429,8 @@ class Immersal extends EventTarget {
     window.addEventListener("resize", this.handleResize);
     window.addEventListener("focus", this.handleFocus);
 
-    this.#angle = screen.orientation.angle || 0;
-    screen.orientation.addEventListener("change", this.handleScreenOrientationChange);
+    this.#angle = screen.orientation?.angle || 0;
+    screen.orientation?.addEventListener?.("change", this.handleScreenOrientationChange);
   }
 
   getPngData() {
@@ -550,6 +550,16 @@ class Immersal extends EventTarget {
         reject(e);
       }
     });
+  }
+
+  dispose() {
+    this.continuousLocalization = false;
+    window.removeEventListener("deviceorientation", this.handleOrientation);
+    window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("focus", this.handleFocus);
+    screen.orientation?.removeEventListener?.("change", this.handleScreenOrientationChange);
+    this.camera?.dispose();
+    this.camera = null;
   }
 
   getMapDataByHandle(handle) {

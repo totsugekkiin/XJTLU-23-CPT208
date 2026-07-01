@@ -1,9 +1,12 @@
 const IMMERSAL_MAP_ID = 148549;
 const LOCALIZE_INTERVAL_MS = 2600;
+const SDK_LOCALIZE_INTERVAL_MS = 800;
+const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
+const CLIENT_IMMERSAL_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
 
 function degToRad(deg) {
   return (deg * Math.PI) / 180;
@@ -79,6 +82,10 @@ export function bootstrapArScene(rootEl) {
   let mediaStream = null;
   let orientationHandler = null;
   let localizeTimer = null;
+  let sdkSession = null;
+  let sdkFrameId = null;
+  let sdkMapHandle = null;
+  let localizationMode = "rest";
   let localizing = false;
   let captureCanvas = null;
   let captureCtx = null;
@@ -86,6 +93,12 @@ export function bootstrapArScene(rootEl) {
   let deviceQuaternion = { x: 0, y: 0, z: 0, w: 1 };
   let hasGyro = false;
   let lastIntrinsics = { fx: 0, fy: 0, ox: 0, oy: 0 };
+  let sdkFailureCount = 0;
+  let sdkAttemptInFlight = false;
+  let sdkAttemptStartedAt = 0;
+  let sdkAttemptCounter = 0;
+  let sdkLastLocalizeAt = 0;
+  let sdkLastDebugAt = 0;
 
   const debugState = {
     status: "idle",
@@ -159,6 +172,7 @@ export function bootstrapArScene(rootEl) {
     return JSON.stringify(
       {
         ...debugState,
+        localizationMode,
         cameraZoom,
         hasGyro,
         lastIntrinsics,
@@ -450,10 +464,180 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
+  function getSdkPoseSnapshot(info, estimatedPose = null) {
+    const position = estimatedPose?.position
+      ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
+      : { ...info.position };
+    const rotationSource = estimatedPose?.rotation
+      ? {
+          x: estimatedPose.rotation[0],
+          y: estimatedPose.rotation[1],
+          z: estimatedPose.rotation[2],
+          w: estimatedPose.rotation[3],
+        }
+      : info.rotation;
+
+    return {
+      mode: "sdk",
+      mapHandle: info.handle,
+      position,
+      rotation: {
+        x: rotationSource.x,
+        y: rotationSource.y,
+        z: rotationSource.z,
+        w: rotationSource.w,
+      },
+      wgs84: info.wgs84 ? { ...info.wgs84 } : undefined,
+      estimated: Boolean(estimatedPose),
+    };
+  }
+
+  function markSdkAttemptComplete(now) {
+    if (!sdkAttemptInFlight || sdkSession?.localization.localizing) return;
+
+    sdkAttemptInFlight = false;
+    const nextCounter = sdkSession?.localization.counter ?? 0;
+    const elapsed = Math.round(now - sdkAttemptStartedAt);
+
+    if (nextCounter > sdkAttemptCounter) {
+      return;
+    }
+
+    sdkFailureCount += 1;
+    setDebug({
+      status: "sdk tracking",
+      immersal: "sdk no match",
+      success: nextCounter,
+      failure: sdkFailureCount,
+      latency: `${elapsed}ms`,
+      lastError: "SDK 本地定位未匹配",
+    });
+  }
+
+  function updateSdkDebug(now) {
+    if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
+    sdkLastDebugAt = now;
+
+    let estimatedPose = null;
+    if (sdkSession.localization.counter > 0 && typeof window.icvPoseGet === "function") {
+      try {
+        estimatedPose = sdkSession.getEstimatedPose(now);
+      } catch (err) {
+        console.warn("[Immersal] SDK estimated pose failed", err);
+      }
+    }
+
+    const info = sdkSession.localizeInfo;
+    const hasPose = sdkSession.localization.counter > 0 && info.handle >= 0;
+    setDebug({
+      status: hasPose ? "tracking (sdk)" : "sdk localizing",
+      immersal: sdkSession.localization.localizing ? "sdk requesting" : "sdk tracking",
+      success: sdkSession.localization.counter,
+      failure: sdkFailureCount,
+      latency: info.elapsedTime ? `${Math.round(info.elapsedTime)}ms` : "-",
+      lastError: hasPose ? "none" : "waiting for SDK match",
+      lastPose: hasPose ? getSdkPoseSnapshot(info, estimatedPose) : debugState.lastPose,
+    });
+  }
+
+  function startSdkFrameLoop() {
+    const tick = (now) => {
+      if (!sdkSession) return;
+
+      markSdkAttemptComplete(now);
+
+      if (!sdkSession.localization.localizing && now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS) {
+        sdkAttemptInFlight = true;
+        sdkAttemptStartedAt = now;
+        sdkAttemptCounter = sdkSession.localization.counter;
+        sdkLastLocalizeAt = now;
+        try {
+          sdkSession.localizeDevice(now);
+        } catch (err) {
+          sdkAttemptInFlight = false;
+          sdkFailureCount += 1;
+          setDebug(
+            {
+              status: "sdk localize exception",
+              immersal: "sdk error",
+              failure: sdkFailureCount,
+              lastError: err?.message || String(err),
+            },
+            "SDK 本地定位异常",
+            err?.message || String(err),
+          );
+        }
+      }
+
+      updateSdkDebug(now);
+      sdkFrameId = requestAnimationFrame(tick);
+    };
+
+    sdkFrameId = requestAnimationFrame(tick);
+  }
+
+  async function startImmersalSdkLocalization() {
+    if (!CLIENT_IMMERSAL_TOKEN) {
+      throw new Error("前端未配置 VITE_IMMERSAL_TOKEN，跳过 SDK 连续定位。");
+    }
+
+    setDebug({ status: "sdk initializing", immersal: "loading sdk" }, "开始初始化 Immersal SDK");
+
+    let session = null;
+    try {
+      const sdkUrl = "/vendor/immersal/immersal.js";
+      const { Immersal } = await import(/* @vite-ignore */ sdkUrl);
+      const cameraWrap = rootEl.querySelector("#ar-camera-wrap") ?? rootEl;
+      session = await Immersal.Initialize(cameraWrap, {
+        developerToken: CLIENT_IMMERSAL_TOKEN,
+        mapIds: [IMMERSAL_MAP_ID],
+        continuousLocalization: true,
+        continuousInterval: SDK_LOCALIZE_INTERVAL_MS,
+        solverType: hasGyro ? 1 : 0,
+        imageDownScale: 0.25,
+      });
+
+      sdkSession = session;
+      localizationMode = "sdk";
+      rootEl.classList.add("is-sdk-camera");
+
+      setDebug(
+        {
+          status: "sdk map loading",
+          camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
+          immersal: "downloading map",
+        },
+        "Immersal SDK 摄像头已启动",
+        { width: session.camera.width, height: session.camera.height },
+      );
+
+      sdkMapHandle = await session.loadMap(IMMERSAL_MAP_ID);
+      setDebug(
+        {
+          status: "sdk ready",
+          immersal: `sdk map loaded (${sdkMapHandle})`,
+          lastError: "none",
+        },
+        "Immersal SDK Map 已加载，开始连续定位",
+        { mapId: IMMERSAL_MAP_ID, mapHandle: sdkMapHandle },
+      );
+
+      startSdkFrameLoop();
+    } catch (err) {
+      session?.dispose?.();
+      sdkSession = null;
+      sdkMapHandle = null;
+      localizationMode = "rest";
+      rootEl.classList.remove("is-sdk-camera");
+      throw err;
+    }
+  }
+
   function startLocalizationLoop() {
+    localizationMode = "rest";
     localizeOnce("start");
     localizeTimer = window.setInterval(() => localizeOnce("interval"), LOCALIZE_INTERVAL_MS);
-    setDebug({ immersal: "loop running" }, "Immersal 连续识别循环已启动");
+    setDebug({ immersal: "REST loop running" }, "Immersal REST 定时识别循环已启动");
   }
 
   async function checkImmersalConfig() {
@@ -485,7 +669,6 @@ export function bootstrapArScene(rootEl) {
     try {
       await checkImmersalConfig();
       await checkWebXrSupport();
-      await requestCameraPermission();
       await requestOrientationPermission();
       updateZoomUi();
 
@@ -495,8 +678,20 @@ export function bootstrapArScene(rootEl) {
       debugPanel?.classList.remove("is-hidden");
       rootEl.classList.add("is-ar-active");
 
-      startLocalizationLoop();
-      setDebug({ status: "running" }, "Immersal 测试已启动");
+      try {
+        await startImmersalSdkLocalization();
+        setDebug({ status: "running (sdk)" }, "Immersal SDK 连续定位已启动");
+      } catch (sdkErr) {
+        console.warn("[Immersal] SDK fallback to REST", sdkErr);
+        setDebug(
+          { status: "sdk fallback", immersal: "using REST fallback", lastError: sdkErr?.message || String(sdkErr) },
+          "SDK 初始化失败，回退 REST 定时定位",
+          sdkErr?.message || String(sdkErr),
+        );
+        await requestCameraPermission();
+        startLocalizationLoop();
+        setDebug({ status: "running (rest)" }, "Immersal REST 测试已启动");
+      }
     } catch (err) {
       console.error("[Immersal]", err);
       showError(err.message || "启动失败，请检查权限设置后重试。");
@@ -537,6 +732,11 @@ export function bootstrapArScene(rootEl) {
   });
 
   localizeNowBtn?.addEventListener("click", () => {
+    if (sdkSession) {
+      sdkLastLocalizeAt = 0;
+      setDebug({ status: "sdk manual localize" }, "手动触发 SDK 定位");
+      return;
+    }
     localizeOnce("manual");
   });
 
@@ -561,6 +761,14 @@ export function bootstrapArScene(rootEl) {
 
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);
+    if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
+    if (sdkMapHandle != null) {
+      sdkSession?.freeMap(sdkMapHandle).catch((err) => {
+        console.warn("[Immersal] freeMap failed", err);
+      });
+    }
+    sdkSession?.dispose?.();
+    rootEl.classList.remove("is-sdk-camera");
     if (orientationHandler) {
       window.removeEventListener("deviceorientation", orientationHandler, true);
     }
