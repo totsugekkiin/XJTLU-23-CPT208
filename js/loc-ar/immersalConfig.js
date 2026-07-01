@@ -1,5 +1,5 @@
 /** Immersal VPS configuration — token via VITE_IMMERSAL_TOKEN in .env.local */
-export const IMMERSAL_MAP_ID = 148539;
+export const IMMERSAL_MAP_ID = 148542;
 
 export const immersalParams = {
   developerToken: import.meta.env.VITE_IMMERSAL_TOKEN || "",

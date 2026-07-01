@@ -246,7 +246,7 @@ export function bootstrapLocAr(rootEl) {
       const elapsed = Date.now() - localizeStartTime;
       if (elapsed > 15000 && elapsed < 16000) {
         showPlaceHint(
-          "仍未定位成功：请确认你在 Map 148539 建图现场，并缓慢左右扫描墙面与走廊特征。",
+          "仍未定位成功：请确认你在 Map 148542 建图现场，并缓慢左右扫描墙面与走廊特征。",
         );
       }
       if (elapsed > 25000 && !serverLocalizeTried && runtime.immersal) {

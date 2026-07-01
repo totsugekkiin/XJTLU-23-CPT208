@@ -3,7 +3,7 @@
 /** @type {{ phase: TrackingPhase, mapId: number, localizeCount: number, lastLocalizedAt: number | null, error: string | null, webxrSupported: boolean, position: { x: number, y: number, z: number } | null }} */
 export const trackingState = {
   phase: "idle",
-  mapId: 148539,
+  mapId: 148542,
   localizeCount: 0,
   lastLocalizedAt: null,
   error: null,
