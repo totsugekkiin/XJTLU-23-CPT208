@@ -1,6 +1,6 @@
 const IMMERSAL_MAP_ID = 148549;
 const LOCALIZE_INTERVAL_MS = 2600;
-const SDK_LOCALIZE_INTERVAL_MS = 800;
+const SDK_LOCALIZE_INTERVAL_MS = 1500;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -94,9 +94,7 @@ export function bootstrapArScene(rootEl) {
   let hasGyro = false;
   let lastIntrinsics = { fx: 0, fy: 0, ox: 0, oy: 0 };
   let sdkFailureCount = 0;
-  let sdkAttemptInFlight = false;
-  let sdkAttemptStartedAt = 0;
-  let sdkAttemptCounter = 0;
+  let sdkLocalizePending = false;
   let sdkLastLocalizeAt = 0;
   let sdkLastDebugAt = 0;
 
@@ -492,28 +490,6 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
-  function markSdkAttemptComplete(now) {
-    if (!sdkAttemptInFlight || sdkSession?.localization.localizing) return;
-
-    sdkAttemptInFlight = false;
-    const nextCounter = sdkSession?.localization.counter ?? 0;
-    const elapsed = Math.round(now - sdkAttemptStartedAt);
-
-    if (nextCounter > sdkAttemptCounter) {
-      return;
-    }
-
-    sdkFailureCount += 1;
-    setDebug({
-      status: "sdk tracking",
-      immersal: "sdk no match",
-      success: nextCounter,
-      failure: sdkFailureCount,
-      latency: `${elapsed}ms`,
-      lastError: "SDK 本地定位未匹配",
-    });
-  }
-
   function updateSdkDebug(now) {
     if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
     sdkLastDebugAt = now;
@@ -535,38 +511,70 @@ export function bootstrapArScene(rootEl) {
       success: sdkSession.localization.counter,
       failure: sdkFailureCount,
       latency: info.elapsedTime ? `${Math.round(info.elapsedTime)}ms` : "-",
-      lastError: hasPose ? "none" : "waiting for SDK match",
+      lastError: hasPose ? "none" : "waiting for SDK server match",
       lastPose: hasPose ? getSdkPoseSnapshot(info, estimatedPose) : debugState.lastPose,
     });
+  }
+
+  async function runSdkServerLocalization(reason = "auto") {
+    if (!sdkSession || sdkLocalizePending || sdkSession.localization.localizing) return;
+
+    sdkLocalizePending = true;
+    const startedAt = performance.now();
+    const prevCounter = sdkSession.localization.counter;
+    setDebug({ status: `sdk localizing (${reason})`, immersal: "sdk server requesting" });
+
+    try {
+      const info = await sdkSession.localizeServerAsync();
+      const elapsed = Math.round(performance.now() - startedAt);
+      setDebug(
+        {
+          status: "tracking (sdk)",
+          immersal: "sdk server recognized",
+          success: sdkSession.localization.counter,
+          failure: sdkFailureCount,
+          latency: `${info.elapsedTime ? Math.round(info.elapsedTime) : elapsed}ms`,
+          lastError: "none",
+          lastPose: getSdkPoseSnapshot(info),
+        },
+        "SDK 服务端识别成功",
+        info,
+      );
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startedAt);
+      const recognizedSinceStart = sdkSession.localization.counter > prevCounter;
+      if (!recognizedSinceStart) {
+        sdkFailureCount += 1;
+      }
+      const message = typeof err === "string" ? err : err?.message || String(err);
+      setDebug(
+        {
+          status: recognizedSinceStart ? "tracking (sdk)" : "sdk not recognized",
+          immersal: recognizedSinceStart ? "sdk server recognized" : "sdk server no match",
+          success: sdkSession.localization.counter,
+          failure: sdkFailureCount,
+          latency: `${elapsed}ms`,
+          lastError: recognizedSinceStart ? "none" : message,
+        },
+        recognizedSinceStart ? "SDK 服务端识别成功" : "SDK 服务端暂未识别",
+        message,
+      );
+    } finally {
+      sdkLocalizePending = false;
+    }
   }
 
   function startSdkFrameLoop() {
     const tick = (now) => {
       if (!sdkSession) return;
 
-      markSdkAttemptComplete(now);
-
-      if (!sdkSession.localization.localizing && now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS) {
-        sdkAttemptInFlight = true;
-        sdkAttemptStartedAt = now;
-        sdkAttemptCounter = sdkSession.localization.counter;
+      if (
+        !sdkLocalizePending &&
+        !sdkSession.localization.localizing &&
+        now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS
+      ) {
         sdkLastLocalizeAt = now;
-        try {
-          sdkSession.localizeDevice(now);
-        } catch (err) {
-          sdkAttemptInFlight = false;
-          sdkFailureCount += 1;
-          setDebug(
-            {
-              status: "sdk localize exception",
-              immersal: "sdk error",
-              failure: sdkFailureCount,
-              lastError: err?.message || String(err),
-            },
-            "SDK 本地定位异常",
-            err?.message || String(err),
-          );
-        }
+        runSdkServerLocalization("interval");
       }
 
       updateSdkDebug(now);
@@ -574,6 +582,7 @@ export function bootstrapArScene(rootEl) {
     };
 
     sdkFrameId = requestAnimationFrame(tick);
+    runSdkServerLocalization("start");
   }
 
   async function startImmersalSdkLocalization() {
@@ -603,23 +612,13 @@ export function bootstrapArScene(rootEl) {
 
       setDebug(
         {
-          status: "sdk map loading",
-          camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
-          immersal: "downloading map",
-        },
-        "Immersal SDK 摄像头已启动",
-        { width: session.camera.width, height: session.camera.height },
-      );
-
-      sdkMapHandle = await session.loadMap(IMMERSAL_MAP_ID);
-      setDebug(
-        {
           status: "sdk ready",
-          immersal: `sdk map loaded (${sdkMapHandle})`,
+          camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
+          immersal: "sdk server tracking",
           lastError: "none",
         },
-        "Immersal SDK Map 已加载，开始连续定位",
-        { mapId: IMMERSAL_MAP_ID, mapHandle: sdkMapHandle },
+        "Immersal SDK 摄像头已启动，使用服务端连续定位",
+        { width: session.camera.width, height: session.camera.height },
       );
 
       startSdkFrameLoop();
@@ -733,8 +732,7 @@ export function bootstrapArScene(rootEl) {
 
   localizeNowBtn?.addEventListener("click", () => {
     if (sdkSession) {
-      sdkLastLocalizeAt = 0;
-      setDebug({ status: "sdk manual localize" }, "手动触发 SDK 定位");
+      runSdkServerLocalization("manual");
       return;
     }
     localizeOnce("manual");
