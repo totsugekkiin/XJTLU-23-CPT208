@@ -34,13 +34,19 @@ function waitForCameraFrames(camera, timeoutMs = 8000) {
  */
 export function getImmersalDiagnostics(immersal) {
   const camera = immersal?.camera;
+  const track = camera?.el?.srcObject?.getVideoTracks?.()[0];
+  const settings = track?.getSettings?.();
+  const trackSize =
+    settings?.width && settings?.height
+      ? ` · track ${settings.width}x${settings.height}`
+      : "";
   return {
     mapHandle: immersal?.localizeInfo?.handle ?? -1,
     localizeCount: immersal?.localization?.counter ?? 0,
     localizing: immersal?.localization?.localizing ?? false,
     cameraSize:
       camera?.width && camera?.height
-        ? `${camera.width}x${camera.height}`
+        ? `${camera.width}x${camera.height}${trackSize}`
         : "—",
     videoState: camera?.el?.readyState ?? 0,
   };
@@ -101,17 +107,21 @@ export async function createImmersalRuntime(container) {
 
   function resize() {
     if (!immersal.camera) return;
-    const w = immersal.camera.el.width;
-    const h = immersal.camera.el.height;
+    const video = immersal.camera.el;
+    const w = video.width;
+    const h = video.height;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    renderer.domElement.style.left = video.style.left || "0";
+    renderer.domElement.style.top = video.style.top || "0";
   }
 
   resize();
   container.appendChild(renderer.domElement);
   renderer.domElement.style.position = "absolute";
-  renderer.domElement.style.inset = "0";
+  renderer.domElement.style.left = "0";
+  renderer.domElement.style.top = "0";
   renderer.domElement.style.zIndex = "2";
   renderer.domElement.style.pointerEvents = "none";
 
@@ -193,6 +203,7 @@ export async function createImmersalRuntime(container) {
 
   async function destroy() {
     stopRenderLoop();
+    immersal.removeEventListener("resize", resize);
     renderer.domElement.remove();
     renderer.dispose();
     if (mapHandle >= 0) {

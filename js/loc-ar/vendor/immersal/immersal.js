@@ -282,6 +282,8 @@ class Immersal extends EventTarget {
   #initVideo() {
     console.log(`[IMMERSAL] Video resolution: [${this.camera.width}x${this.camera.height}]`);
     const size = this.#resizeVideo(this.camera.width, this.camera.height, this.container.clientWidth, this.container.clientHeight);
+    this.camera.el.style.left = size.x + "px";
+    this.camera.el.style.top = size.y + "px";
     this.camera.el.style.width = size.width + "px";
     this.camera.el.style.height = size.height + "px";
     this.camera.el.width = size.width;
@@ -343,17 +345,17 @@ class Immersal extends EventTarget {
     const rect = {};
 
     if (dstW / dstH > srcW / srcH) {
-      const scale = dstW / srcW;
-      rect.width = ~~(scale * srcW);
-      rect.height = ~~(scale * srcH);
-      rect.x = 0;
-      rect.y = ~~((dstH - rect.height) * 0.5);
-    } else {
       const scale = dstH / srcH;
       rect.width = ~~(scale * srcW);
       rect.height = ~~(scale * srcH);
       rect.x = ~~((dstW - rect.width) * 0.5);
       rect.y = 0;
+    } else {
+      const scale = dstW / srcW;
+      rect.width = ~~(scale * srcW);
+      rect.height = ~~(scale * srcH);
+      rect.x = 0;
+      rect.y = ~~((dstH - rect.height) * 0.5);
     }
     return rect;
   }
