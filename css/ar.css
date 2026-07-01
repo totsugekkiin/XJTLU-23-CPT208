@@ -259,6 +259,7 @@ body {
 /* Immersal debug panel */
 #ar-debug {
   --ar-debug-width: min(18rem, 86vw);
+  --ar-debug-tab: 2.25rem;
   position: absolute;
   top: max(3.1rem, env(safe-area-inset-top));
   right: 0.5rem;
@@ -266,16 +267,17 @@ body {
   max-height: calc(100vh - 6.5rem);
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.65rem;
-  overflow: hidden;
+  padding: max(0.5rem, env(safe-area-inset-top)) 0.5rem max(0.5rem, env(safe-area-inset-bottom));
+  overflow: visible;
   color: rgba(244, 241, 234, 0.9);
   background: rgba(0, 0, 0, 0.68);
   border: 1px solid rgba(246, 205, 69, 0.3);
   border-radius: 0.65rem;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  transform: translateX(0);
   transition: transform 0.24s ease;
+  z-index: 12;
 }
 
 #ar-debug.is-hidden {
@@ -283,28 +285,50 @@ body {
 }
 
 #ar-debug.is-collapsed {
-  transform: translateX(calc(var(--ar-debug-width) - 4.5rem));
+  transform: translateX(calc(var(--ar-debug-width) - var(--ar-debug-tab)));
 }
 
-#ar-debug.is-collapsed .ar-debug__grid,
-#ar-debug.is-collapsed #ar-debug-pose,
-#ar-debug.is-collapsed .ar-debug__actions,
-#ar-debug.is-collapsed .ar-debug__log {
+#ar-debug-toggle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  transform: translate(-100%, -50%);
+  width: var(--ar-debug-tab);
+  height: 3rem;
+  padding: 0;
+  border: 1px solid rgba(246, 205, 69, 0.45);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f6cd45;
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ar-debug__inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  overflow: hidden;
+}
+
+#ar-debug.is-collapsed .ar-debug__inner {
   display: none;
 }
 
 .ar-debug__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-shrink: 0;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #f6cd45;
 }
 
-#ar-debug-toggle,
 #ar-localize-now,
 #ar-copy-debug {
   border: 1px solid rgba(246, 205, 69, 0.45);
@@ -314,10 +338,6 @@ body {
   font-size: 0.62rem;
   font-weight: 700;
   cursor: pointer;
-}
-
-#ar-debug-toggle {
-  padding: 0.25rem 0.5rem;
 }
 
 .ar-debug__grid {

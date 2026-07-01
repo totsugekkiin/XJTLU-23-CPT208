@@ -73,12 +73,18 @@ export function ArPage() {
         </div>
 
         <div id="ar-debug" className="is-hidden" aria-live="polite">
-          <div className="ar-debug__header">
-            <span>Immersal Debug</span>
-            <button id="ar-debug-toggle" type="button" aria-expanded="true" aria-label="收起 debug 面板">
-              Debug
-            </button>
-          </div>
+          <button
+            id="ar-debug-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-label="收起 debug 面板"
+          >
+            ◀
+          </button>
+          <div className="ar-debug__inner">
+            <div className="ar-debug__header">
+              <span>Immersal Debug</span>
+            </div>
           <div id="ar-debug-grid" className="ar-debug__grid">
             <div className="ar-debug__item">
               <span>状态</span>
@@ -123,6 +129,7 @@ export function ArPage() {
             </button>
           </div>
           <ol id="ar-debug-log" className="ar-debug__log" />
+          </div>
         </div>
       </div>
 

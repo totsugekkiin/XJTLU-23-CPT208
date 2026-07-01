@@ -1,7 +1,6 @@
 const IMMERSAL_MAP_ID = 148549;
 const LOCALIZE_INTERVAL_MS = 2600;
 const CAPTURE_WIDTH = 480;
-const DEFAULT_FOV = 65;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
@@ -45,6 +44,8 @@ function deviceOrientationToQuaternion(alpha, beta, gamma, screenAngle) {
   return multiplyQuat(qScreen, qTilt);
 }
 
+const AXIS_ROT = quatFromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI);
+
 export function bootstrapArScene(rootEl) {
   const video = rootEl.querySelector("#ar-camera");
   const overlay = rootEl.querySelector("#ar-start-overlay");
@@ -83,6 +84,8 @@ export function bootstrapArScene(rootEl) {
   let captureCtx = null;
   let cameraZoom = 1;
   let deviceQuaternion = { x: 0, y: 0, z: 0, w: 1 };
+  let hasGyro = false;
+  let lastIntrinsics = { fx: 0, fy: 0, ox: 0, oy: 0 };
 
   const debugState = {
     status: "idle",
@@ -157,6 +160,8 @@ export function bootstrapArScene(rootEl) {
       {
         ...debugState,
         cameraZoom,
+        hasGyro,
+        lastIntrinsics,
         deviceQuaternion,
         userAgent: navigator.userAgent,
         secureContext: window.isSecureContext,
@@ -260,6 +265,8 @@ export function bootstrapArScene(rootEl) {
   }
 
   function onDeviceOrientation(event) {
+    if (event.alpha == null || event.beta == null || event.gamma == null) return;
+    hasGyro = true;
     const screenAngle = window.screen?.orientation?.angle ?? window.orientation ?? 0;
     deviceQuaternion = deviceOrientationToQuaternion(
       degToRad(event.alpha ?? 0),
@@ -267,6 +274,22 @@ export function bootstrapArScene(rootEl) {
       degToRad(event.gamma ?? 0),
       screenAngle,
     );
+  }
+
+  function getCameraRotation() {
+    if (!hasGyro) {
+      return { qx: 0, qy: 0, qz: 0, qw: 1 };
+    }
+    const camRot = multiplyQuat(deviceQuaternion, AXIS_ROT);
+    return { qx: camRot.x, qy: camRot.y, qz: camRot.z, qw: camRot.w };
+  }
+
+  function getIntrinsics(capture) {
+    const ox = capture.width / 2;
+    const oy = capture.height / 2;
+    // 未接入 Immersal devget 设备标定时，发送 0 让服务端估计焦距。
+    lastIntrinsics = { fx: 0, fy: 0, ox, oy };
+    return lastIntrinsics;
   }
 
   function getCaptureCanvas() {
@@ -314,29 +337,24 @@ export function bootstrapArScene(rootEl) {
   }
 
   function getLocalizationPayload(capture) {
-    const verticalFov = degToRad(DEFAULT_FOV / cameraZoom);
-    const fy = capture.height / (2 * Math.tan(verticalFov / 2));
-    const fx = fy;
+    const intrinsics = getIntrinsics(capture);
+    const rotation = getCameraRotation();
+    const solverType = hasGyro ? 1 : 0;
 
     return {
       action: "localize",
       mapId: IMMERSAL_MAP_ID,
       imageBase64: capture.imageBase64,
       camera: {
-        fx,
-        fy,
-        ox: capture.width / 2,
-        oy: capture.height / 2,
+        fx: intrinsics.fx,
+        fy: intrinsics.fy,
+        ox: intrinsics.ox,
+        oy: intrinsics.oy,
         width: capture.width,
         height: capture.height,
       },
-      rotation: {
-        qx: deviceQuaternion.x,
-        qy: deviceQuaternion.y,
-        qz: deviceQuaternion.z,
-        qw: deviceQuaternion.w,
-      },
-      solverType: 1,
+      rotation,
+      solverType,
     };
   }
 
@@ -359,14 +377,14 @@ export function bootstrapArScene(rootEl) {
       const elapsed = Math.round(performance.now() - startedAt);
 
       if (!response.ok) {
-        const message = data?.message || `HTTP ${response.status}`;
+        const message = data?.message || data?.upstream || `HTTP ${response.status}`;
         debugState.failure += 1;
         setDebug(
           {
             status: "localize failed",
             immersal: "proxy/upstream error",
             latency: `${elapsed}ms`,
-            lastError: message,
+            lastError: typeof message === "string" ? message : JSON.stringify(message),
           },
           "Immersal 请求失败",
           data,
@@ -400,16 +418,19 @@ export function bootstrapArScene(rootEl) {
         );
       } else {
         debugState.failure += 1;
+        const failReason = result?.error && result.error !== "none"
+          ? result.error
+          : "场景未匹配（success=false）";
         setDebug(
           {
             status: "not recognized",
             immersal: "no match",
             latency: `${data.elapsedMs ?? elapsed}ms`,
-            lastError: result?.error || "localization returned success=false",
+            lastError: failReason,
             lastPose: result ?? null,
           },
           "场景暂未识别",
-          result,
+          { result, solverType: hasGyro ? 1 : 0, intrinsics: lastIntrinsics, hasGyro },
         );
       }
     } catch (err) {
@@ -435,6 +456,26 @@ export function bootstrapArScene(rootEl) {
     setDebug({ immersal: "loop running" }, "Immersal 连续识别循环已启动");
   }
 
+  async function checkImmersalConfig() {
+    try {
+      const response = await fetch("/api/immersal");
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.message || `HTTP ${response.status}`);
+      }
+      if (!data?.hasToken) {
+        throw new Error("Vercel 未配置 VITE_IMMERSAL_TOKEN");
+      }
+      setDebug(
+        { immersal: `ready (map ${data.mapId})` },
+        "Immersal 代理可用",
+        data,
+      );
+    } catch (err) {
+      throw new Error(`Immersal 配置检查失败：${err.message || err}`);
+    }
+  }
+
   async function startExperience() {
     errorMsg.textContent = "";
     startBtn.disabled = true;
@@ -442,6 +483,7 @@ export function bootstrapArScene(rootEl) {
     setDebug({ status: "initializing", lastError: "none" }, "开始 Immersal 测试");
 
     try {
+      await checkImmersalConfig();
       await checkWebXrSupport();
       await requestCameraPermission();
       await requestOrientationPermission();
@@ -472,7 +514,7 @@ export function bootstrapArScene(rootEl) {
     const collapsed = debugPanel.classList.toggle("is-collapsed");
     debugToggle.setAttribute("aria-expanded", String(!collapsed));
     debugToggle.setAttribute("aria-label", collapsed ? "展开 debug 面板" : "收起 debug 面板");
-    debugToggle.textContent = collapsed ? "Debug +" : "Debug";
+    debugToggle.textContent = collapsed ? "▶" : "◀";
   });
 
   hintToggle?.addEventListener("click", () => {
