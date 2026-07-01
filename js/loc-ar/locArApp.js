@@ -3,6 +3,7 @@ import { checkWebXRSupport, createImmersalRuntime } from "./immersalClient.js";
 import { IMMERSAL_MAP_ID, validateImmersalConfig } from "./immersalConfig.js";
 import { createPlacementManager } from "./placementManager.js";
 import { MAX_PLACEMENTS, MIN_PLACE_DISTANCE_M } from "./placementConfig.js";
+import { requestSensorPermissions } from "./sensorPermissions.js";
 import { StabilityTracker } from "./stabilityTracker.js";
 import {
   onTrackingStateChange,
@@ -65,6 +66,7 @@ export function bootstrapLocAr(rootEl) {
   const statusMapId = rootEl.querySelector("#loc-vps-map-id");
   const statusPhase = rootEl.querySelector("#loc-vps-phase");
   const statusPos = rootEl.querySelector("#loc-vps-position");
+  const statusAttempts = rootEl.querySelector("#loc-vps-attempts");
   const statusTime = rootEl.querySelector("#loc-vps-time");
   const statusWebxr = rootEl.querySelector("#loc-vps-webxr");
   const statusSignalLabel = rootEl.querySelector("#loc-vps-signal-label");
@@ -74,6 +76,8 @@ export function bootstrapLocAr(rootEl) {
   const metricJump = rootEl.querySelector("#loc-metric-jump");
   const metricDrift = rootEl.querySelector("#loc-metric-drift");
   const placeBtn = rootEl.querySelector("#loc-place-btn");
+  const localizeBtn = rootEl.querySelector("#loc-localize-btn");
+  const localizeServerBtn = rootEl.querySelector("#loc-localize-server-btn");
   const resetBtn = rootEl.querySelector("#loc-reset-btn");
   const panelToggle = rootEl.querySelector("#loc-metrics-toggle");
   const placeHint = rootEl.querySelector("#loc-place-hint");
@@ -93,6 +97,8 @@ export function bootstrapLocAr(rootEl) {
   let originPlaced = false;
   let lastCameraPos = null;
   let metricsTimer = 0;
+  let localizeStartTime = 0;
+  let serverLocalizeTried = false;
 
   function showError(message) {
     if (errorMsg) errorMsg.textContent = message;
@@ -175,6 +181,9 @@ export function bootstrapLocAr(rootEl) {
       statusPos.textContent = "—";
     }
     if (statusTime) statusTime.textContent = formatTime(trackingState.lastLocalizedAt);
+    if (statusAttempts) {
+      statusAttempts.textContent = String(trackingState.localizeCount);
+    }
     if (statusWebxr) {
       statusWebxr.textContent = trackingState.webxrSupported ? "支持" : "回退模式";
     }
@@ -233,6 +242,20 @@ export function bootstrapLocAr(rootEl) {
         phase: "localizing",
         localizeCount: counter,
       });
+    } else if (localizeStartTime > 0) {
+      const elapsed = Date.now() - localizeStartTime;
+      if (elapsed > 15000 && elapsed < 16000) {
+        showPlaceHint(
+          "仍未定位成功：请确认你在 Map 148539 建图现场，并缓慢左右扫描墙面与走廊特征。",
+        );
+      }
+      if (elapsed > 25000 && !serverLocalizeTried && runtime.immersal) {
+        serverLocalizeTried = true;
+        showPlaceHint("正在尝试云端定位…");
+        runtime.immersal.localizeServerAsync().catch(() => {
+          showPlaceHint("云端定位也未成功，请换角度重试或点击「触发定位」。");
+        });
+      }
     }
 
     if (placementManager && runtime.camera) {
@@ -301,6 +324,28 @@ export function bootstrapLocAr(rootEl) {
     updatePlaceButton();
   }
 
+  async function triggerDeviceLocalize() {
+    if (!runtime?.immersal) return;
+    showPlaceHint("正在触发设备端定位…");
+    try {
+      await runtime.immersal.localizeDeviceAsync();
+      showPlaceHint("设备端定位成功。");
+    } catch {
+      showPlaceHint("设备端定位失败，可尝试「云端定位」或换角度扫描。");
+    }
+  }
+
+  async function triggerServerLocalize() {
+    if (!runtime?.immersal) return;
+    showPlaceHint("正在触发云端定位…");
+    try {
+      await runtime.immersal.localizeServerAsync();
+      showPlaceHint("云端定位成功。");
+    } catch {
+      showPlaceHint("云端定位失败，请确认在建图区域且光线充足。");
+    }
+  }
+
   async function startExperience() {
     if (starting || started) return;
 
@@ -316,6 +361,9 @@ export function bootstrapLocAr(rootEl) {
     startBtn.textContent = "加载中…";
 
     try {
+      setBootStatus("请求传感器权限…");
+      await requestSensorPermissions();
+
       setBootStatus("检测 WebXR…");
       const webxrSupported = await checkWebXRSupport();
       updateTrackingState({ webxrSupported, phase: "initializing" });
@@ -333,6 +381,8 @@ export function bootstrapLocAr(rootEl) {
       runtime.startRenderLoop();
 
       metricsTimer = window.setInterval(pollTracking, 100);
+      localizeStartTime = Date.now();
+      serverLocalizeTried = false;
 
       started = true;
       updateTrackingState({ phase: "localizing" });
@@ -356,6 +406,8 @@ export function bootstrapLocAr(rootEl) {
   }
 
   startBtn.addEventListener("click", startExperience);
+  localizeBtn?.addEventListener("click", triggerDeviceLocalize);
+  localizeServerBtn?.addEventListener("click", triggerServerLocalize);
   placeBtn?.addEventListener("click", onPlace);
   resetBtn?.addEventListener("click", onReset);
   panelToggle?.addEventListener("click", () => {

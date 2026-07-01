@@ -39,6 +39,10 @@
                 <span class="loc-status__label">位置</span>
                 <span id="loc-vps-position">—</span>
             </div>
+            <div class="loc-status__row">
+                <span class="loc-status__label">次数</span>
+                <span id="loc-vps-attempts">0</span>
+            </div>
             <div class="loc-status__row loc-status__signal">
                 <span class="loc-status__label">定位</span>
                 <span id="loc-vps-signal" class="loc-signal" aria-hidden="true">
@@ -80,6 +84,8 @@
         </aside>
 
         <div id="loc-action-bar">
+            <button id="loc-localize-btn" type="button">触发定位</button>
+            <button id="loc-localize-server-btn" type="button">云端定位</button>
             <button id="loc-place-btn" type="button">放置 (0/4)</button>
             <button id="loc-reset-btn" type="button">重置锚点</button>
         </div>

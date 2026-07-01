@@ -72,7 +72,7 @@ export async function createImmersalRuntime(container) {
   immersal.addEventListener("resize", resize);
 
   function isLocalized() {
-    return immersal.localization.counter > 1;
+    return immersal.localization.counter >= 1;
   }
 
   function render(time) {

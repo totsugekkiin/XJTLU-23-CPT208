@@ -103,6 +103,8 @@ body {
 }
 
 #loc-ar-start-btn,
+#loc-localize-btn,
+#loc-localize-server-btn,
 #loc-place-btn,
 #loc-reset-btn {
   padding: 0.8rem 1.6rem;
@@ -348,14 +350,24 @@ body {
   display: none;
 }
 
+#loc-localize-btn,
+#loc-localize-server-btn {
+  padding: 0.55rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-color: rgba(244, 241, 234, 0.45);
+  color: rgba(244, 241, 234, 0.85);
+}
+
 #loc-action-bar {
   position: absolute;
   left: 50%;
   bottom: 1rem;
   transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 92vw;
   gap: 0.5rem;
 }
 
