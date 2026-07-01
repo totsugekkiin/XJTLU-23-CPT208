@@ -22,35 +22,51 @@ export function ArPage() {
 
   return (
     <div id="ar-app" data-ar-mode="loc-ar">
-      <video id="ar-camera" autoPlay muted playsInline />
-
-      <canvas id="ar-canvas" />
+      <div id="ar-camera-wrap">
+        <video id="ar-camera" autoPlay muted playsInline />
+      </div>
 
       <div id="ar-ui">
         <div id="ar-start-overlay">
-          <h1>阊门 · Immersal AR 识别</h1>
-          <p>点击开始后会打开后置摄像头，并用 Immersal Map 148549 尝试识别当前场景。请在已建图区域缓慢移动手机。</p>
+          <h1>Immersal 场景识别测试</h1>
+          <p>打开摄像头后，系统会针对 Map 148549 持续发起定位请求。请在现场已建图区域缓慢移动手机。</p>
           <button id="ar-start-btn" type="button">
             打开摄像头并开始识别
           </button>
           <p id="ar-error-msg" />
         </div>
 
-        <div id="ar-panel" className="is-hidden">
-          <button id="ar-panel-toggle" type="button" aria-expanded="true" aria-label="收起调参面板">
-            ◀
-          </button>
-          <div id="ar-panel-inner">
-            <div className="ar-panel__header">调参面板</div>
-            <div id="ar-panel-body" />
-            <button id="ar-copy-params" type="button">
-              复制参数
+        <div id="ar-controls" className="is-hidden">
+          <div className="ar-controls__header">
+            <span>摄像头缩放</span>
+            <button id="ar-controls-toggle" type="button" aria-expanded="true" aria-label="收起缩放控制">
+              缩放
             </button>
+          </div>
+          <div className="ar-controls__body">
+            <div className="ar-controls__buttons">
+              <button id="ar-zoom-out" type="button" aria-label="缩小">
+                -
+              </button>
+              <span id="ar-zoom-value">1.00x</span>
+              <button id="ar-zoom-in" type="button" aria-label="放大">
+                +
+              </button>
+            </div>
+            <input
+              id="ar-zoom-slider"
+              className="ar-controls__slider"
+              type="range"
+              min="0.5"
+              max="3"
+              step="0.05"
+              defaultValue="1"
+            />
           </div>
         </div>
 
         <div id="ar-hint" className="is-hidden">
-          <p>识别说明：将摄像头对准 Immersal Map 148549 覆盖的场景，右侧 debug 面板会实时显示识别状态。</p>
+          <p>对准 Map 148549 覆盖区域。右侧 Debug 面板可查看识别状态、耗时与 pose。</p>
           <button id="ar-hint-toggle" type="button" aria-expanded="true" aria-label="最小化提示信息">
             -
           </button>

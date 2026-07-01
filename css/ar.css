@@ -1,6 +1,4 @@
-/* =========================================
-   AR Field Test Page
-========================================= */
+/* Immersal localization test page */
 
 html,
 body {
@@ -18,31 +16,26 @@ body {
   overflow: hidden;
 }
 
-/* L1 — camera background */
-#ar-camera {
+#ar-camera-wrap {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(1);
-  transform-origin: center center;
-  transition: transform 0.16s ease-out;
+  overflow: hidden;
   z-index: 1;
   background: #111;
 }
 
-/* L2 — Three.js canvas */
-#ar-canvas {
+#ar-camera {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
   width: 100%;
   height: 100%;
-  z-index: 2;
-  pointer-events: none;
+  object-fit: contain;
+  transform: translate(-50%, -50%) scale(var(--ar-camera-zoom, 1));
+  transform-origin: center center;
+  transition: transform 0.16s ease-out;
 }
 
-/* L3 — static UI overlay */
 #ar-ui {
   position: absolute;
   inset: 0;
@@ -54,7 +47,6 @@ body {
   pointer-events: auto;
 }
 
-/* Start overlay */
 #ar-start-overlay {
   position: absolute;
   inset: 0;
@@ -84,7 +76,7 @@ body {
 
 #ar-start-overlay p {
   margin: 0;
-  max-width: 20rem;
+  max-width: 22rem;
   font-size: 0.85rem;
   line-height: 1.6;
   color: rgba(244, 241, 234, 0.75);
@@ -101,12 +93,6 @@ body {
   font-weight: 700;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-#ar-start-btn:hover:not(:disabled) {
-  background: #f4f1ea;
-  color: #111;
 }
 
 #ar-start-btn:disabled {
@@ -122,151 +108,105 @@ body {
   color: #ff6b6b;
 }
 
-/* Control panel — left side, scrollable, collapsible */
-#ar-panel {
-  --ar-panel-width: min(17rem, 78vw);
-  --ar-panel-tab: 2.25rem;
+/* Camera zoom controls */
+#ar-controls {
+  --ar-controls-width: min(14rem, 72vw);
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: var(--ar-panel-width);
+  top: max(3.1rem, env(safe-area-inset-top));
+  left: 0.5rem;
+  width: var(--ar-controls-width);
   display: flex;
   flex-direction: column;
-  padding: max(0.5rem, env(safe-area-inset-top)) 0.5rem max(0.5rem, env(safe-area-inset-bottom));
-  background: rgba(0, 0, 0, 0.62);
+  gap: 0.45rem;
+  padding: 0.65rem;
+  color: rgba(244, 241, 234, 0.9);
+  background: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(246, 205, 69, 0.3);
+  border-radius: 0.65rem;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  transform: translateX(0);
-  transition: transform 0.28s ease;
+  transition: transform 0.24s ease;
 }
 
-#ar-panel.is-hidden {
+#ar-controls.is-hidden {
   display: none;
 }
 
-#ar-panel.is-collapsed {
-  transform: translateX(calc(-1 * (var(--ar-panel-width) - var(--ar-panel-tab))));
+#ar-controls.is-collapsed {
+  transform: translateX(calc(-1 * (var(--ar-controls-width) - 4.5rem)));
 }
 
-#ar-panel-toggle {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  z-index: 2;
-  transform: translate(100%, -50%);
-  width: var(--ar-panel-tab);
-  height: 3rem;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-left: none;
-  border-radius: 0 8px 8px 0;
-  background: rgba(0, 0, 0, 0.72);
-  color: #f6cd45;
-  font-size: 0.75rem;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
+#ar-controls.is-collapsed .ar-controls__body {
+  display: none;
 }
 
-#ar-panel-toggle:active {
-  background: rgba(0, 0, 0, 0.88);
-}
-
-#ar-panel-inner {
-  flex: 1;
-  min-height: 0;
+.ar-controls__header {
   display: flex;
-  flex-direction: column;
-}
-
-.ar-panel__header {
-  flex-shrink: 0;
-  margin-bottom: 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: rgba(244, 241, 234, 0.9);
-}
-
-#ar-panel-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding-right: 0.25rem;
-  touch-action: pan-y;
-}
-
-.ar-panel__group-title {
-  margin: 0.6rem 0 0.35rem;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
   color: #f6cd45;
 }
 
-.ar-panel__group-title:first-child {
-  margin-top: 0;
+#ar-controls-toggle {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgba(246, 205, 69, 0.45);
+  border-radius: 999px;
+  background: rgba(246, 205, 69, 0.12);
+  color: #f6cd45;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.ar-panel__row {
-  display: grid;
-  grid-template-columns: 3.6rem 1fr 3rem;
+.ar-controls__buttons {
+  display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.35rem;
 }
 
-.ar-panel__label {
-  font-size: 0.62rem;
-  font-weight: 600;
-  color: rgba(244, 241, 234, 0.9);
-  line-height: 1.2;
+#ar-zoom-out,
+#ar-zoom-in {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid rgba(246, 205, 69, 0.45);
+  border-radius: 999px;
+  background: rgba(246, 205, 69, 0.12);
+  color: #f6cd45;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.ar-panel__slider {
+#ar-zoom-value {
+  flex: 1;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 241, 234, 0.95);
+}
+
+.ar-controls__slider {
   width: 100%;
-  min-width: 0;
   accent-color: #f6cd45;
   height: 1.5rem;
   touch-action: manipulation;
   cursor: pointer;
 }
 
-.ar-panel__value {
-  font-size: 0.58rem;
-  font-variant-numeric: tabular-nums;
-  color: rgba(244, 241, 234, 0.65);
-  text-align: right;
-  line-height: 1.2;
-}
-
-#ar-copy-params {
-  flex-shrink: 0;
-  margin-top: 0.4rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid rgba(246, 205, 69, 0.5);
-  border-radius: 6px;
-  background: rgba(246, 205, 69, 0.12);
-  color: #f6cd45;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-#ar-copy-params:active {
-  background: rgba(246, 205, 69, 0.25);
-}
-
 /* Hint bar */
 #ar-hint {
   position: absolute;
-  left: min(17.5rem, 79vw);
-  right: 0.75rem;
+  left: 0.75rem;
+  right: min(19rem, 88vw);
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   margin: 0;
   padding: 0.55rem 0.75rem;
@@ -278,8 +218,6 @@ body {
   color: rgba(244, 241, 234, 0.85);
   background: rgba(0, 0, 0, 0.45);
   border-radius: 6px;
-  pointer-events: auto;
-  transition: left 0.28s ease, right 0.28s ease, width 0.28s ease;
 }
 
 #ar-hint p {
@@ -312,14 +250,6 @@ body {
 
 #ar-hint.is-collapsed p {
   display: none;
-}
-
-#ar-app.is-panel-collapsed #ar-hint {
-  left: 0.75rem;
-}
-
-#ar-app.is-panel-collapsed #ar-hint.is-collapsed {
-  left: auto;
 }
 
 #ar-hint.is-hidden {
@@ -460,7 +390,6 @@ body {
   margin-top: 0.18rem;
 }
 
-/* Back link */
 #ar-back {
   position: absolute;
   top: max(0.5rem, env(safe-area-inset-top));
@@ -479,7 +408,7 @@ body {
 
 @media (max-width: 480px) {
   #ar-hint {
-    left: 0.75rem;
+    right: 0.75rem;
     font-size: 0.62rem;
   }
 
