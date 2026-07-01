@@ -5,6 +5,47 @@ import { immersalParams } from "./immersalConfig.js";
 const USE_POSE_FILTERING = true;
 const POSE_LERP_STEP = 0.025;
 
+function waitForCameraFrames(camera, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const check = () => {
+      const video = camera?.el;
+      const ready =
+        video &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        camera.width > 0 &&
+        camera.height > 0;
+      if (ready) {
+        resolve();
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error("摄像头画面未就绪，请刷新后重试。"));
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
+/**
+ * @param {InstanceType<typeof Immersal>} immersal
+ */
+export function getImmersalDiagnostics(immersal) {
+  const camera = immersal?.camera;
+  return {
+    mapHandle: immersal?.localizeInfo?.handle ?? -1,
+    localizeCount: immersal?.localization?.counter ?? 0,
+    localizing: immersal?.localization?.localizing ?? false,
+    cameraSize:
+      camera?.width && camera?.height
+        ? `${camera.width}x${camera.height}`
+        : "—",
+    videoState: camera?.el?.readyState ?? 0,
+  };
+}
+
 /**
  * @typedef {object} ImmersalRuntime
  * @property {() => void} startRenderLoop
@@ -28,6 +69,11 @@ export async function createImmersalRuntime(container) {
   const immersal = await Immersal.Initialize(container, immersalParams);
   const mapId = immersalParams.mapIds[0];
   const mapHandle = await immersal.loadMap(mapId);
+  if (mapHandle < 0) {
+    throw new Error(`地图 ${mapId} 加载失败，请检查 Token 与 Map ID。`);
+  }
+
+  await waitForCameraFrames(immersal.camera);
 
   const camera = new THREE.PerspectiveCamera(
     45,

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { checkWebXRSupport, createImmersalRuntime } from "./immersalClient.js";
+import { checkWebXRSupport, createImmersalRuntime, getImmersalDiagnostics } from "./immersalClient.js";
 import { IMMERSAL_MAP_ID, validateImmersalConfig } from "./immersalConfig.js";
 import { createPlacementManager } from "./placementManager.js";
 import { MAX_PLACEMENTS, MIN_PLACE_DISTANCE_M } from "./placementConfig.js";
@@ -69,6 +69,7 @@ export function bootstrapLocAr(rootEl) {
   const statusAttempts = rootEl.querySelector("#loc-vps-attempts");
   const statusTime = rootEl.querySelector("#loc-vps-time");
   const statusWebxr = rootEl.querySelector("#loc-vps-webxr");
+  const statusDiag = rootEl.querySelector("#loc-vps-diag");
   const statusSignalLabel = rootEl.querySelector("#loc-vps-signal-label");
   const signalBars = rootEl.querySelector("#loc-vps-signal");
   const placementList = rootEl.querySelector("#loc-placement-list");
@@ -99,6 +100,7 @@ export function bootstrapLocAr(rootEl) {
   let metricsTimer = 0;
   let localizeStartTime = 0;
   let serverLocalizeTried = false;
+  let localizingStuckSince = 0;
 
   function showError(message) {
     if (errorMsg) errorMsg.textContent = message;
@@ -187,6 +189,12 @@ export function bootstrapLocAr(rootEl) {
     if (statusWebxr) {
       statusWebxr.textContent = trackingState.webxrSupported ? "支持" : "回退模式";
     }
+    if (statusDiag && runtime?.immersal) {
+      const d = getImmersalDiagnostics(runtime.immersal);
+      statusDiag.textContent = `相机 ${d.cameraSize} · 视频状态 ${d.videoState} · 定位中 ${d.localizing ? "是" : "否"}`;
+    } else if (statusDiag) {
+      statusDiag.textContent = "—";
+    }
     renderSignal();
     renderPlacementList();
   }
@@ -212,6 +220,17 @@ export function bootstrapLocAr(rootEl) {
 
     const localized = runtime.isLocalized();
     const counter = runtime.immersal.localization.counter;
+    const { localizing } = runtime.immersal.localization;
+
+    if (localizing) {
+      if (!localizingStuckSince) localizingStuckSince = Date.now();
+      else if (Date.now() - localizingStuckSince > 4000) {
+        runtime.immersal.localization.localizing = false;
+        localizingStuckSince = 0;
+      }
+    } else {
+      localizingStuckSince = 0;
+    }
 
     if (localized) {
       const pos = runtime.camera.position;
@@ -261,6 +280,11 @@ export function bootstrapLocAr(rootEl) {
     if (placementManager && runtime.camera) {
       tracker.tick(runtime.camera, placementManager.getEntities(), 0);
       renderMetrics();
+    }
+
+    if (statusDiag && runtime.immersal) {
+      const d = getImmersalDiagnostics(runtime.immersal);
+      statusDiag.textContent = `相机 ${d.cameraSize} · 视频状态 ${d.videoState} · 定位中 ${d.localizing ? "是" : "否"}`;
     }
   }
 
@@ -379,6 +403,9 @@ export function bootstrapLocAr(rootEl) {
 
       setBootStatus("正在启动定位…", true);
       runtime.startRenderLoop();
+
+      // Kick off an explicit localize attempt once the camera is ready.
+      runtime.immersal.localizeDeviceAsync().catch(() => {});
 
       metricsTimer = window.setInterval(pollTracking, 100);
       localizeStartTime = Date.now();

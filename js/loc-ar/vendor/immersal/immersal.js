@@ -19,15 +19,26 @@ trackerPluginModule().then(instance => {
 });
 
 export const createOrientationSensor = async () => {
-  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === 'function') {
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try {
-      const permissionState = await DeviceMotionEvent.requestPermission();
+      const permissionState = await DeviceOrientationEvent.requestPermission();
       if (permissionState === 'granted') {
         console.log(`[IMMERSAL] DeviceOrientation permissions ${permissionState}`);
-        window.addEventListener('devicemotion', () => {});
       }
     } catch (error) {
       console.error(`[IMMERSAL] Error requesting DeviceOrientation permission:`, error);
+    }
+  }
+
+  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const permissionState = await DeviceMotionEvent.requestPermission();
+      if (permissionState === 'granted') {
+        console.log(`[IMMERSAL] DeviceMotion permissions ${permissionState}`);
+        window.addEventListener('devicemotion', () => {});
+      }
+    } catch (error) {
+      console.error(`[IMMERSAL] Error requesting DeviceMotion permission:`, error);
     }
   }
 }
@@ -216,7 +227,7 @@ class Immersal extends EventTarget {
       try {
         this.#locWorker = new Worker(new URL("./locWorker.js", import.meta.url), {type: "module"});
         this.#locWorker.addEventListener("message", (e) => {
-          const {type} = e.data;
+          const {type, data} = e.data;
           if (type === "Init") {
             console.log(`[IMMERSAL] PosePlugin init`);
             this.#locWorker.postMessage({type: "ValidateUser", data: params.developerToken});
@@ -229,6 +240,15 @@ class Immersal extends EventTarget {
               });
           }
         }, {once: true});
+        this.#locWorker.addEventListener("message", (e) => {
+          const {type, data} = e.data;
+          if (type === "ValidateUser") {
+            console.log(`[IMMERSAL] ValidateUser result:`, data);
+            if (data !== 1) {
+              console.error(`[IMMERSAL] Developer token validation failed (code ${data})`);
+            }
+          }
+        });
         this.#locWorker.addEventListener("error", (e) => {
           reject(e);
         }, {once: true});
@@ -664,7 +684,10 @@ class Immersal extends EventTarget {
 
     this.cameraData.buffer = this.camera?.getImageData(this.imageDownScale);
 
-    if (!this.cameraData.buffer) return;
+    if (!this.cameraData.buffer || this.cameraData.buffer.length === 0) {
+      this.localization.localizing = false;
+      return;
+    }
 
     const intr = Object.values(this.cameraData.intrinsics);
 
