@@ -5,9 +5,6 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  optimizeDeps: {
-    exclude: ["aframe"],
-  },
   build: {
     rollupOptions: {
       input: {

@@ -1,123 +1,163 @@
+import * as THREE from "three";
 import {
   CUBE_COLORS,
   CUBE_SIZE,
   MAX_PLACEMENTS,
-  ORIGIN_SPHERE,
+  ORIGIN_MARKER,
 } from "./placementConfig.js";
 
 /**
- * @param {HTMLElement} sceneEl
+ * @param {THREE.Scene} scene
  */
-export function createPlacementManager(sceneEl) {
-  /** @type {{ lat: number, lng: number, entity: HTMLElement } | null} */
+export function createPlacementManager(scene) {
+  const contentRoot = new THREE.Group();
+  contentRoot.name = "ar-content-root";
+  scene.add(contentRoot);
+
+  /** @type {{ position: THREE.Vector3, object: THREE.Object3D } | null} */
   let origin = null;
-  /** @type {Array<{ id: string, label: string, lat: number, lng: number, accuracy: number | null, color: string, entity: HTMLElement }>} */
+  /** @type {Array<{ id: string, label: string, position: THREE.Vector3, color: number, object: THREE.Object3D }>} */
   let placements = [];
 
   function getEntities() {
     const entities = [];
-    if (origin?.entity) entities.push(origin.entity);
-    placements.forEach((p) => entities.push(p.entity));
+    if (origin?.object) entities.push(origin.object);
+    placements.forEach((p) => entities.push(p.object));
     return entities;
   }
 
+  function createTextSprite(text) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    const fontSize = 48;
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+    const metrics = ctx.measureText(text);
+    canvas.width = Math.ceil(metrics.width + 24);
+    canvas.height = fontSize + 24;
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#f4f1ea";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    const scale = 0.5;
+    sprite.scale.set((canvas.width / canvas.height) * scale, scale, 1);
+    return sprite;
+  }
+
   /**
-   * @param {number} lat
-   * @param {number} lng
+   * Place origin marker at map origin (localization anchor).
    * @returns {boolean}
    */
-  function setOrigin(lat, lng) {
+  function setOriginAtAnchor() {
     if (origin) return false;
 
-    const wrapper = document.createElement("a-entity");
-    wrapper.id = "placement-origin";
-    wrapper.setAttribute("gps-new-entity-place", {
-      latitude: lat,
-      longitude: lng,
+    const group = new THREE.Group();
+    group.name = "placement-origin";
+
+    const geometry = new THREE.SphereGeometry(ORIGIN_MARKER.radius, 24, 24);
+    const material = new THREE.MeshStandardMaterial({
+      color: ORIGIN_MARKER.color,
+      transparent: true,
+      opacity: 0.92,
     });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.position.y = ORIGIN_MARKER.radius;
+    group.add(sphere);
 
-    const sphere = document.createElement("a-sphere");
-    sphere.setAttribute("color", ORIGIN_SPHERE.color);
-    sphere.setAttribute("radius", String(ORIGIN_SPHERE.radius));
-    sphere.setAttribute("position", `0 ${ORIGIN_SPHERE.radius} 0`);
-    sphere.setAttribute("material", "opacity: 0.92; transparent: true");
+    const label = createTextSprite(ORIGIN_MARKER.label);
+    if (label) {
+      label.position.set(0, ORIGIN_MARKER.radius * 2 + 0.35, 0);
+      group.add(label);
+    }
 
-    const label = document.createElement("a-text");
-    label.setAttribute("value", ORIGIN_SPHERE.label);
-    label.setAttribute("align", "center");
-    label.setAttribute("color", "#f4f1ea");
-    label.setAttribute("position", `0 ${ORIGIN_SPHERE.radius * 2 + 0.3} 0`);
-    label.setAttribute("scale", "2 2 2");
+    const cubeGeo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+    const cubeMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x4488ff,
+      emissiveIntensity: 0.35,
+    });
+    const cube = new THREE.Mesh(cubeGeo, cubeMat);
+    cube.position.set(0, CUBE_SIZE / 2, -1.2);
+    group.add(cube);
 
-    wrapper.appendChild(sphere);
-    wrapper.appendChild(label);
-    sceneEl.appendChild(wrapper);
-
-    origin = { lat, lng, entity: wrapper };
+    contentRoot.add(group);
+    origin = { position: new THREE.Vector3(0, 0, 0), object: group };
     return true;
   }
 
   /**
-   * @param {number} lat
-   * @param {number} lng
-   * @param {number | null} accuracy
-   * @returns {{ id: string, label: string, lat: number, lng: number, accuracy: number | null, color: string, entity: HTMLElement } | null}
+   * @param {THREE.Vector3} position
+   * @returns {typeof placements[0] | null}
    */
-  function placeAt(lat, lng, accuracy = null) {
+  function placeAt(position) {
     if (placements.length >= MAX_PLACEMENTS) return null;
 
     const index = placements.length;
     const id = `p${index + 1}`;
-    const label = `观测点 ${index + 1}`;
+    const label = `AR 点 ${index + 1}`;
     const color = CUBE_COLORS[index % CUBE_COLORS.length];
 
-    const wrapper = document.createElement("a-entity");
-    wrapper.id = `placement-${id}`;
-    wrapper.setAttribute("data-placement-id", id);
-    wrapper.setAttribute("gps-new-entity-place", {
-      latitude: lat,
-      longitude: lng,
+    const group = new THREE.Group();
+    group.name = `placement-${id}`;
+    group.position.copy(position);
+
+    const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      transparent: true,
+      opacity: 0.92,
     });
+    const box = new THREE.Mesh(geometry, material);
+    box.position.y = CUBE_SIZE / 2;
+    group.add(box);
 
-    const box = document.createElement("a-box");
-    box.setAttribute("color", color);
-    box.setAttribute("depth", String(CUBE_SIZE));
-    box.setAttribute("height", String(CUBE_SIZE));
-    box.setAttribute("width", String(CUBE_SIZE));
-    box.setAttribute("position", `0 ${CUBE_SIZE / 2} 0`);
-    box.setAttribute("material", "opacity: 0.92; transparent: true");
+    const text = createTextSprite(label);
+    if (text) {
+      text.position.set(0, CUBE_SIZE + 0.45, 0);
+      group.add(text);
+    }
 
-    const text = document.createElement("a-text");
-    text.setAttribute("value", label);
-    text.setAttribute("align", "center");
-    text.setAttribute("color", "#f4f1ea");
-    text.setAttribute("position", `0 ${CUBE_SIZE + 0.6} 0`);
-    text.setAttribute("scale", "2 2 2");
-
-    wrapper.appendChild(box);
-    wrapper.appendChild(text);
-    sceneEl.appendChild(wrapper);
-
-    const placement = { id, label, lat, lng, accuracy, color, entity: wrapper };
+    contentRoot.add(group);
+    const placement = {
+      id,
+      label,
+      position: position.clone(),
+      color,
+      object: group,
+    };
     placements.push(placement);
     return placement;
   }
 
+  /**
+   * Place at current camera position (projected to ground y=0).
+   * @param {THREE.Camera} camera
+   */
+  function placeAtCamera(camera) {
+    const pos = new THREE.Vector3();
+    camera.getWorldPosition(pos);
+    pos.y = 0;
+    return placeAt(pos);
+  }
+
   function clear() {
-    if (origin?.entity) origin.entity.remove();
-    placements.forEach((p) => p.entity.remove());
+    contentRoot.clear();
     origin = null;
     placements = [];
   }
 
-  /**
-   * Reset origin to current position (clears cubes, re-places sphere).
-   * @param {number} lat
-   * @param {number} lng
-   */
-  function resetOrigin(lat, lng) {
+  function resetAnchor() {
     clear();
-    setOrigin(lat, lng);
+    setOriginAtAnchor();
   }
 
   return {
@@ -133,10 +173,11 @@ export function createPlacementManager(sceneEl) {
     get canPlace() {
       return placements.length < MAX_PLACEMENTS;
     },
-    setOrigin,
+    setOriginAtAnchor,
     placeAt,
+    placeAtCamera,
     getEntities,
     clear,
-    resetOrigin,
+    resetAnchor,
   };
 }

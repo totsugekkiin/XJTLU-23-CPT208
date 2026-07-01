@@ -1,53 +1,37 @@
-import {
-  accuracyToSignal,
-  formatCoord,
-  formatDistance,
-  haversineDistance,
-} from "./geoUtils.js";
-import { gpsState, onGpsStateChange, updateGpsState } from "./gpsState.js";
+import * as THREE from "three";
+import { checkWebXRSupport, createImmersalRuntime } from "./immersalClient.js";
+import { IMMERSAL_MAP_ID, validateImmersalConfig } from "./immersalConfig.js";
 import { createPlacementManager } from "./placementManager.js";
 import { MAX_PLACEMENTS, MIN_PLACE_DISTANCE_M } from "./placementConfig.js";
 import { StabilityTracker } from "./stabilityTracker.js";
+import {
+  onTrackingStateChange,
+  trackingState,
+  updateTrackingState,
+} from "./trackingState.js";
 
-const AR_SCRIPTS = [
-  "vendor/aframe.min.js",
-  "vendor/ar-threex-location-only.js",
-  "vendor/aframe-ar.js",
-];
+const PHASE_LABELS = {
+  idle: "待命",
+  initializing: "初始化中",
+  loading_map: "加载地图",
+  localizing: "定位中",
+  localized: "已定位",
+  error: "错误",
+};
 
-let arLibsPromise = null;
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-loc-ar-src="${src}"]`);
-    if (existing) {
-      if (existing.dataset.loaded === "1") resolve();
-      else existing.addEventListener("load", () => resolve(), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.dataset.locArSrc = src;
-    script.addEventListener("load", () => {
-      script.dataset.loaded = "1";
-      resolve();
-    }, { once: true });
-    script.addEventListener("error", () => {
-      reject(new Error(`脚本加载失败：${src}`));
-    }, { once: true });
-    document.head.appendChild(script);
-  });
+function formatCoord(value) {
+  if (value == null || Number.isNaN(value)) return "—";
+  return value.toFixed(3);
 }
 
-function loadArLibs() {
-  if (window.AFRAME?.registerComponent) return Promise.resolve();
-  if (!arLibsPromise) {
-    arLibsPromise = AR_SCRIPTS.reduce(
-      (chain, src) => chain.then(() => loadScript(src)),
-      Promise.resolve(),
-    );
-  }
-  return arLibsPromise;
+function formatDistance(meters) {
+  if (meters == null || Number.isNaN(meters)) return "—";
+  if (meters < 1) return `${(meters * 100).toFixed(0)} cm`;
+  return `${meters.toFixed(1)} m`;
+}
+
+function formatTime(ts) {
+  return ts ? new Date(ts).toLocaleTimeString() : "—";
 }
 
 function showBootError(message) {
@@ -69,62 +53,6 @@ function setBootStatus(text, ready = false) {
   bootStatus.classList.toggle("is-ready", ready);
 }
 
-function waitForAframe(timeoutMs = 20000) {
-  return new Promise((resolve, reject) => {
-    if (window.AFRAME?.registerComponent) {
-      resolve();
-      return;
-    }
-    const start = Date.now();
-    const timer = setInterval(() => {
-      if (window.AFRAME?.registerComponent) {
-        clearInterval(timer);
-        resolve();
-        return;
-      }
-      if (Date.now() - start > timeoutMs) {
-        clearInterval(timer);
-        reject(new Error("AR 库初始化超时，请刷新重试。"));
-      }
-    }, 50);
-  });
-}
-
-function waitForSceneLoaded(sceneEl, timeoutMs = 25000) {
-  if (sceneEl.hasLoaded) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("AR 场景初始化超时，请重试。"));
-    }, timeoutMs);
-    sceneEl.addEventListener(
-      "loaded",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
-  });
-}
-
-function createArScene(host) {
-  const scene = document.createElement("a-scene");
-  scene.id = "loc-ar-scene";
-  scene.setAttribute("vr-mode-ui", "enabled: false");
-  scene.setAttribute("embedded", "");
-  scene.setAttribute("renderer", "alpha: true; antialias: true");
-  scene.setAttribute(
-    "arjs",
-    "sourceType: webcam; videoTexture: true; debugUIEnabled: false",
-  );
-
-  const camera = document.createElement("a-camera");
-  camera.setAttribute("gps-new-camera", "gpsMinDistance: 0; positionMinAccuracy: 100");
-  scene.appendChild(camera);
-  host.appendChild(scene);
-  return scene;
-}
-
 /**
  * @param {HTMLElement} rootEl
  * @returns {() => void}
@@ -134,12 +62,13 @@ export function bootstrapLocAr(rootEl) {
   const startBtn = document.getElementById("loc-ar-start-btn");
   const errorMsg = document.getElementById("loc-ar-error-msg");
   const sceneHost = rootEl.querySelector("#loc-ar-scene-host");
-  const statusLat = rootEl.querySelector("#loc-gps-lat");
-  const statusLng = rootEl.querySelector("#loc-gps-lng");
-  const statusAcc = rootEl.querySelector("#loc-gps-acc");
-  const statusTime = rootEl.querySelector("#loc-gps-time");
-  const signalBars = rootEl.querySelector("#loc-gps-signal");
-  const signalLabel = rootEl.querySelector("#loc-gps-signal-label");
+  const statusMapId = rootEl.querySelector("#loc-vps-map-id");
+  const statusPhase = rootEl.querySelector("#loc-vps-phase");
+  const statusPos = rootEl.querySelector("#loc-vps-position");
+  const statusTime = rootEl.querySelector("#loc-vps-time");
+  const statusWebxr = rootEl.querySelector("#loc-vps-webxr");
+  const statusSignalLabel = rootEl.querySelector("#loc-vps-signal-label");
+  const signalBars = rootEl.querySelector("#loc-vps-signal");
   const placementList = rootEl.querySelector("#loc-placement-list");
   const metricJitter = rootEl.querySelector("#loc-metric-jitter");
   const metricJump = rootEl.querySelector("#loc-metric-jump");
@@ -155,13 +84,15 @@ export function bootstrapLocAr(rootEl) {
   }
 
   const tracker = new StabilityTracker();
-  /** @type {HTMLElement | null} */
-  let sceneEl = null;
+  /** @type {Awaited<ReturnType<typeof createImmersalRuntime>> | null} */
+  let runtime = null;
   /** @type {ReturnType<typeof createPlacementManager> | null} */
   let placementManager = null;
-  let lastGpsPos = null;
   let started = false;
   let starting = false;
+  let originPlaced = false;
+  let lastCameraPos = null;
+  let metricsTimer = 0;
 
   function showError(message) {
     if (errorMsg) errorMsg.textContent = message;
@@ -169,66 +100,63 @@ export function bootstrapLocAr(rootEl) {
     startBtn.textContent = "重试";
     gate.classList.remove("is-hidden");
     rootEl.classList.remove("is-loc-ar-active");
+    updateTrackingState({ phase: "error", error: message });
   }
 
   function showPlaceHint(message) {
     if (placeHint) placeHint.textContent = message;
   }
 
-  function updatePlaceButton() {
-    if (!placeBtn || !placementManager) return;
-    const count = placementManager.placementCount;
-    placeBtn.textContent = `放置 (${count}/${MAX_PLACEMENTS})`;
-    placeBtn.disabled = !placementManager.canPlace || !placementManager.origin;
-  }
-
-  function renderSignal(accuracy) {
-    if (!signalBars || !signalLabel) return;
-    const { level, label } = accuracyToSignal(accuracy);
-    signalLabel.textContent = label;
+  function renderSignal() {
+    if (!signalBars || !statusSignalLabel) return;
+    const count = trackingState.localizeCount;
+    const level = count > 5 ? 3 : count > 2 ? 2 : count > 0 ? 1 : 0;
+    const label =
+      count > 5 ? "稳定" : count > 2 ? "良好" : count > 0 ? "弱" : "未定位";
+    statusSignalLabel.textContent = label;
     signalBars.querySelectorAll(".loc-signal__bar").forEach((bar, i) => {
       bar.classList.toggle("is-active", i < level);
     });
   }
 
+  function updatePlaceButton() {
+    if (!placeBtn || !placementManager) return;
+    const count = placementManager.placementCount;
+    placeBtn.textContent = `放置 (${count}/${MAX_PLACEMENTS})`;
+    placeBtn.disabled =
+      !placementManager.canPlace ||
+      !placementManager.origin ||
+      trackingState.phase !== "localized";
+  }
+
   function renderPlacementList() {
     if (!placementList) return;
 
-    if (gpsState.lat == null || gpsState.lng == null) {
-      placementList.innerHTML = "<p class='loc-placement-list__empty'>等待 GPS…</p>";
-      return;
-    }
-
     if (!placementManager?.origin) {
       placementList.innerHTML =
-        "<p class='loc-placement-list__empty'>等待 GPS 以标记起点…</p>";
+        "<p class='loc-placement-list__empty'>等待 Immersal 定位成功…</p>";
       return;
     }
 
-    const user = { lat: gpsState.lat, lng: gpsState.lng };
-    const origin = placementManager.origin;
-    const distToOrigin = haversineDistance(user, origin);
     let html = `<div class="loc-placement-row">
       <span class="loc-placement-row__dot" style="background:#88ccff;border-radius:50%"></span>
-      <span class="loc-placement-row__name">起点球体</span>
-      <span class="loc-placement-row__meta">${formatCoord(origin.lat)}, ${formatCoord(origin.lng)} · 距你 ${formatDistance(distToOrigin)}</span>
+      <span class="loc-placement-row__name">定位锚点</span>
+      <span class="loc-placement-row__meta">地图原点 (0, 0, 0) · 立方体 + 标签</span>
     </div>`;
 
-    let prev = { lat: origin.lat, lng: origin.lng };
+    let prev = new THREE.Vector3(0, 0, 0);
     placementManager.placements.forEach((p) => {
-      const distFromOrigin = haversineDistance(
-        { lat: origin.lat, lng: origin.lng },
-        p,
-      );
-      const distFromPrev = haversineDistance(prev, p);
-      const accText =
-        p.accuracy != null ? ` · ±${p.accuracy.toFixed(1)}m` : "";
+      const distFromOrigin = p.position.distanceTo(new THREE.Vector3(0, 0, 0));
+      const distFromPrev = p.position.distanceTo(prev);
       html += `<div class="loc-placement-row">
-        <span class="loc-placement-row__dot" style="background:${p.color}"></span>
+        <span class="loc-placement-row__dot" style="background:#${p.color.toString(16).padStart(6, "0")}"></span>
         <span class="loc-placement-row__name">${p.label}</span>
-        <span class="loc-placement-row__meta">${formatCoord(p.lat)}, ${formatCoord(p.lng)}${accText}<br>距起点 ${formatDistance(distFromOrigin)} · 距上一点 ${formatDistance(distFromPrev)}</span>
+        <span class="loc-placement-row__meta">
+          (${formatCoord(p.position.x)}, ${formatCoord(p.position.y)}, ${formatCoord(p.position.z)})<br>
+          距锚点 ${formatDistance(distFromOrigin)} · 距上一点 ${formatDistance(distFromPrev)}
+        </span>
       </div>`;
-      prev = p;
+      prev = p.position.clone();
     });
 
     placementList.innerHTML = html;
@@ -236,15 +164,21 @@ export function bootstrapLocAr(rootEl) {
   }
 
   function renderStatus() {
-    if (!statusLat || !statusLng) return;
-    statusLat.textContent = formatCoord(gpsState.lat);
-    statusLng.textContent = formatCoord(gpsState.lng);
-    statusAcc.textContent =
-      gpsState.accuracy != null ? `±${gpsState.accuracy.toFixed(1)} m` : "—";
-    statusTime.textContent = gpsState.timestamp
-      ? new Date(gpsState.timestamp).toLocaleTimeString()
-      : "—";
-    renderSignal(gpsState.accuracy);
+    if (statusMapId) statusMapId.textContent = String(IMMERSAL_MAP_ID);
+    if (statusPhase) {
+      statusPhase.textContent = PHASE_LABELS[trackingState.phase] || trackingState.phase;
+    }
+    if (statusPos && trackingState.position) {
+      const { x, y, z } = trackingState.position;
+      statusPos.textContent = `${formatCoord(x)}, ${formatCoord(y)}, ${formatCoord(z)}`;
+    } else if (statusPos) {
+      statusPos.textContent = "—";
+    }
+    if (statusTime) statusTime.textContent = formatTime(trackingState.lastLocalizedAt);
+    if (statusWebxr) {
+      statusWebxr.textContent = trackingState.webxrSupported ? "支持" : "回退模式";
+    }
+    renderSignal();
     renderPlacementList();
   }
 
@@ -254,106 +188,96 @@ export function bootstrapLocAr(rootEl) {
     metricJitter.textContent =
       m.anchorScreenJitter != null ? `${m.anchorScreenJitter.toFixed(1)} px` : "—";
     metricJump.textContent =
-      m.worldPositionJump != null ? `${m.worldPositionJump.toFixed(2)} m` : "—";
+      m.poseJump != null ? `${m.poseJump.toFixed(2)} m` : "—";
     metricDrift.textContent =
       m.maxDrift != null ? `${m.maxDrift.toFixed(1)} px` : "—";
   }
 
-  const unsubGps = onGpsStateChange(() => {
+  const unsubTracking = onTrackingStateChange(() => {
     renderStatus();
     renderMetrics();
   });
 
-  function onGpsCameraUpdate(e) {
-    const { latitude, longitude } = e.detail.position;
-    const accuracy = e.detail.position.accuracy ?? gpsState.accuracy;
-    const speed = e.detail.position.speed ?? gpsState.speed ?? 0;
+  function pollTracking() {
+    if (!runtime) return;
 
-    if (lastGpsPos) {
-      const jump = haversineDistance(
-        { lat: lastGpsPos.lat, lng: lastGpsPos.lng },
-        { lat: latitude, lng: longitude },
-      );
-      tracker.onWorldPositionJump(jump);
+    const localized = runtime.isLocalized();
+    const counter = runtime.immersal.localization.counter;
+
+    if (localized) {
+      const pos = runtime.camera.position;
+      if (lastCameraPos) {
+        const jump = pos.distanceTo(lastCameraPos);
+        if (jump > 0.01) tracker.onPoseJump(jump);
+      }
+      lastCameraPos = pos.clone();
+
+      updateTrackingState({
+        phase: "localized",
+        localizeCount: counter,
+        lastLocalizedAt: Date.now(),
+        position: { x: pos.x, y: pos.y, z: pos.z },
+        error: null,
+      });
+      tracker.onTrackingUpdate(counter);
+
+      if (!originPlaced && placementManager) {
+        placementManager.setOriginAtAnchor();
+        originPlaced = true;
+        showPlaceHint("定位成功！已在定位点放置 AR 内容。");
+        renderPlacementList();
+        updatePlaceButton();
+      }
+    } else if (counter > 0) {
+      updateTrackingState({
+        phase: "localizing",
+        localizeCount: counter,
+      });
     }
-    lastGpsPos = { lat: latitude, lng: longitude };
 
-    updateGpsState({
-      lat: latitude,
-      lng: longitude,
-      accuracy,
-      speed,
-      timestamp: Date.now(),
-    });
-    tracker.onGpsUpdate(accuracy, speed);
-
-    if (placementManager && !placementManager.origin) {
-      placementManager.setOrigin(latitude, longitude);
-      showPlaceHint("起点已标记，请沿走廊走动后点击「放置」。");
-      renderPlacementList();
-      updatePlaceButton();
+    if (placementManager && runtime.camera) {
+      tracker.tick(runtime.camera, placementManager.getEntities(), 0);
+      renderMetrics();
     }
   }
-
-  function onSceneTick() {
-    if (!started || !sceneEl?.camera || !placementManager) return;
-    const cameraEl = sceneEl.querySelector("[gps-new-camera]");
-    const threeCamera = cameraEl?.getObject3D("camera");
-    if (!threeCamera || !window.THREE) return;
-    tracker.tick(threeCamera, placementManager.getEntities(), gpsState.speed ?? 0);
-    renderMetrics();
-  }
-
-  function bindGpsCamera() {
-    if (!sceneEl) return null;
-    const cameraEl = sceneEl.querySelector("[gps-new-camera]");
-    if (!cameraEl) return null;
-    cameraEl.addEventListener("gps-camera-update-position", onGpsCameraUpdate);
-    return () => {
-      cameraEl.removeEventListener("gps-camera-update-position", onGpsCameraUpdate);
-    };
-  }
-
-  let unbindGpsCamera = null;
 
   function onPlace() {
     showPlaceHint("");
     if (errorMsg) errorMsg.textContent = "";
 
-    if (gpsState.lat == null || gpsState.lng == null) {
-      showPlaceHint("尚无 GPS 数据，请稍候。");
+    if (trackingState.phase !== "localized" || !runtime) {
+      showPlaceHint("尚未完成定位，请对准已建图区域。");
       return;
     }
 
     if (!placementManager?.origin) {
-      showPlaceHint("等待起点标记完成…");
+      showPlaceHint("等待定位锚点…");
       return;
     }
 
     if (!placementManager.canPlace) {
-      showPlaceHint("已放置 4 个观测点。");
+      showPlaceHint("已放置 4 个 AR 点。");
       return;
     }
 
-    const current = { lat: gpsState.lat, lng: gpsState.lng };
+    const camPos = new THREE.Vector3();
+    runtime.camera.getWorldPosition(camPos);
+    camPos.y = 0;
+
     const lastPlaced =
       placementManager.placements.length > 0
-        ? placementManager.placements[placementManager.placements.length - 1]
-        : placementManager.origin;
+        ? placementManager.placements[placementManager.placements.length - 1].position
+        : new THREE.Vector3(0, 0, 0);
 
-    const distFromLast = haversineDistance(current, lastPlaced);
-    if (distFromLast < MIN_PLACE_DISTANCE_M) {
+    const dist = camPos.distanceTo(lastPlaced);
+    if (dist < MIN_PLACE_DISTANCE_M) {
       showPlaceHint(
-        `距上一点仅 ${formatDistance(distFromLast)}，请再走 ${MIN_PLACE_DISTANCE_M}m 以上再放置。`,
+        `距上一点仅 ${formatDistance(dist)}，请移动 ${MIN_PLACE_DISTANCE_M}m 以上再放置。`,
       );
       return;
     }
 
-    placementManager.placeAt(
-      gpsState.lat,
-      gpsState.lng,
-      gpsState.accuracy,
-    );
+    placementManager.placeAt(camPos);
     showPlaceHint(`已放置 ${placementManager.placementCount}/${MAX_PLACEMENTS}`);
     renderPlacementList();
     updatePlaceButton();
@@ -363,66 +287,65 @@ export function bootstrapLocAr(rootEl) {
     showPlaceHint("");
     if (errorMsg) errorMsg.textContent = "";
 
-    if (gpsState.lat == null || gpsState.lng == null) {
-      showPlaceHint("尚无 GPS 数据，无法重置。");
+    if (!placementManager || trackingState.phase !== "localized") {
+      showPlaceHint("定位未完成，无法重置。");
       return;
     }
 
-    if (!placementManager || !sceneEl) return;
-
-    placementManager.resetOrigin(gpsState.lat, gpsState.lng);
+    placementManager.resetAnchor();
+    originPlaced = true;
     tracker.resetSession();
-    lastGpsPos = null;
-    showPlaceHint("已重置标定，当前位置为新起点。");
+    lastCameraPos = null;
+    showPlaceHint("已重置锚点内容。");
     renderPlacementList();
     updatePlaceButton();
   }
 
   async function startExperience() {
     if (starting || started) return;
+
+    const configError = validateImmersalConfig();
+    if (configError) {
+      showBootError(configError);
+      return;
+    }
+
     starting = true;
     if (errorMsg) errorMsg.textContent = "";
     startBtn.disabled = true;
     startBtn.textContent = "加载中…";
 
     try {
-      setBootStatus("正在加载 AR 组件…");
-      await loadArLibs();
-      await waitForAframe();
-      setBootStatus("正在启动摄像头…", true);
+      setBootStatus("检测 WebXR…");
+      const webxrSupported = await checkWebXRSupport();
+      updateTrackingState({ webxrSupported, phase: "initializing" });
 
-      if (!sceneEl) {
-        sceneEl = createArScene(sceneHost);
-        placementManager = createPlacementManager(sceneEl);
-      }
+      setBootStatus("正在初始化 Immersal SDK…");
+      runtime = await createImmersalRuntime(sceneHost);
+      updateTrackingState({ phase: "loading_map" });
+
+      placementManager = createPlacementManager(runtime.scene);
 
       gate.classList.add("is-hidden");
       rootEl.classList.add("is-loc-ar-active");
 
-      await waitForSceneLoaded(sceneEl);
+      setBootStatus("正在启动定位…", true);
+      runtime.startRenderLoop();
 
-      if (
-        typeof DeviceOrientationEvent !== "undefined" &&
-        typeof DeviceOrientationEvent.requestPermission === "function"
-      ) {
-        const result = await DeviceOrientationEvent.requestPermission();
-        if (result !== "granted") {
-          throw new Error("需要允许设备方向权限以同步 AR 视角。");
-        }
-      }
-
-      if (!navigator.geolocation) {
-        throw new Error("当前浏览器不支持地理定位。");
-      }
+      metricsTimer = window.setInterval(pollTracking, 100);
 
       started = true;
-      unbindGpsCamera = bindGpsCamera() ?? null;
-      sceneEl.addEventListener("tick", onSceneTick);
+      updateTrackingState({ phase: "localizing" });
+      showPlaceHint("请缓慢扫描周围环境以完成 VPS 定位…");
       updatePlaceButton();
     } catch (err) {
       console.error("[loc-ar]", err);
       started = false;
-      showError(err.message || "启动失败，请检查权限后重试。");
+      if (runtime) {
+        await runtime.destroy();
+        runtime = null;
+      }
+      showError(err?.message || "启动失败，请检查 HTTPS、权限与 Token 后重试。");
     } finally {
       starting = false;
       if (!started) {
@@ -446,10 +369,10 @@ export function bootstrapLocAr(rootEl) {
   renderMetrics();
 
   return () => {
-    unsubGps();
-    unbindGpsCamera?.();
-    if (sceneEl) sceneEl.removeEventListener("tick", onSceneTick);
+    unsubTracking();
+    if (metricsTimer) clearInterval(metricsTimer);
     placementManager?.clear();
+    runtime?.destroy();
     started = false;
     starting = false;
   };

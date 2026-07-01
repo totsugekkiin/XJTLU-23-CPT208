@@ -1,50 +1,45 @@
+import * as THREE from "three";
+
 const STATIONARY_SPEED = 0.3;
 const JITTER_WINDOW = 60;
 
 export class StabilityTracker {
   constructor() {
     this.metrics = {
-      gpsAccuracy: null,
+      trackingQuality: null,
       anchorScreenJitter: 0,
-      worldPositionJump: 0,
+      poseJump: 0,
       maxDrift: 0,
     };
     this._screenSamples = [];
-    this._lastWorldPos = null;
     this._baselineScreen = null;
   }
 
-  onGpsUpdate(accuracy, speed) {
-    this.metrics.gpsAccuracy = accuracy;
-    if (speed != null && speed < STATIONARY_SPEED) {
-      /* keep jitter window */
-    } else {
-      this._screenSamples = [];
-      this._baselineScreen = null;
-    }
+  onTrackingUpdate(localizeCount) {
+    this.metrics.trackingQuality = localizeCount;
   }
 
-  onWorldPositionJump(jumpMeters) {
-    if (jumpMeters > this.metrics.worldPositionJump) {
-      this.metrics.worldPositionJump = jumpMeters;
+  onPoseJump(jumpMeters) {
+    if (jumpMeters > this.metrics.poseJump) {
+      this.metrics.poseJump = jumpMeters;
     }
   }
 
   /**
    * @param {THREE.Camera} camera
-   * @param {Array<{ object3D: THREE.Object3D }>} anchorEntities
+   * @param {THREE.Object3D[]} anchorObjects
    * @param {number} speed m/s
    */
-  tick(camera, anchorEntities, speed) {
-    if (!camera || !anchorEntities.length) return;
+  tick(camera, anchorObjects, speed) {
+    if (!camera || !anchorObjects.length) return;
 
-    const vec = new window.THREE.Vector3();
+    const vec = new THREE.Vector3();
     let sumX = 0;
     let sumY = 0;
     let count = 0;
 
-    anchorEntities.forEach((entity) => {
-      entity.object3D.getWorldPosition(vec);
+    anchorObjects.forEach((obj) => {
+      obj.getWorldPosition(vec);
       vec.project(camera);
       const sx = (vec.x * 0.5 + 0.5) * window.innerWidth;
       const sy = (-vec.y * 0.5 + 0.5) * window.innerHeight;
@@ -92,11 +87,10 @@ export class StabilityTracker {
   }
 
   resetSession() {
-    this.metrics.worldPositionJump = 0;
+    this.metrics.poseJump = 0;
     this.metrics.maxDrift = 0;
     this.metrics.anchorScreenJitter = 0;
     this._screenSamples = [];
     this._baselineScreen = null;
-    this._lastWorldPos = null;
   }
 }
