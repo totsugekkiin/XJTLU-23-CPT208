@@ -188,7 +188,7 @@ export function createArRenderer(cameraWrap, options = {}) {
       let step = POSE_LERP_DT_SCALE * dt;
       if (step > 1) step = 1;
       camera.position.lerp(targetPos, step);
-      camera.quaternion.copy(targetQuat);
+      camera.quaternion.slerp(targetQuat, step);
     } else {
       camera.position.lerp(targetPos, POSE_LERP);
       camera.quaternion.slerp(targetQuat, POSE_LERP);
