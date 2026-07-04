@@ -12,7 +12,7 @@ export const AR_ANCHORS = [
     id: "vast-land",
     label: "The Vast Land",
     url: "/models/the_vast_land_no_background.glb",
-    position: [0.2061, -0.0643, 0.8271],
+    position: [0.2061, -0.0643, 0.1626],
     rotation: [0, 0, 0],
     scale: [0.05, 0.05, 0.05],
   },

@@ -25,10 +25,11 @@ function prepareModelMaterials(object) {
  * Immersal 官方示例思路：模型固定在地图坐标，相机随设备 pose 移动。
  * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
  */
-export function createArRenderer(mountEl, cameraWrap) {
+export function createArRenderer(cameraWrap, options = {}) {
+  const { getCameraViewport = null } = options;
   const canvas = document.createElement("canvas");
   canvas.id = "ar-three-canvas";
-  mountEl.appendChild(canvas);
+  cameraWrap.appendChild(canvas);
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -41,7 +42,7 @@ export function createArRenderer(mountEl, cameraWrap) {
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.02, 500);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 10000);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.85));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -126,17 +127,32 @@ export function createArRenderer(mountEl, cameraWrap) {
     });
   }
 
+  function getViewportSize() {
+    const source = getCameraViewport?.();
+    if (source?.width && source?.height) {
+      return {
+        width: source.width,
+        height: source.height,
+      };
+    }
+    return {
+      width: cameraWrap.clientWidth,
+      height: cameraWrap.clientHeight,
+    };
+  }
+
   function resize() {
-    const w = cameraWrap.clientWidth;
-    const h = cameraWrap.clientHeight;
+    const { width: w, height: h } = getViewportSize();
     if (!w || !h) return;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
   }
 
   function bringCanvasToFront() {
-    mountEl.appendChild(canvas);
+    cameraWrap.appendChild(canvas);
   }
 
   /**
@@ -147,6 +163,7 @@ export function createArRenderer(mountEl, cameraWrap) {
   function updateCameraFromPose(pose, gyroQuatRaw = null, vFov = null) {
     if (!pose?.position || !pose?.rotation) return;
 
+    resize();
     hasPose = true;
     setModelsVisible(true);
 
@@ -206,6 +223,7 @@ export function createArRenderer(mountEl, cameraWrap) {
           canvasHeight: canvas.height,
           clientWidth: cameraWrap.clientWidth,
           clientHeight: cameraWrap.clientHeight,
+          viewportSize: getViewportSize(),
           devicePixelRatio: window.devicePixelRatio,
         },
       });
@@ -260,6 +278,7 @@ export function createArRenderer(mountEl, cameraWrap) {
     ready: loadPromise,
     start,
     bringCanvasToFront,
+    resize,
     updateCameraFromPose,
     renderFrame,
     getStatus,

@@ -161,6 +161,7 @@ export function bootstrapArScene(rootEl) {
   let localizeTimer = null;
   let sdkSession = null;
   let sdkFrameId = null;
+  let sdkResizeHandler = null;
   let sdkMapHandle = null;
   let localizationMode = "rest";
   let localizing = false;
@@ -351,7 +352,9 @@ export function bootstrapArScene(rootEl) {
     if (!cameraWrap) return;
 
     const { createArRenderer } = await import("./arRenderer.js");
-    arRenderer = createArRenderer(rootEl, cameraWrap);
+    arRenderer = createArRenderer(cameraWrap, {
+      getCameraViewport: () => sdkSession?.camera?.el ?? null,
+    });
     arRenderer.start();
     try {
       await arRenderer.ready;
@@ -1062,6 +1065,9 @@ export function bootstrapArScene(rootEl) {
       localizationMode = "sdk";
       rootEl.classList.add("is-sdk-camera");
       arRenderer?.bringCanvasToFront();
+      sdkResizeHandler = () => arRenderer?.resize();
+      session.addEventListener?.("resize", sdkResizeHandler);
+      arRenderer?.resize();
 
       setDebug({ status: "sdk loading map", immersal: "loading map" }, "正在下载并加载地图到设备…");
       sdkMapHandle = await session.loadMap(IMMERSAL_MAP_ID);
@@ -1265,6 +1271,9 @@ export function bootstrapArScene(rootEl) {
     if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
     if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
     if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
+    if (sdkResizeHandler) {
+      sdkSession?.removeEventListener?.("resize", sdkResizeHandler);
+    }
     arRenderer?.dispose();
     if (sdkMapHandle != null) {
       sdkSession?.freeMap(sdkMapHandle).catch((err) => {
