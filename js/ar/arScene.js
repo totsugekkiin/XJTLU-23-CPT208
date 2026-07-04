@@ -2,7 +2,7 @@ import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
-const SDK_LOCALIZE_INTERVAL_MS = 700;
+const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -169,8 +169,6 @@ export function bootstrapArScene(rootEl) {
   let hasGyro = false;
   let lastIntrinsics = { fx: 0, fy: 0, ox: 0, oy: 0 };
   let sdkFailureCount = 0;
-  let sdkLocalizePending = false;
-  let sdkLastLocalizeAt = 0;
   let sdkLastDebugAt = 0;
   let arRenderer = null;
   let lastMapPose = null;
@@ -730,44 +728,6 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
-  function feedPoseToTracker(pose, time = performance.now()) {
-    if (!sdkSession || typeof window.icvPosePut !== "function") return false;
-
-    const correctedRotation = applyImmersalPoseCorrection(pose.rotation);
-    const position = new Float32Array([pose.position.x, pose.position.y, pose.position.z]);
-    const rotation = new Float32Array([
-      correctedRotation.x,
-      correctedRotation.y,
-      correctedRotation.z,
-      correctedRotation.w,
-    ]);
-    window.icvPosePut(time, new Uint8Array(position.buffer), new Uint8Array(rotation.buffer));
-
-    sdkSession.localizeInfo.handle = pose.map ?? sdkSession.localizeInfo.handle;
-    sdkSession.localizeInfo.position.x = pose.position.x;
-    sdkSession.localizeInfo.position.y = pose.position.y;
-    sdkSession.localizeInfo.position.z = pose.position.z;
-    sdkSession.localizeInfo.rotation.set(
-      correctedRotation.x,
-      correctedRotation.y,
-      correctedRotation.z,
-      correctedRotation.w,
-    );
-    sdkSession.localizeInfo.elapsedTime = 0;
-    sdkSession.localization.counter += 1;
-
-    // #region agent log
-    agentDebugLog("post-fix", "H2", "js/ar/arScene.js:feedPoseToTracker", "Pose corrected before tracker feed", {
-      rawRotation: pose.rotation,
-      correctedRotation,
-      lastLocalizationGyro: getLastLocalizationGyro(),
-      position: pose.position,
-    });
-    // #endregion
-
-    return true;
-  }
-
   function getTrackedPoseSnapshot(now) {
     if (!sdkSession || sdkSession.localization.counter <= 0) return null;
 
@@ -782,7 +742,7 @@ export function bootstrapArScene(rootEl) {
 
     const info = sdkSession.localizeInfo;
     return {
-      mode: "sdk+proxy",
+      mode: "sdk-device",
       mapHandle: info.handle,
       position: estimatedPose
         ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
@@ -879,8 +839,8 @@ export function bootstrapArScene(rootEl) {
     const trackedPose = getTrackedPoseSnapshot(now);
     const hasPose = Boolean(trackedPose);
     setDebug({
-      status: hasPose ? "tracking (sdk+proxy)" : "sdk localizing",
-      immersal: sdkLocalizePending ? "proxy requesting" : "proxy tracking",
+      status: hasPose ? "tracking (sdk-device)" : "sdk localizing",
+      immersal: sdkSession.localization.localizing ? "device requesting" : "device tracking",
       success: sdkSession.localization.counter,
       failure: sdkFailureCount,
       latency: sdkSession.localizeInfo.elapsedTime
@@ -892,93 +852,19 @@ export function bootstrapArScene(rootEl) {
     if (hasPose) logArRendererStatus();
   }
 
-  async function runSdkProxyLocalization(reason = "auto") {
-    if (!sdkSession || sdkLocalizePending) return;
-
-    sdkLocalizePending = true;
-    const startedAt = performance.now();
-    setDebug({ status: `sdk localizing (${reason})`, immersal: "proxy requesting" });
-
-    try {
-      const localization = await requestImmersalLocalization(reason);
-      const { result, data, elapsed } = localization;
-
-      if (result?.success) {
-        markLocalizationSuccess();
-        const pose = restResultToPose(result);
-        feedPoseToTracker(pose, startedAt);
-        const tracked = getTrackedPoseSnapshot(performance.now()) ?? pose;
-        lastMapPose = poseForRenderer(tracked);
-        updateArRendererPose(tracked);
-        setDebug(
-          {
-            status: "tracking (sdk+proxy)",
-            immersal: "proxy recognized",
-            success: sdkSession.localization.counter,
-            failure: sdkFailureCount,
-            latency: `${data.elapsedMs ?? elapsed}ms`,
-            lastError: "none",
-            lastPose: getTrackedPoseSnapshot(performance.now()) ?? {
-              mode: "sdk+proxy",
-              ...pose,
-            },
-          },
-          "代理识别成功，Tracker 已续跟",
-          result,
-        );
-      } else {
-        sdkFailureCount += 1;
-        const failReason = result?.error && result.error !== "none"
-          ? result.error
-          : "场景未匹配（success=false）";
-        const trackedPose = getTrackedPoseSnapshot(performance.now());
-        setDebug(
-          {
-            status: trackedPose ? "tracking (sdk+proxy)" : "sdk not recognized",
-            immersal: trackedPose ? "proxy tracking (last pose)" : "proxy no match",
-            success: sdkSession.localization.counter,
-            failure: sdkFailureCount,
-            latency: `${data.elapsedMs ?? elapsed}ms`,
-            lastError: trackedPose ? "none" : failReason,
-            lastPose: trackedPose ?? result ?? null,
-          },
-          trackedPose ? "本次未匹配，继续沿用上一帧 Tracker pose" : "代理暂未识别",
-          { result, failReason },
-        );
-      }
-    } catch (err) {
-      sdkFailureCount += 1;
-      const trackedPose = getTrackedPoseSnapshot(performance.now());
-      setDebug(
-        {
-          status: trackedPose ? "tracking (sdk+proxy)" : "sdk localize failed",
-          immersal: trackedPose ? "proxy tracking (last pose)" : "proxy/upstream error",
-          success: sdkSession.localization.counter,
-          failure: sdkFailureCount,
-          latency: `${Math.round(performance.now() - startedAt)}ms`,
-          lastError: err?.message || String(err),
-          lastPose: trackedPose ?? debugState.lastPose,
-        },
-        trackedPose ? "代理请求失败，继续沿用上一帧 Tracker pose" : "代理识别失败",
-        err?.message || String(err),
-      );
-    } finally {
-      sdkLocalizePending = false;
-      sdkLastLocalizeAt = performance.now();
-    }
-  }
-
   function startSdkFrameLoop() {
     const tick = (now) => {
       if (!sdkSession) return;
 
-      if (!sdkLocalizePending && now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS) {
-        runSdkProxyLocalization("interval");
+      if (sdkMapHandle >= 0 && sdkSession.continuousLocalization) {
+        sdkSession.localizeDevice(now);
       }
 
-      const trackedPose = getTrackedPoseSnapshot(now);
-      if (trackedPose) {
-        updateArRendererPose(trackedPose);
+      if (sdkSession.localization.counter > 0) {
+        const trackedPose = getTrackedPoseSnapshot(now);
+        if (trackedPose) {
+          updateArRendererPose(trackedPose);
+        }
       } else if (lastMapPose) {
         updateArRendererPose(lastMapPose);
       }
@@ -988,7 +874,6 @@ export function bootstrapArScene(rootEl) {
     };
 
     sdkFrameId = requestAnimationFrame(tick);
-    runSdkProxyLocalization("start");
   }
 
   function startRestRenderLoop() {
@@ -1018,7 +903,7 @@ export function bootstrapArScene(rootEl) {
         developerToken: CLIENT_IMMERSAL_TOKEN,
         mapIds: [IMMERSAL_MAP_ID],
         continuousLocalization: true,
-        continuousInterval: SDK_LOCALIZE_INTERVAL_MS,
+        continuousInterval: SDK_DEVICE_LOCALIZE_INTERVAL_MS,
         solverType: hasGyro ? 1 : 0,
         imageDownScale: 0.25,
       });
@@ -1028,15 +913,18 @@ export function bootstrapArScene(rootEl) {
       rootEl.classList.add("is-sdk-camera");
       arRenderer?.bringCanvasToFront();
 
+      setDebug({ status: "sdk loading map", immersal: "loading map" }, "正在下载并加载地图到设备…");
+      sdkMapHandle = await session.loadMap(IMMERSAL_MAP_ID);
+
       setDebug(
         {
           status: "sdk ready",
           camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
-          immersal: "sdk+proxy tracking",
+          immersal: "device tracking",
           lastError: "none",
         },
-        "Immersal SDK 摄像头已启动，定位走 Vercel 代理 + Tracker 续跟",
-        { width: session.camera.width, height: session.camera.height },
+        "Immersal SDK 设备端连续识别已启动",
+        { width: session.camera.width, height: session.camera.height, mapHandle: sdkMapHandle },
       );
 
       startSdkFrameLoop();
@@ -1059,23 +947,14 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function checkImmersalConfig() {
-    try {
-      const response = await fetch("/api/immersal");
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(data?.message || `HTTP ${response.status}`);
-      }
-      if (!data?.hasToken) {
-        throw new Error("Vercel 未配置 VITE_IMMERSAL_TOKEN");
-      }
-      setDebug(
-        { immersal: `ready (map ${data.mapId})` },
-        "Immersal 代理可用",
-        data,
-      );
-    } catch (err) {
-      throw new Error(`Immersal 配置检查失败：${err.message || err}`);
+    if (!CLIENT_IMMERSAL_TOKEN) {
+      throw new Error("未配置 VITE_IMMERSAL_TOKEN，请在环境变量中设置 Immersal developer token。");
     }
+    setDebug(
+      { immersal: `ready (map ${IMMERSAL_MAP_ID}, on-device)` },
+      "Immersal token 已配置，优先使用设备端识别",
+      { mapId: IMMERSAL_MAP_ID, hasToken: true },
+    );
   }
 
   async function startExperience() {
@@ -1151,9 +1030,40 @@ export function bootstrapArScene(rootEl) {
     setCameraZoom(cameraZoom + ZOOM_STEP);
   });
 
-  localizeNowBtn?.addEventListener("click", () => {
+  localizeNowBtn?.addEventListener("click", async () => {
     if (sdkSession) {
-      runSdkProxyLocalization("manual");
+      setDebug({ status: "sdk localizing (manual)", immersal: "device requesting" });
+      try {
+        await sdkSession.localizeDeviceAsync();
+        markLocalizationSuccess();
+        const trackedPose = getTrackedPoseSnapshot(performance.now());
+        if (trackedPose) {
+          updateArRendererPose(trackedPose);
+        }
+        setDebug(
+          {
+            status: "tracking (sdk-device)",
+            immersal: "device recognized",
+            success: sdkSession.localization.counter,
+            lastError: "none",
+            lastPose: trackedPose ?? debugState.lastPose,
+          },
+          "手动设备端识别成功",
+          sdkSession.localizeInfo,
+        );
+      } catch (err) {
+        sdkFailureCount += 1;
+        setDebug(
+          {
+            status: "sdk not recognized",
+            immersal: "device no match",
+            failure: sdkFailureCount,
+            lastError: err?.message || String(err),
+          },
+          "手动设备端识别失败",
+          err?.message || String(err),
+        );
+      }
       return;
     }
     localizeOnce("manual");
