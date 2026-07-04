@@ -52,6 +52,15 @@ body {
   display: none;
 }
 
+#ar-three-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
 #ar-ui {
   position: absolute;
   inset: 0;
@@ -426,11 +435,16 @@ body {
   margin-top: 0.18rem;
 }
 
-#ar-back {
+#ar-back-nav {
   position: absolute;
   top: max(0.5rem, env(safe-area-inset-top));
   right: 0.5rem;
   z-index: 11;
+  display: flex;
+  gap: 0.4rem;
+}
+
+#ar-back-nav a {
   padding: 0.4rem 0.75rem;
   font-size: 0.72rem;
   font-weight: 600;

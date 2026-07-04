@@ -1,4 +1,5 @@
-const IMMERSAL_MAP_ID = 148549;
+import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
+
 const LOCALIZE_INTERVAL_MS = 2600;
 const SDK_LOCALIZE_INTERVAL_MS = 2600;
 const SDK_DEBUG_INTERVAL_MS = 250;
@@ -151,6 +152,9 @@ export function bootstrapArScene(rootEl) {
   let sdkLocalizePending = false;
   let sdkLastLocalizeAt = 0;
   let sdkLastDebugAt = 0;
+  let arRenderer = null;
+  let lastMapPose = null;
+  let restRenderFrameId = null;
 
   const debugState = {
     status: "idle",
@@ -168,6 +172,57 @@ export function bootstrapArScene(rootEl) {
     video: null,
     logs: [],
   };
+
+  function getGyroQuaternion() {
+    if (!sdkSession?.gyroData) return null;
+    const g = sdkSession.gyroData;
+    return { x: g.x, y: g.y, z: g.z, w: g.w };
+  }
+
+  function getRendererVFov() {
+    if (sdkSession && typeof sdkSession.getVFov === "function") {
+      try {
+        return sdkSession.getVFov();
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function poseForRenderer(poseLike) {
+    if (!poseLike) return null;
+    if (poseLike.position && poseLike.rotation) {
+      return {
+        position: poseLike.position,
+        rotation: poseLike.rotation,
+      };
+    }
+    return null;
+  }
+
+  function updateArRendererPose(poseLike) {
+    if (!arRenderer) return;
+    const pose = poseForRenderer(poseLike);
+    if (!pose) return;
+    lastMapPose = pose;
+    arRenderer.updateCameraFromPose(pose, getGyroQuaternion(), getRendererVFov());
+  }
+
+  async function initArRenderer() {
+    const cameraWrap = rootEl.querySelector("#ar-camera-wrap");
+    if (!cameraWrap) return;
+
+    const { createArRenderer } = await import("./arRenderer.js");
+    arRenderer = createArRenderer(cameraWrap);
+    arRenderer.start();
+    try {
+      await arRenderer.ready;
+      logDebug(`AR 模型已加载（${AR_ANCHORS?.length ?? 0} 个锚点）`);
+    } catch (err) {
+      logDebug("AR 模型加载失败", err?.message || String(err));
+    }
+  }
 
   function clampZoom(value) {
     return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
@@ -520,6 +575,9 @@ export function bootstrapArScene(rootEl) {
 
       if (result?.success) {
         debugState.success += 1;
+        const pose = restResultToPose(result);
+        lastMapPose = poseForRenderer(pose);
+        updateArRendererPose(pose);
         setDebug(
           {
             status: "localized",
@@ -527,7 +585,7 @@ export function bootstrapArScene(rootEl) {
             latency: `${data.elapsedMs ?? elapsed}ms`,
             lastError: "none",
             lastImageBytes: data.imageBytes ?? payload.imageBase64.length,
-            lastPose: restResultToPose(result),
+            lastPose: pose,
           },
           "场景识别成功",
           result,
@@ -665,12 +723,29 @@ export function bootstrapArScene(rootEl) {
         runSdkProxyLocalization("interval");
       }
 
+      const trackedPose = getTrackedPoseSnapshot(now);
+      if (trackedPose) {
+        updateArRendererPose(trackedPose);
+      } else if (lastMapPose) {
+        updateArRendererPose(lastMapPose);
+      }
+
       updateSdkDebug(now);
       sdkFrameId = requestAnimationFrame(tick);
     };
 
     sdkFrameId = requestAnimationFrame(tick);
     runSdkProxyLocalization("start");
+  }
+
+  function startRestRenderLoop() {
+    const tick = () => {
+      if (lastMapPose) {
+        updateArRendererPose(lastMapPose);
+      }
+      restRenderFrameId = requestAnimationFrame(tick);
+    };
+    restRenderFrameId = requestAnimationFrame(tick);
   }
 
   async function startImmersalSdkLocalization() {
@@ -724,6 +799,7 @@ export function bootstrapArScene(rootEl) {
     localizationMode = "rest";
     localizeOnce("start");
     localizeTimer = window.setInterval(() => localizeOnce("interval"), LOCALIZE_INTERVAL_MS);
+    startRestRenderLoop();
     setDebug({ immersal: "REST loop running" }, "Immersal REST 定时识别循环已启动");
   }
 
@@ -764,6 +840,8 @@ export function bootstrapArScene(rootEl) {
       hint?.classList.remove("is-hidden");
       debugPanel?.classList.remove("is-hidden");
       rootEl.classList.add("is-ar-active");
+
+      await initArRenderer();
 
       try {
         await startImmersalSdkLocalization();
@@ -848,6 +926,8 @@ export function bootstrapArScene(rootEl) {
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);
     if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
+    if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
+    arRenderer?.dispose();
     if (sdkMapHandle != null) {
       sdkSession?.freeMap(sdkMapHandle).catch((err) => {
         console.warn("[Immersal] freeMap failed", err);

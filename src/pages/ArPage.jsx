@@ -66,7 +66,7 @@ export function ArPage() {
         </div>
 
         <div id="ar-hint" className="is-hidden">
-          <p>对准 Map 148549 覆盖区域。右侧 Debug 面板可查看识别状态、耗时与 pose。</p>
+          <p>对准 Map 148549 覆盖区域。定位成功后叠加 AR 模型，Debug 面板可查看 pose。</p>
           <button id="ar-hint-toggle" type="button" aria-expanded="true" aria-label="最小化提示信息">
             -
           </button>
@@ -133,9 +133,12 @@ export function ArPage() {
         </div>
       </div>
 
-      <a id="ar-back" href="index.html">
-        ← 返回
-      </a>
+      <nav id="ar-back-nav">
+        <a id="ar-back" href="loc-ar-editor.html">
+          摆放工具
+        </a>
+        <a href="index.html">← 返回</a>
+      </nav>
     </div>
   );
 }

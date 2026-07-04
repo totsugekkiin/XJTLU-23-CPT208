@@ -13,6 +13,7 @@ export default defineConfig({
         map: resolve(__dirname, "map.html"),
         portfolio: resolve(__dirname, "portfolio.html"),
         locAr: resolve(__dirname, "loc-ar.html"),
+        locArEditor: resolve(__dirname, "loc-ar-editor.html"),
       },
     },
   },
