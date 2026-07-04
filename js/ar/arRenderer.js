@@ -3,6 +3,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_ANCHORS } from "./arAnchors.js";
 import { agentDebugLog } from "./agentDebugLog.js";
 
+const POSE_LERP = 0.28;
+const POSE_LERP_DT_SCALE = 0.025;
+
 function prepareModelMaterials(object) {
   object.traverse((node) => {
     if (!node.isMesh) return;
@@ -31,10 +34,10 @@ export function createArRenderer(cameraWrap, options = {}) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
     alpha: true,
-    antialias: false,
+    antialias: true,
     powerPreference: "high-performance",
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
 
@@ -57,11 +60,8 @@ export function createArRenderer(cameraWrap, options = {}) {
   let frameId = 0;
   let renderCount = 0;
   let resizeObserver = null;
-  let renderTick = null;
-  let afterRenderTick = null;
-  let lastViewportWidth = 0;
-  let lastViewportHeight = 0;
-  let lastAppliedFov = camera.fov;
+  let agentLastCameraLogAt = 0;
+  let lastPoseUpdateTime = 0;
 
   const loadPromise = (async () => {
     const loader = new GLTFLoader();
@@ -144,9 +144,6 @@ export function createArRenderer(cameraWrap, options = {}) {
   function resize() {
     const { width: w, height: h } = getViewportSize();
     if (!w || !h) return;
-    if (w === lastViewportWidth && h === lastViewportHeight) return;
-    lastViewportWidth = w;
-    lastViewportHeight = h;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
@@ -166,31 +163,71 @@ export function createArRenderer(cameraWrap, options = {}) {
   function updateCameraFromPose(pose, gyroQuatRaw = null, vFov = null) {
     if (!pose?.position || !pose?.rotation) return;
 
+    resize();
     hasPose = true;
     setModelsVisible(true);
+
+    const now = performance.now();
+    const dt = lastPoseUpdateTime ? now - lastPoseUpdateTime : 16;
+    lastPoseUpdateTime = now;
 
     targetPos.set(pose.position.x, pose.position.y, pose.position.z);
     targetQuat.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
 
+    const usesGyroBlend = Boolean(gyroQuatRaw);
     if (gyroQuatRaw) {
       gyroQuat.set(gyroQuatRaw.x, gyroQuatRaw.y, gyroQuatRaw.z, gyroQuatRaw.w);
       targetQuat.multiply(gyroQuat);
     }
 
-    camera.position.copy(targetPos);
-    camera.quaternion.copy(targetQuat);
-    firstPoseApplied = true;
+    if (!firstPoseApplied) {
+      camera.position.copy(targetPos);
+      camera.quaternion.copy(targetQuat);
+      firstPoseApplied = true;
+    } else if (usesGyroBlend) {
+      let step = POSE_LERP_DT_SCALE * dt;
+      if (step > 1) step = 1;
+      camera.position.lerp(targetPos, step);
+      camera.quaternion.slerp(targetQuat, step);
+    } else {
+      camera.position.lerp(targetPos, POSE_LERP);
+      camera.quaternion.slerp(targetQuat, POSE_LERP);
+    }
 
-    if (
-      typeof vFov === "number" &&
-      Number.isFinite(vFov) &&
-      vFov > 10 &&
-      vFov < 120 &&
-      Math.abs(vFov - lastAppliedFov) > 0.01
-    ) {
+    if (typeof vFov === "number" && Number.isFinite(vFov) && vFov > 10 && vFov < 120) {
       camera.fov = vFov;
-      lastAppliedFov = vFov;
       camera.updateProjectionMatrix();
+    }
+
+    const logNow = performance.now();
+    if (logNow - agentLastCameraLogAt > 1000) {
+      agentLastCameraLogAt = logNow;
+      // #region agent log
+      agentDebugLog("initial", "H1,H4", "js/ar/arRenderer.js:updateCameraFromPose", "Renderer camera transform after applying pose and gyro", {
+        inputPose: pose,
+        gyroQuatRaw,
+        target: {
+          position: targetPos.toArray(),
+          quaternionAfterGyro: targetQuat.toArray(),
+        },
+        camera: {
+          position: camera.position.toArray(),
+          quaternion: camera.quaternion.toArray(),
+          fov: camera.fov,
+          aspect: camera.aspect,
+          near: camera.near,
+          far: camera.far,
+        },
+        viewport: {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          clientWidth: cameraWrap.clientWidth,
+          clientHeight: cameraWrap.clientHeight,
+          viewportSize: getViewportSize(),
+          devicePixelRatio: window.devicePixelRatio,
+        },
+      });
+      // #endregion
     }
   }
 
@@ -210,32 +247,20 @@ export function createArRenderer(cameraWrap, options = {}) {
     };
   }
 
-  function setRenderTick(fn) {
-    renderTick = typeof fn === "function" ? fn : null;
-  }
-
-  function setAfterRenderTick(fn) {
-    afterRenderTick = typeof fn === "function" ? fn : null;
-  }
-
   function start() {
     bringCanvasToFront();
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(cameraWrap);
     resize();
 
-    const tick = (now) => {
-      renderTick?.(now);
+    const tick = () => {
       renderFrame();
-      afterRenderTick?.(now);
       frameId = requestAnimationFrame(tick);
     };
     frameId = requestAnimationFrame(tick);
   }
 
   function dispose() {
-    renderTick = null;
-    afterRenderTick = null;
     cancelAnimationFrame(frameId);
     resizeObserver?.disconnect();
     scene.traverse((obj) => {
@@ -255,8 +280,6 @@ export function createArRenderer(cameraWrap, options = {}) {
     bringCanvasToFront,
     resize,
     updateCameraFromPose,
-    setRenderTick,
-    setAfterRenderTick,
     renderFrame,
     getStatus,
     dispose,

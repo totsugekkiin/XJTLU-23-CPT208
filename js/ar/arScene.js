@@ -1,14 +1,11 @@
 import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
-const POSE_UPDATE_HZ = 60;
-const LOCALIZE_INTERVAL_MS = 400;
-const SDK_DEVICE_LOCALIZE_INTERVAL_MS = Math.round(1000 / POSE_UPDATE_HZ);
-const SDK_IMAGE_DOWN_SCALE = 0.125;
-const SDK_SERVER_ASSIST_INTERVAL_MS = 5000;
-const SDK_SERVER_ASSIST_STALE_MS = 4500;
+const LOCALIZE_INTERVAL_MS = 800;
+const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
+const SDK_SERVER_ASSIST_INTERVAL_MS = 800;
 const SDK_DEVICE_WATCHDOG_MS = 8000;
-const SDK_DEBUG_INTERVAL_MS = 500;
+const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -163,6 +160,7 @@ export function bootstrapArScene(rootEl) {
   let orientationHandler = null;
   let localizeTimer = null;
   let sdkSession = null;
+  let sdkFrameId = null;
   let sdkResizeHandler = null;
   let sdkMapHandle = null;
   let localizationMode = "rest";
@@ -181,14 +179,13 @@ export function bootstrapArScene(rootEl) {
   let sdkLastLocalizeCounter = 0;
   let sdkWasLocalizing = false;
   let sdkLastDebugAt = 0;
-  let sdkLastDeviceLocalizeAt = 0;
   let arRenderer = null;
   let lastMapPose = null;
   let lastSuccessfulLocalizeAt = 0;
+  let restRenderFrameId = null;
+  let agentLastRendererPoseLogAt = 0;
   let agentLastRestSubstituteLogAt = 0;
   let lastLocalizationGyro = { x: 0, y: 0, z: 0, w: 1 };
-  let cachedRendererVFov = null;
-  let lastRendererVFovCheckAt = 0;
 
   const debugState = {
     status: "idle",
@@ -283,15 +280,6 @@ export function bootstrapArScene(rootEl) {
     return null;
   }
 
-  function getRendererVFovCached(now = performance.now()) {
-    if (now - lastRendererVFovCheckAt < 250) {
-      return cachedRendererVFov;
-    }
-    lastRendererVFovCheckAt = now;
-    cachedRendererVFov = getRendererVFov();
-    return cachedRendererVFov;
-  }
-
   function getSdkCameraDebug() {
     if (!sdkSession) return null;
     return {
@@ -347,70 +335,26 @@ export function bootstrapArScene(rootEl) {
       lastMapPose = pose;
     }
     const gyro = options.skipGyro ? null : getGyroQuaternion();
-    arRenderer.updateCameraFromPose(pose, gyro, getRendererVFovCached());
-  }
-
-  function applyArPoseBeforeRender(now = performance.now()) {
-    if (!arRenderer) return;
-
-    if (localizationMode === "sdk" && sdkSession) {
-      if (sdkSession.localization.counter > 0) {
-        const trackedPose = getTrackedPoseSnapshot(now);
-        if (trackedPose) {
-          updateArRendererPose(trackedPose);
-          return;
-        }
-      }
-      if (lastMapPose) {
-        updateArRendererPose(lastMapPose);
-      }
-      return;
-    }
-
-    if (localizationMode === "rest") {
-      const pose = getRestModeRenderPose();
-      if (pose) {
-        updateArRendererPose(pose, { keepLastMapPose: true, skipGyro: true });
-      }
-    }
-  }
-
-  function runSdkLocalizationTick(now) {
-    if (!sdkSession) return;
-
-    syncSdkSolverType();
-
-    if (
-      sdkServerAssistEnabled &&
-      !sdkServerAssistPending &&
-      now - sdkLastServerAssistAt >= SDK_SERVER_ASSIST_INTERVAL_MS &&
-      (!lastSuccessfulLocalizeAt || now - lastSuccessfulLocalizeAt >= SDK_SERVER_ASSIST_STALE_MS)
-    ) {
-      runSdkServerAssist("interval");
-    } else if (
-      sdkMapHandle >= 0 &&
-      sdkSession.continuousLocalization &&
-      !sdkSession.localization.localizing &&
-      now - sdkLastDeviceLocalizeAt >= SDK_DEVICE_LOCALIZE_INTERVAL_MS
-    ) {
-      sdkLastDeviceLocalizeAt = now;
-      sdkSession.localizeDevice(now);
-    }
-  }
-
-  function attachArRenderTick(mode) {
-    if (!arRenderer) return;
-    arRenderer.setRenderTick((now) => {
-      applyArPoseBeforeRender(now);
-    });
-    if (mode === "sdk") {
-      arRenderer.setAfterRenderTick((now) => {
-        runSdkLocalizationTick(now);
-        updateSdkDebug(now);
+    const vFov = getRendererVFov();
+    const now = performance.now();
+    if (now - agentLastRendererPoseLogAt > 1000) {
+      agentLastRendererPoseLogAt = now;
+      // #region agent log
+      agentDebugLog("post-fix", "H1", "js/ar/arScene.js:updateArRendererPose", "Pose handed to AR renderer", {
+        localizationMode,
+        options,
+        pose,
+        gyro,
+        skipGyroReason: options.skipGyro ? "explicit" : localizationMode === "sdk" ? "sdk-gyro-at-render" : "none",
+        vFov,
+        hasGyro,
+        cameraZoom,
+        lastIntrinsics,
+        video: debugState.video,
       });
-      return;
+      // #endregion
     }
-    arRenderer.setAfterRenderTick(null);
+    arRenderer.updateCameraFromPose(pose, gyro, vFov);
   }
 
   async function initArRenderer() {
@@ -1002,7 +946,6 @@ export function bootstrapArScene(rootEl) {
         lastMapPose = tracked;
         updateArRendererPose(tracked);
       }
-      sdkLastDeviceLocalizeAt = 0;
       logDebug("SDK server 辅助识别成功，Tracker 已由 SDK 更新", {
         reason,
         elapsed: Math.round(performance.now() - startedAt),
@@ -1031,12 +974,47 @@ export function bootstrapArScene(rootEl) {
     }, SDK_DEVICE_WATCHDOG_MS);
   }
 
-  function attachSdkRenderLoop() {
-    attachArRenderTick("sdk");
+  function startSdkFrameLoop() {
+    const tick = (now) => {
+      if (!sdkSession) return;
+
+      syncSdkSolverType();
+
+      if (
+        sdkServerAssistEnabled &&
+        !sdkServerAssistPending &&
+        now - sdkLastServerAssistAt >= SDK_SERVER_ASSIST_INTERVAL_MS
+      ) {
+        runSdkServerAssist("interval");
+      } else if (sdkMapHandle >= 0 && sdkSession.continuousLocalization) {
+        sdkSession.localizeDevice(now);
+      }
+
+      if (sdkSession.localization.counter > 0) {
+        const trackedPose = getTrackedPoseSnapshot(now);
+        if (trackedPose) {
+          updateArRendererPose(trackedPose);
+        }
+      } else if (lastMapPose) {
+        updateArRendererPose(lastMapPose);
+      }
+
+      updateSdkDebug(now);
+      sdkFrameId = requestAnimationFrame(tick);
+    };
+
+    sdkFrameId = requestAnimationFrame(tick);
   }
 
-  function attachRestRenderLoop() {
-    attachArRenderTick("rest");
+  function startRestRenderLoop() {
+    const tick = () => {
+      const pose = getRestModeRenderPose();
+      if (pose) {
+        updateArRendererPose(pose, { keepLastMapPose: true, skipGyro: true });
+      }
+      restRenderFrameId = requestAnimationFrame(tick);
+    };
+    restRenderFrameId = requestAnimationFrame(tick);
   }
 
   async function startImmersalSdkLocalization() {
@@ -1059,7 +1037,7 @@ export function bootstrapArScene(rootEl) {
         continuousLocalization: true,
         continuousInterval: SDK_DEVICE_LOCALIZE_INTERVAL_MS,
         solverType: hasGyro ? 1 : 0,
-        imageDownScale: SDK_IMAGE_DOWN_SCALE,
+        imageDownScale: 0.25,
       });
 
       sdkSession = session;
@@ -1085,7 +1063,7 @@ export function bootstrapArScene(rootEl) {
         { width: session.camera.width, height: session.camera.height, mapHandle: sdkMapHandle },
       );
 
-      attachSdkRenderLoop();
+      startSdkFrameLoop();
       startSdkDeviceWatchdog();
     } catch (err) {
       session?.dispose?.();
@@ -1101,7 +1079,7 @@ export function bootstrapArScene(rootEl) {
     localizationMode = "rest";
     localizeOnce("start");
     localizeTimer = window.setInterval(() => localizeOnce("interval"), LOCALIZE_INTERVAL_MS);
-    attachRestRenderLoop();
+    startRestRenderLoop();
     setDebug({ immersal: "REST loop running" }, "Immersal REST 定时识别循环已启动");
   }
 
@@ -1269,6 +1247,8 @@ export function bootstrapArScene(rootEl) {
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);
     if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
+    if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
+    if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
     if (sdkResizeHandler) {
       sdkSession?.removeEventListener?.("resize", sdkResizeHandler);
     }
