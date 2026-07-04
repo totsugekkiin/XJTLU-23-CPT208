@@ -1,8 +1,8 @@
 import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
-const LOCALIZE_INTERVAL_MS = 1400;
-const SDK_LOCALIZE_INTERVAL_MS = 1400;
+const LOCALIZE_INTERVAL_MS = 800;
+const SDK_LOCALIZE_INTERVAL_MS = 700;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -297,7 +297,7 @@ export function bootstrapArScene(rootEl) {
     if (!options.keepLastMapPose) {
       lastMapPose = pose;
     }
-    const gyro = options.skipGyro || localizationMode === "sdk" ? null : getGyroQuaternion();
+    const gyro = options.skipGyro ? null : getGyroQuaternion();
     const vFov = getRendererVFov();
     const now = performance.now();
     if (now - agentLastRendererPoseLogAt > 1000) {
@@ -308,7 +308,7 @@ export function bootstrapArScene(rootEl) {
         options,
         pose,
         gyro,
-        skipGyroReason: localizationMode === "sdk" ? "sdk-tracked-full-pose" : options.skipGyro ? "explicit" : "none",
+        skipGyroReason: options.skipGyro ? "explicit" : localizationMode === "sdk" ? "sdk-gyro-at-render" : "none",
         vFov,
         hasGyro,
         cameraZoom,
@@ -964,6 +964,7 @@ export function bootstrapArScene(rootEl) {
       );
     } finally {
       sdkLocalizePending = false;
+      sdkLastLocalizeAt = performance.now();
     }
   }
 
@@ -972,7 +973,6 @@ export function bootstrapArScene(rootEl) {
       if (!sdkSession) return;
 
       if (!sdkLocalizePending && now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS) {
-        sdkLastLocalizeAt = now;
         runSdkProxyLocalization("interval");
       }
 

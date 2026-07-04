@@ -4,6 +4,7 @@ import { AR_ANCHORS } from "./arAnchors.js";
 import { agentDebugLog } from "./agentDebugLog.js";
 
 const POSE_LERP = 0.28;
+const POSE_LERP_DT_SCALE = 0.025;
 
 function prepareModelMaterials(object) {
   object.traverse((node) => {
@@ -59,6 +60,7 @@ export function createArRenderer(mountEl, cameraWrap) {
   let renderCount = 0;
   let resizeObserver = null;
   let agentLastCameraLogAt = 0;
+  let lastPoseUpdateTime = 0;
 
   const loadPromise = (async () => {
     const loader = new GLTFLoader();
@@ -148,9 +150,14 @@ export function createArRenderer(mountEl, cameraWrap) {
     hasPose = true;
     setModelsVisible(true);
 
+    const now = performance.now();
+    const dt = lastPoseUpdateTime ? now - lastPoseUpdateTime : 16;
+    lastPoseUpdateTime = now;
+
     targetPos.set(pose.position.x, pose.position.y, pose.position.z);
     targetQuat.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
 
+    const usesGyroBlend = Boolean(gyroQuatRaw);
     if (gyroQuatRaw) {
       gyroQuat.set(gyroQuatRaw.x, gyroQuatRaw.y, gyroQuatRaw.z, gyroQuatRaw.w);
       targetQuat.multiply(gyroQuat);
@@ -160,6 +167,11 @@ export function createArRenderer(mountEl, cameraWrap) {
       camera.position.copy(targetPos);
       camera.quaternion.copy(targetQuat);
       firstPoseApplied = true;
+    } else if (usesGyroBlend) {
+      let step = POSE_LERP_DT_SCALE * dt;
+      if (step > 1) step = 1;
+      camera.position.lerp(targetPos, step);
+      camera.quaternion.copy(targetQuat);
     } else {
       camera.position.lerp(targetPos, POSE_LERP);
       camera.quaternion.slerp(targetQuat, POSE_LERP);
@@ -170,9 +182,9 @@ export function createArRenderer(mountEl, cameraWrap) {
       camera.updateProjectionMatrix();
     }
 
-    const now = performance.now();
-    if (now - agentLastCameraLogAt > 1000) {
-      agentLastCameraLogAt = now;
+    const logNow = performance.now();
+    if (logNow - agentLastCameraLogAt > 1000) {
+      agentLastCameraLogAt = logNow;
       // #region agent log
       agentDebugLog("initial", "H1,H4", "js/ar/arRenderer.js:updateCameraFromPose", "Renderer camera transform after applying pose and gyro", {
         inputPose: pose,
