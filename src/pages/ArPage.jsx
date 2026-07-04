@@ -66,7 +66,7 @@ export function ArPage() {
         </div>
 
         <div id="ar-hint" className="is-hidden">
-          <p>对准 Map 148549 覆盖区域。定位成功后叠加 AR 模型，Debug 面板可查看 pose。</p>
+          <p>对准 Map 148549 覆盖区域。定位成功后叠加 AR 模型。走动时需持续识别成功，否则位置会漂移。</p>
           <button id="ar-hint-toggle" type="button" aria-expanded="true" aria-label="最小化提示信息">
             -
           </button>

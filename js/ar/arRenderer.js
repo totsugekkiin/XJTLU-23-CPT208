@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_ANCHORS } from "./arAnchors.js";
 
-const POSE_LERP = 0.22;
+const POSE_LERP = 0.28;
 
 function prepareModelMaterials(object) {
   object.traverse((node) => {
@@ -19,19 +19,9 @@ function prepareModelMaterials(object) {
   });
 }
 
-function normalizeModelScale(model, maxExtent = 8) {
-  const box = new THREE.Box3().setFromObject(model);
-  if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3());
-  const extent = Math.max(size.x, size.y, size.z);
-  if (!Number.isFinite(extent) || extent <= maxExtent) return;
-  const factor = maxExtent / extent;
-  model.scale.multiplyScalar(factor);
-}
-
 /**
- * 在摄像头画面上叠加 Three.js AR 内容。
- * 采用「固定相机 + 逆变换内容根节点」，与 Immersal Unity XR Space 思路一致。
+ * Immersal 官方示例思路：模型固定在地图坐标，相机随设备 pose 移动。
+ * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
  */
 export function createArRenderer(mountEl, cameraWrap) {
   const canvas = document.createElement("canvas");
@@ -50,22 +40,15 @@ export function createArRenderer(mountEl, cameraWrap) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(50, 1, 0.02, 500);
-  camera.position.set(0, 0, 0);
-  camera.quaternion.set(0, 0, 0, 1);
-
-  const contentRoot = new THREE.Group();
-  contentRoot.name = "ar-content-root";
-  scene.add(contentRoot);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.85));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
   keyLight.position.set(4, 8, 3);
   scene.add(keyLight);
 
-  const devicePos = new THREE.Vector3();
-  const deviceQuat = new THREE.Quaternion();
-  const invPos = new THREE.Vector3();
-  const invQuat = new THREE.Quaternion();
+  const targetPos = new THREE.Vector3();
+  const targetQuat = new THREE.Quaternion();
+  const gyroQuat = new THREE.Quaternion();
 
   let modelsReady = false;
   let hasPose = false;
@@ -89,9 +72,8 @@ export function createArRenderer(mountEl, cameraWrap) {
         model.rotation.set(rot[0], rot[1], rot[2]);
         model.scale.set(scl[0], scl[1], scl[2]);
         prepareModelMaterials(model);
-        normalizeModelScale(model);
-        model.visible = true;
-        contentRoot.add(model);
+        model.visible = false;
+        scene.add(model);
       }),
     );
     modelsReady = true;
@@ -101,6 +83,13 @@ export function createArRenderer(mountEl, cameraWrap) {
     loadError = err?.message || String(err);
     console.error("[AR] 模型加载失败", err);
   });
+
+  function setModelsVisible(visible) {
+    scene.children.forEach((child) => {
+      if (child.isLight) return;
+      child.visible = visible;
+    });
+  }
 
   function resize() {
     const w = cameraWrap.clientWidth;
@@ -112,40 +101,35 @@ export function createArRenderer(mountEl, cameraWrap) {
   }
 
   function bringCanvasToFront() {
-    if (canvas.parentElement !== mountEl) {
-      mountEl.appendChild(canvas);
-    } else {
-      mountEl.appendChild(canvas);
-    }
+    mountEl.appendChild(canvas);
   }
 
   /**
    * @param {{ position: {x,y,z}, rotation: {x,y,z,w} }} pose
-   * @param {{ x,y,z,w } | null} gyroQuat
+   * @param {{ x,y,z,w } | null} gyroQuatRaw Immersal gyroData（与官方示例一致，乘到 rotation 上）
    * @param {number | null} vFov
    */
-  function updateCameraFromPose(pose, gyroQuat = null, vFov = null) {
+  function updateCameraFromPose(pose, gyroQuatRaw = null, vFov = null) {
     if (!pose?.position || !pose?.rotation) return;
 
     hasPose = true;
-    devicePos.set(pose.position.x, pose.position.y, pose.position.z);
-    deviceQuat.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
+    setModelsVisible(true);
 
-    if (gyroQuat) {
-      const qGyro = new THREE.Quaternion(gyroQuat.x, gyroQuat.y, gyroQuat.z, gyroQuat.w);
-      deviceQuat.multiply(qGyro);
+    targetPos.set(pose.position.x, pose.position.y, pose.position.z);
+    targetQuat.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
+
+    if (gyroQuatRaw) {
+      gyroQuat.set(gyroQuatRaw.x, gyroQuatRaw.y, gyroQuatRaw.z, gyroQuatRaw.w);
+      targetQuat.multiply(gyroQuat);
     }
 
-    invQuat.copy(deviceQuat).invert();
-    invPos.copy(devicePos).applyQuaternion(invQuat).negate();
-
     if (!firstPoseApplied) {
-      contentRoot.position.copy(invPos);
-      contentRoot.quaternion.copy(invQuat);
+      camera.position.copy(targetPos);
+      camera.quaternion.copy(targetQuat);
       firstPoseApplied = true;
     } else {
-      contentRoot.position.lerp(invPos, POSE_LERP);
-      contentRoot.quaternion.slerp(invQuat, POSE_LERP);
+      camera.position.lerp(targetPos, POSE_LERP);
+      camera.quaternion.slerp(targetQuat, POSE_LERP);
     }
 
     if (typeof vFov === "number" && Number.isFinite(vFov) && vFov > 10 && vFov < 120) {
@@ -186,7 +170,7 @@ export function createArRenderer(mountEl, cameraWrap) {
   function dispose() {
     cancelAnimationFrame(frameId);
     resizeObserver?.disconnect();
-    contentRoot.traverse((obj) => {
+    scene.traverse((obj) => {
       if (obj.isMesh) {
         obj.geometry?.dispose();
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];

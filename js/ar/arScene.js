@@ -1,7 +1,7 @@
 import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
 
-const LOCALIZE_INTERVAL_MS = 2600;
-const SDK_LOCALIZE_INTERVAL_MS = 2600;
+const LOCALIZE_INTERVAL_MS = 1400;
+const SDK_LOCALIZE_INTERVAL_MS = 1400;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -154,6 +154,7 @@ export function bootstrapArScene(rootEl) {
   let sdkLastDebugAt = 0;
   let arRenderer = null;
   let lastMapPose = null;
+  let lastSuccessfulLocalizeAt = 0;
   let restRenderFrameId = null;
 
   const debugState = {
@@ -174,9 +175,13 @@ export function bootstrapArScene(rootEl) {
   };
 
   function getGyroQuaternion() {
-    if (!sdkSession?.gyroData) return null;
-    const g = sdkSession.gyroData;
-    return { x: g.x, y: g.y, z: g.z, w: g.w };
+    if (sdkSession?.gyroData) {
+      const g = sdkSession.gyroData;
+      return { x: g.x, y: g.y, z: g.z, w: g.w };
+    }
+    if (!hasGyro) return null;
+    const camRot = multiplyQuat(deviceQuaternion, AXIS_ROT);
+    return { x: camRot.x, y: camRot.y, z: camRot.z, w: camRot.w };
   }
 
   function getRendererVFov() {
@@ -201,12 +206,28 @@ export function bootstrapArScene(rootEl) {
     return null;
   }
 
-  function updateArRendererPose(poseLike) {
+  function markLocalizationSuccess() {
+    lastSuccessfulLocalizeAt = performance.now();
+  }
+
+  function getRestModeRenderPose() {
+    if (!lastMapPose) return null;
+    const cam = getCameraRotation();
+    return {
+      position: { ...lastMapPose.position },
+      rotation: { x: cam.qx, y: cam.qy, z: cam.qz, w: cam.qw },
+    };
+  }
+
+  function updateArRendererPose(poseLike, options = {}) {
     if (!arRenderer) return;
     const pose = poseForRenderer(poseLike);
     if (!pose) return;
-    lastMapPose = pose;
-    arRenderer.updateCameraFromPose(pose, getGyroQuaternion(), getRendererVFov());
+    if (!options.keepLastMapPose) {
+      lastMapPose = pose;
+    }
+    const gyro = options.skipGyro ? null : getGyroQuaternion();
+    arRenderer.updateCameraFromPose(pose, gyro, getRendererVFov());
   }
 
   async function initArRenderer() {
@@ -300,6 +321,10 @@ export function bootstrapArScene(rootEl) {
         hasGyro,
         lastIntrinsics,
         deviceQuaternion,
+        lastSuccessfulLocalizeAt,
+        msSinceLastLocalize: lastSuccessfulLocalizeAt
+          ? Math.round(performance.now() - lastSuccessfulLocalizeAt)
+          : null,
         userAgent: navigator.userAgent,
         secureContext: window.isSecureContext,
         location: window.location.href,
@@ -591,6 +616,7 @@ export function bootstrapArScene(rootEl) {
 
       if (result?.success) {
         debugState.success += 1;
+        markLocalizationSuccess();
         const pose = restResultToPose(result);
         lastMapPose = poseForRenderer(pose);
         updateArRendererPose(pose);
@@ -673,6 +699,7 @@ export function bootstrapArScene(rootEl) {
       const { result, data, elapsed } = localization;
 
       if (result?.success) {
+        markLocalizationSuccess();
         const pose = restResultToPose(result);
         feedPoseToTracker(pose, startedAt);
         const tracked = getTrackedPoseSnapshot(performance.now()) ?? pose;
@@ -761,8 +788,9 @@ export function bootstrapArScene(rootEl) {
 
   function startRestRenderLoop() {
     const tick = () => {
-      if (lastMapPose) {
-        updateArRendererPose(lastMapPose);
+      const pose = getRestModeRenderPose();
+      if (pose) {
+        updateArRendererPose(pose, { keepLastMapPose: true, skipGyro: true });
       }
       restRenderFrameId = requestAnimationFrame(tick);
     };
