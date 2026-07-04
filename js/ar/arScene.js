@@ -214,14 +214,30 @@ export function bootstrapArScene(rootEl) {
     if (!cameraWrap) return;
 
     const { createArRenderer } = await import("./arRenderer.js");
-    arRenderer = createArRenderer(cameraWrap);
+    arRenderer = createArRenderer(rootEl, cameraWrap);
     arRenderer.start();
     try {
       await arRenderer.ready;
-      logDebug(`AR 模型已加载（${AR_ANCHORS?.length ?? 0} 个锚点）`);
+      logDebug(`AR 模型已加载（${AR_ANCHORS.length} 个锚点）`);
     } catch (err) {
       logDebug("AR 模型加载失败", err?.message || String(err));
     }
+  }
+
+  function logArRendererStatus() {
+    if (!arRenderer) return;
+    const status = arRenderer.getStatus();
+    if (status.loadError) {
+      setDebug({ lastError: `AR 模型: ${status.loadError}` });
+      return;
+    }
+    if (status.modelsReady && status.hasPose && status.renderCount > 0) return;
+    const parts = [
+      status.modelsReady ? "模型就绪" : "模型加载中",
+      status.hasPose ? "有 pose" : "等待 pose",
+      `已渲染 ${status.renderCount} 帧`,
+    ];
+    logDebug(`AR 渲染：${parts.join(" · ")}`, status);
   }
 
   function clampZoom(value) {
@@ -578,6 +594,7 @@ export function bootstrapArScene(rootEl) {
         const pose = restResultToPose(result);
         lastMapPose = poseForRenderer(pose);
         updateArRendererPose(pose);
+        logArRendererStatus();
         setDebug(
           {
             status: "localized",
@@ -641,6 +658,7 @@ export function bootstrapArScene(rootEl) {
       lastError: hasPose ? "none" : debugState.lastError,
       lastPose: trackedPose ?? debugState.lastPose,
     });
+    if (hasPose) logArRendererStatus();
   }
 
   async function runSdkProxyLocalization(reason = "auto") {
@@ -657,6 +675,9 @@ export function bootstrapArScene(rootEl) {
       if (result?.success) {
         const pose = restResultToPose(result);
         feedPoseToTracker(pose, startedAt);
+        const tracked = getTrackedPoseSnapshot(performance.now()) ?? pose;
+        lastMapPose = poseForRenderer(tracked);
+        updateArRendererPose(tracked);
         setDebug(
           {
             status: "tracking (sdk+proxy)",
@@ -772,6 +793,7 @@ export function bootstrapArScene(rootEl) {
       sdkSession = session;
       localizationMode = "sdk";
       rootEl.classList.add("is-sdk-camera");
+      arRenderer?.bringCanvasToFront();
 
       setDebug(
         {
