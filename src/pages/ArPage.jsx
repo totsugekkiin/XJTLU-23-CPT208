@@ -85,6 +85,9 @@ export function ArPage() {
           <div className="ar-debug__inner">
             <div className="ar-debug__header">
               <span>Immersal Debug</span>
+              <button id="ar-copy-debug" type="button">
+                复制 debug
+              </button>
             </div>
           <div id="ar-debug-grid" className="ar-debug__grid">
             <div className="ar-debug__item">
@@ -124,9 +127,6 @@ export function ArPage() {
           <div className="ar-debug__actions">
             <button id="ar-localize-now" type="button">
               手动识别一次
-            </button>
-            <button id="ar-copy-debug" type="button">
-              复制 debug
             </button>
           </div>
           <ol id="ar-debug-log" className="ar-debug__log" />

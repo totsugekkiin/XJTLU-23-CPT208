@@ -339,19 +339,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  overflow: hidden;
-}
-
-#ar-debug.is-collapsed .ar-debug__inner {
-  display: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ar-debug__header {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #f6cd45;
+}
+
+.ar-debug__header #ar-copy-debug {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.58rem;
+}
+
+#ar-debug.is-collapsed .ar-debug__inner {
+  display: none;
 }
 
 #ar-localize-now,
@@ -414,8 +426,7 @@ body {
   gap: 0.4rem;
 }
 
-#ar-localize-now,
-#ar-copy-debug {
+#ar-localize-now {
   flex: 1;
   padding: 0.35rem 0.45rem;
 }
