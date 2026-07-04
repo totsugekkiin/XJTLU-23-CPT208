@@ -176,6 +176,7 @@ export function bootstrapArScene(rootEl) {
   let sdkRestAssistEnabled = false;
   let sdkDeviceWatchdogTimer = null;
   let sdkLastLocalizeCounter = 0;
+  let sdkWasLocalizing = false;
   let sdkLastDebugAt = 0;
   let arRenderer = null;
   let lastMapPose = null;
@@ -887,16 +888,34 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function updateSdkDebug(now) {
-    if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
-    sdkLastDebugAt = now;
+  function trackSdkLocalizeAttempts() {
+    if (!sdkSession) return;
 
     const counter = sdkSession.localization.counter;
-    if (counter > sdkLastLocalizeCounter) {
+    const isLocalizing = sdkSession.localization.localizing;
+
+    if (sdkWasLocalizing && !isLocalizing) {
+      if (counter > sdkLastLocalizeCounter) {
+        sdkLastLocalizeCounter = counter;
+        markLocalizationSuccess();
+      } else {
+        sdkFailureCount += 1;
+      }
+    } else if (counter > sdkLastLocalizeCounter) {
       sdkLastLocalizeCounter = counter;
       markLocalizationSuccess();
     }
 
+    sdkWasLocalizing = isLocalizing;
+  }
+
+  function updateSdkDebug(now) {
+    if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
+    sdkLastDebugAt = now;
+
+    trackSdkLocalizeAttempts();
+
+    const counter = sdkSession.localization.counter;
     const trackedPose = getTrackedPoseSnapshot(now);
     const hasPose = Boolean(trackedPose);
     const immersalLabel = sdkRestAssistEnabled
@@ -952,6 +971,8 @@ export function bootstrapArScene(rootEl) {
       logDebug("REST 辅助识别失败", err?.message || String(err));
     } finally {
       sdkRestAssistPending = false;
+      sdkLastDebugAt = 0;
+      updateSdkDebug(performance.now());
     }
   }
 
@@ -981,7 +1002,6 @@ export function bootstrapArScene(rootEl) {
 
       if (
         sdkRestAssistEnabled &&
-        sdkSession.localization.counter <= 0 &&
         !sdkRestAssistPending &&
         now - sdkLastRestAssistAt >= SDK_REST_ASSIST_INTERVAL_MS
       ) {
