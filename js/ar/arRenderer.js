@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_ANCHORS } from "./arAnchors.js";
+import { agentDebugLog } from "./agentDebugLog.js";
 
 const POSE_LERP = 0.28;
 
@@ -57,6 +58,7 @@ export function createArRenderer(mountEl, cameraWrap) {
   let frameId = 0;
   let renderCount = 0;
   let resizeObserver = null;
+  let agentLastCameraLogAt = 0;
 
   const loadPromise = (async () => {
     const loader = new GLTFLoader();
@@ -74,6 +76,37 @@ export function createArRenderer(mountEl, cameraWrap) {
         prepareModelMaterials(model);
         model.visible = false;
         scene.add(model);
+        model.updateMatrixWorld(true);
+        const worldPosition = new THREE.Vector3();
+        const worldQuaternion = new THREE.Quaternion();
+        const worldScale = new THREE.Vector3();
+        model.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+        const worldEuler = new THREE.Euler().setFromQuaternion(worldQuaternion, "XYZ");
+        const worldBox = new THREE.Box3().setFromObject(model);
+        const worldBoxSize = worldBox.getSize(new THREE.Vector3());
+        // #region agent log
+        agentDebugLog("initial", "H3,H5", "js/ar/arRenderer.js:modelLoad", "Anchor model loaded with renderer world transform", {
+          anchor: {
+            id: anchor.id,
+            position: pos,
+            rotation: rot,
+            scale: scl,
+          },
+          local: {
+            position: model.position.toArray(),
+            rotation: [model.rotation.x, model.rotation.y, model.rotation.z],
+            quaternion: model.quaternion.toArray(),
+            scale: model.scale.toArray(),
+          },
+          world: {
+            position: worldPosition.toArray(),
+            quaternion: worldQuaternion.toArray(),
+            euler: [worldEuler.x, worldEuler.y, worldEuler.z],
+            scale: worldScale.toArray(),
+            boxSize: worldBoxSize.toArray(),
+          },
+        });
+        // #endregion
       }),
     );
     modelsReady = true;
@@ -135,6 +168,36 @@ export function createArRenderer(mountEl, cameraWrap) {
     if (typeof vFov === "number" && Number.isFinite(vFov) && vFov > 10 && vFov < 120) {
       camera.fov = vFov;
       camera.updateProjectionMatrix();
+    }
+
+    const now = performance.now();
+    if (now - agentLastCameraLogAt > 1000) {
+      agentLastCameraLogAt = now;
+      // #region agent log
+      agentDebugLog("initial", "H1,H4", "js/ar/arRenderer.js:updateCameraFromPose", "Renderer camera transform after applying pose and gyro", {
+        inputPose: pose,
+        gyroQuatRaw,
+        target: {
+          position: targetPos.toArray(),
+          quaternionAfterGyro: targetQuat.toArray(),
+        },
+        camera: {
+          position: camera.position.toArray(),
+          quaternion: camera.quaternion.toArray(),
+          fov: camera.fov,
+          aspect: camera.aspect,
+          near: camera.near,
+          far: camera.far,
+        },
+        viewport: {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          clientWidth: cameraWrap.clientWidth,
+          clientHeight: cameraWrap.clientHeight,
+          devicePixelRatio: window.devicePixelRatio,
+        },
+      });
+      // #endregion
     }
   }
 

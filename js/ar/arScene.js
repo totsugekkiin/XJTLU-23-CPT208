@@ -1,4 +1,5 @@
 import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
+import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
 const LOCALIZE_INTERVAL_MS = 1400;
 const SDK_LOCALIZE_INTERVAL_MS = 1400;
@@ -86,20 +87,35 @@ function quatFromRotationMatrix(matrix) {
 }
 
 function restResultToPose(result) {
-  return {
+  const rotationMatrix = [
+    [result.r00, result.r01, result.r02],
+    [result.r10, result.r11, result.r12],
+    [result.r20, result.r21, result.r22],
+  ];
+  const rotation = quatFromRotationMatrix(rotationMatrix);
+  const pose = {
     map: result.map,
     position: { x: result.px, y: result.py, z: result.pz },
-    rotationMatrix: [
-      [result.r00, result.r01, result.r02],
-      [result.r10, result.r11, result.r12],
-      [result.r20, result.r21, result.r22],
-    ],
-    rotation: quatFromRotationMatrix([
-      [result.r00, result.r01, result.r02],
-      [result.r10, result.r11, result.r12],
-      [result.r20, result.r21, result.r22],
-    ]),
+    rotationMatrix,
+    rotation,
   };
+
+  // #region agent log
+  agentDebugLog("initial", "H2,H5", "js/ar/arScene.js:restResultToPose", "Immersal REST result converted to renderer pose", {
+    map: pose.map,
+    position: pose.position,
+    rotationMatrix,
+    rotation,
+    anchors: AR_ANCHORS.map((anchor) => ({
+      id: anchor.id,
+      position: anchor.position,
+      rotation: anchor.rotation,
+      scale: anchor.scale,
+    })),
+  });
+  // #endregion
+
+  return pose;
 }
 
 const AXIS_ROT = quatFromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI);
@@ -156,6 +172,8 @@ export function bootstrapArScene(rootEl) {
   let lastMapPose = null;
   let lastSuccessfulLocalizeAt = 0;
   let restRenderFrameId = null;
+  let agentLastRendererPoseLogAt = 0;
+  let agentLastRestSubstituteLogAt = 0;
 
   const debugState = {
     status: "idle",
@@ -213,6 +231,19 @@ export function bootstrapArScene(rootEl) {
   function getRestModeRenderPose() {
     if (!lastMapPose) return null;
     const cam = getCameraRotation();
+    const now = performance.now();
+    if (now - agentLastRestSubstituteLogAt > 1000) {
+      agentLastRestSubstituteLogAt = now;
+      // #region agent log
+      agentDebugLog("initial", "H1", "js/ar/arScene.js:getRestModeRenderPose", "REST render loop replaces localized rotation with device camera rotation", {
+        localizationMode,
+        hasGyro,
+        lastMapPose,
+        cameraRotation: cam,
+        deviceQuaternion,
+      });
+      // #endregion
+    }
     return {
       position: { ...lastMapPose.position },
       rotation: { x: cam.qx, y: cam.qy, z: cam.qz, w: cam.qw },
@@ -227,7 +258,25 @@ export function bootstrapArScene(rootEl) {
       lastMapPose = pose;
     }
     const gyro = options.skipGyro ? null : getGyroQuaternion();
-    arRenderer.updateCameraFromPose(pose, gyro, getRendererVFov());
+    const vFov = getRendererVFov();
+    const now = performance.now();
+    if (now - agentLastRendererPoseLogAt > 1000) {
+      agentLastRendererPoseLogAt = now;
+      // #region agent log
+      agentDebugLog("initial", "H1,H2,H4,H5", "js/ar/arScene.js:updateArRendererPose", "Pose handed to AR renderer", {
+        localizationMode,
+        options,
+        pose,
+        gyro,
+        vFov,
+        hasGyro,
+        cameraZoom,
+        lastIntrinsics,
+        video: debugState.video,
+      });
+      // #endregion
+    }
+    arRenderer.updateCameraFromPose(pose, gyro, vFov);
   }
 
   async function initArRenderer() {
@@ -328,6 +377,7 @@ export function bootstrapArScene(rootEl) {
         userAgent: navigator.userAgent,
         secureContext: window.isSecureContext,
         location: window.location.href,
+        agentLogs: getAgentDebugLogs(),
       },
       null,
       2,
