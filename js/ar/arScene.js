@@ -384,6 +384,94 @@ export function bootstrapArScene(rootEl) {
     );
   }
 
+  function showDebugExportModal(text) {
+    let modal = rootEl.querySelector("#ar-debug-export");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "ar-debug-export";
+      modal.innerHTML = `
+        <div class="ar-debug-export__backdrop"></div>
+        <div class="ar-debug-export__panel" role="dialog" aria-modal="true" aria-label="Debug 导出">
+          <div class="ar-debug-export__header">
+            <strong>Debug 内容</strong>
+            <button type="button" id="ar-debug-export-close">关闭</button>
+          </div>
+          <p class="ar-debug-export__hint">自动复制失败。请长按下方文本框，选择“全选”后复制，再发给我。</p>
+          <textarea id="ar-debug-export-text" readonly></textarea>
+        </div>
+      `;
+      rootEl.appendChild(modal);
+      modal.querySelector(".ar-debug-export__backdrop")?.addEventListener("click", () => {
+        modal.classList.add("is-hidden");
+      });
+      modal.querySelector("#ar-debug-export-close")?.addEventListener("click", () => {
+        modal.classList.add("is-hidden");
+      });
+    }
+
+    const textarea = modal.querySelector("#ar-debug-export-text");
+    if (textarea) {
+      textarea.value = text;
+      textarea.focus();
+      textarea.select();
+    }
+    modal.classList.remove("is-hidden");
+  }
+
+  async function copyTextWithFallback(text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return "clipboard";
+      } catch {
+        // fall through
+      }
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "0";
+    textarea.style.width = "1px";
+    textarea.style.height = "1px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    document.body.removeChild(textarea);
+    if (copied) return "execCommand";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "AR Debug", text });
+        return "share";
+      } catch (err) {
+        if (err?.name === "AbortError") return "share-cancelled";
+      }
+    }
+
+    showDebugExportModal(text);
+    return "modal";
+  }
+
+  function setCopyDebugButtonLabel(label, resetMs = 1800) {
+    if (!copyDebugBtn) return;
+    copyDebugBtn.textContent = label;
+    window.setTimeout(() => {
+      copyDebugBtn.textContent = "复制 debug";
+    }, resetMs);
+  }
+
   function showError(message) {
     errorMsg.textContent = message;
     startBtn.disabled = false;
@@ -1006,17 +1094,15 @@ export function bootstrapArScene(rootEl) {
 
   copyDebugBtn?.addEventListener("click", async () => {
     const text = getDebugSnapshot();
-    try {
-      await navigator.clipboard.writeText(text);
-      copyDebugBtn.textContent = "已复制";
-      setTimeout(() => {
-        copyDebugBtn.textContent = "复制 debug";
-      }, 1500);
-    } catch {
-      copyDebugBtn.textContent = "复制失败";
-      setTimeout(() => {
-        copyDebugBtn.textContent = "复制 debug";
-      }, 1500);
+    const result = await copyTextWithFallback(text);
+    if (result === "clipboard" || result === "execCommand") {
+      setCopyDebugButtonLabel("已复制");
+    } else if (result === "share") {
+      setCopyDebugButtonLabel("已分享");
+    } else if (result === "share-cancelled") {
+      setCopyDebugButtonLabel("已取消");
+    } else {
+      setCopyDebugButtonLabel("请手动复制", 2500);
     }
   });
 
