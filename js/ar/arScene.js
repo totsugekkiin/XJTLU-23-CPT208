@@ -1,6 +1,6 @@
 const IMMERSAL_MAP_ID = 148549;
 const LOCALIZE_INTERVAL_MS = 2600;
-const SDK_LOCALIZE_INTERVAL_MS = 1500;
+const SDK_LOCALIZE_INTERVAL_MS = 2600;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -45,6 +45,60 @@ function deviceOrientationToQuaternion(alpha, beta, gamma, screenAngle) {
   const qDevice = quatFromEuler(beta, alpha, -gamma);
   const qTilt = multiplyQuat(qDevice, qPortrait);
   return multiplyQuat(qScreen, qTilt);
+}
+
+function quatFromRotationMatrix(matrix) {
+  const m = matrix;
+  let w;
+  let x;
+  let y;
+  let z;
+  const trace = m[0][0] + m[1][1] + m[2][2];
+
+  if (trace > 0) {
+    const s = Math.sqrt(1 + trace) * 2;
+    w = 0.25 * s;
+    x = (m[2][1] - m[1][2]) / s;
+    y = (m[0][2] - m[2][0]) / s;
+    z = (m[1][0] - m[0][1]) / s;
+  } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
+    const s = Math.sqrt(1 + m[0][0] - m[1][1] - m[2][2]) * 2;
+    w = (m[2][1] - m[1][2]) / s;
+    x = 0.25 * s;
+    y = (m[0][1] + m[1][0]) / s;
+    z = (m[0][2] + m[2][0]) / s;
+  } else if (m[1][1] > m[2][2]) {
+    const s = Math.sqrt(1 + m[1][1] - m[0][0] - m[2][2]) * 2;
+    w = (m[0][2] - m[2][0]) / s;
+    x = (m[0][1] + m[1][0]) / s;
+    y = 0.25 * s;
+    z = (m[1][2] + m[2][1]) / s;
+  } else {
+    const s = Math.sqrt(1 + m[2][2] - m[0][0] - m[1][1]) * 2;
+    w = (m[1][0] - m[0][1]) / s;
+    x = (m[0][2] + m[2][0]) / s;
+    y = (m[1][2] + m[2][1]) / s;
+    z = 0.25 * s;
+  }
+
+  return { x, y, z, w };
+}
+
+function restResultToPose(result) {
+  return {
+    map: result.map,
+    position: { x: result.px, y: result.py, z: result.pz },
+    rotationMatrix: [
+      [result.r00, result.r01, result.r02],
+      [result.r10, result.r11, result.r12],
+      [result.r20, result.r21, result.r22],
+    ],
+    rotation: quatFromRotationMatrix([
+      [result.r00, result.r01, result.r02],
+      [result.r10, result.r11, result.r12],
+      [result.r20, result.r21, result.r22],
+    ]),
+  };
 }
 
 const AXIS_ROT = quatFromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI);
@@ -316,12 +370,16 @@ export function bootstrapArScene(rootEl) {
     return captureCanvas;
   }
 
-  function captureFrameDataUrl() {
-    if (!video.videoWidth || !video.videoHeight) {
+  function getActiveCameraVideo() {
+    return sdkSession?.camera?.el ?? video;
+  }
+
+  function captureFrameDataUrl(sourceVideo = getActiveCameraVideo()) {
+    if (!sourceVideo?.videoWidth || !sourceVideo?.videoHeight) {
       throw new Error("摄像头视频尚未产生有效帧");
     }
 
-    const ratio = video.videoHeight / video.videoWidth;
+    const ratio = sourceVideo.videoHeight / sourceVideo.videoWidth;
     const width = CAPTURE_WIDTH;
     const height = Math.max(1, Math.round(width * ratio));
     const target = getCaptureCanvas();
@@ -330,17 +388,17 @@ export function bootstrapArScene(rootEl) {
 
     let srcX = 0;
     let srcY = 0;
-    let srcWidth = video.videoWidth;
-    let srcHeight = video.videoHeight;
+    let srcWidth = sourceVideo.videoWidth;
+    let srcHeight = sourceVideo.videoHeight;
 
     if (cameraZoom > 1) {
-      srcWidth = video.videoWidth / cameraZoom;
-      srcHeight = video.videoHeight / cameraZoom;
-      srcX = (video.videoWidth - srcWidth) / 2;
-      srcY = (video.videoHeight - srcHeight) / 2;
+      srcWidth = sourceVideo.videoWidth / cameraZoom;
+      srcHeight = sourceVideo.videoHeight / cameraZoom;
+      srcX = (sourceVideo.videoWidth - srcWidth) / 2;
+      srcY = (sourceVideo.videoHeight - srcHeight) / 2;
     }
 
-    captureCtx.drawImage(video, srcX, srcY, srcWidth, srcHeight, 0, 0, width, height);
+    captureCtx.drawImage(sourceVideo, srcX, srcY, srcWidth, srcHeight, 0, 0, width, height);
     return {
       imageBase64: target.toDataURL("image/png"),
       width,
@@ -370,6 +428,85 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
+  async function requestImmersalLocalization(reason = "auto") {
+    const capture = captureFrameDataUrl();
+    const payload = getLocalizationPayload(capture);
+    const startedAt = performance.now();
+    const response = await fetch("/api/immersal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => null);
+    const elapsed = Math.round(performance.now() - startedAt);
+
+    if (!response.ok) {
+      const message = data?.message || data?.upstream || `HTTP ${response.status}`;
+      throw new Error(typeof message === "string" ? message : JSON.stringify(message));
+    }
+
+    return {
+      elapsed,
+      payload,
+      data,
+      result: data?.result,
+      reason,
+    };
+  }
+
+  function feedPoseToTracker(pose, time = performance.now()) {
+    if (!sdkSession || typeof window.icvPosePut !== "function") return false;
+
+    const position = new Float32Array([pose.position.x, pose.position.y, pose.position.z]);
+    const rotation = new Float32Array([pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w]);
+    window.icvPosePut(time, new Uint8Array(position.buffer), new Uint8Array(rotation.buffer));
+
+    sdkSession.localizeInfo.handle = pose.map ?? sdkSession.localizeInfo.handle;
+    sdkSession.localizeInfo.position.x = pose.position.x;
+    sdkSession.localizeInfo.position.y = pose.position.y;
+    sdkSession.localizeInfo.position.z = pose.position.z;
+    sdkSession.localizeInfo.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
+    sdkSession.localizeInfo.elapsedTime = 0;
+    sdkSession.localization.counter += 1;
+    return true;
+  }
+
+  function getTrackedPoseSnapshot(now) {
+    if (!sdkSession || sdkSession.localization.counter <= 0) return null;
+
+    let estimatedPose = null;
+    if (typeof window.icvPoseGet === "function") {
+      try {
+        estimatedPose = sdkSession.getEstimatedPose(now);
+      } catch (err) {
+        console.warn("[Immersal] Tracker pose read failed", err);
+      }
+    }
+
+    const info = sdkSession.localizeInfo;
+    return {
+      mode: "sdk+proxy",
+      mapHandle: info.handle,
+      position: estimatedPose
+        ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
+        : { ...info.position },
+      rotation: estimatedPose
+        ? {
+            x: estimatedPose.rotation[0],
+            y: estimatedPose.rotation[1],
+            z: estimatedPose.rotation[2],
+            w: estimatedPose.rotation[3],
+          }
+        : {
+            x: info.rotation.x,
+            y: info.rotation.y,
+            z: info.rotation.z,
+            w: info.rotation.w,
+          },
+      estimated: Boolean(estimatedPose),
+    };
+  }
+
   async function localizeOnce(reason = "auto") {
     if (localizing) return;
 
@@ -378,35 +515,10 @@ export function bootstrapArScene(rootEl) {
     setDebug({ status: `localizing (${reason})`, immersal: "requesting" });
 
     try {
-      const capture = captureFrameDataUrl();
-      const payload = getLocalizationPayload(capture);
-      const response = await fetch("/api/immersal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json().catch(() => null);
-      const elapsed = Math.round(performance.now() - startedAt);
+      const localization = await requestImmersalLocalization(reason);
+      const { result, data, elapsed, payload } = localization;
 
-      if (!response.ok) {
-        const message = data?.message || data?.upstream || `HTTP ${response.status}`;
-        debugState.failure += 1;
-        setDebug(
-          {
-            status: "localize failed",
-            immersal: "proxy/upstream error",
-            latency: `${elapsed}ms`,
-            lastError: typeof message === "string" ? message : JSON.stringify(message),
-          },
-          "Immersal 请求失败",
-          data,
-        );
-        return;
-      }
-
-      const result = data?.result;
-      const success = Boolean(result?.success);
-      if (success) {
+      if (result?.success) {
         debugState.success += 1;
         setDebug(
           {
@@ -415,15 +527,7 @@ export function bootstrapArScene(rootEl) {
             latency: `${data.elapsedMs ?? elapsed}ms`,
             lastError: "none",
             lastImageBytes: data.imageBytes ?? payload.imageBase64.length,
-            lastPose: {
-              map: result.map,
-              position: { x: result.px, y: result.py, z: result.pz },
-              rotationMatrix: [
-                [result.r00, result.r01, result.r02],
-                [result.r10, result.r11, result.r12],
-                [result.r20, result.r21, result.r22],
-              ],
-            },
+            lastPose: restResultToPose(result),
           },
           "场景识别成功",
           result,
@@ -462,102 +566,90 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function getSdkPoseSnapshot(info, estimatedPose = null) {
-    const position = estimatedPose?.position
-      ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
-      : { ...info.position };
-    const rotationSource = estimatedPose?.rotation
-      ? {
-          x: estimatedPose.rotation[0],
-          y: estimatedPose.rotation[1],
-          z: estimatedPose.rotation[2],
-          w: estimatedPose.rotation[3],
-        }
-      : info.rotation;
-
-    return {
-      mode: "sdk",
-      mapHandle: info.handle,
-      position,
-      rotation: {
-        x: rotationSource.x,
-        y: rotationSource.y,
-        z: rotationSource.z,
-        w: rotationSource.w,
-      },
-      wgs84: info.wgs84 ? { ...info.wgs84 } : undefined,
-      estimated: Boolean(estimatedPose),
-    };
-  }
-
   function updateSdkDebug(now) {
     if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
     sdkLastDebugAt = now;
 
-    let estimatedPose = null;
-    if (sdkSession.localization.counter > 0 && typeof window.icvPoseGet === "function") {
-      try {
-        estimatedPose = sdkSession.getEstimatedPose(now);
-      } catch (err) {
-        console.warn("[Immersal] SDK estimated pose failed", err);
-      }
-    }
-
-    const info = sdkSession.localizeInfo;
-    const hasPose = sdkSession.localization.counter > 0 && info.handle >= 0;
+    const trackedPose = getTrackedPoseSnapshot(now);
+    const hasPose = Boolean(trackedPose);
     setDebug({
-      status: hasPose ? "tracking (sdk)" : "sdk localizing",
-      immersal: sdkSession.localization.localizing ? "sdk requesting" : "sdk tracking",
+      status: hasPose ? "tracking (sdk+proxy)" : "sdk localizing",
+      immersal: sdkLocalizePending ? "proxy requesting" : "proxy tracking",
       success: sdkSession.localization.counter,
       failure: sdkFailureCount,
-      latency: info.elapsedTime ? `${Math.round(info.elapsedTime)}ms` : "-",
-      lastError: hasPose ? "none" : "waiting for SDK server match",
-      lastPose: hasPose ? getSdkPoseSnapshot(info, estimatedPose) : debugState.lastPose,
+      latency: sdkSession.localizeInfo.elapsedTime
+        ? `${Math.round(sdkSession.localizeInfo.elapsedTime)}ms`
+        : debugState.latency,
+      lastError: hasPose ? "none" : debugState.lastError,
+      lastPose: trackedPose ?? debugState.lastPose,
     });
   }
 
-  async function runSdkServerLocalization(reason = "auto") {
-    if (!sdkSession || sdkLocalizePending || sdkSession.localization.localizing) return;
+  async function runSdkProxyLocalization(reason = "auto") {
+    if (!sdkSession || sdkLocalizePending) return;
 
     sdkLocalizePending = true;
     const startedAt = performance.now();
-    const prevCounter = sdkSession.localization.counter;
-    setDebug({ status: `sdk localizing (${reason})`, immersal: "sdk server requesting" });
+    setDebug({ status: `sdk localizing (${reason})`, immersal: "proxy requesting" });
 
     try {
-      const info = await sdkSession.localizeServerAsync();
-      const elapsed = Math.round(performance.now() - startedAt);
-      setDebug(
-        {
-          status: "tracking (sdk)",
-          immersal: "sdk server recognized",
-          success: sdkSession.localization.counter,
-          failure: sdkFailureCount,
-          latency: `${info.elapsedTime ? Math.round(info.elapsedTime) : elapsed}ms`,
-          lastError: "none",
-          lastPose: getSdkPoseSnapshot(info),
-        },
-        "SDK 服务端识别成功",
-        info,
-      );
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startedAt);
-      const recognizedSinceStart = sdkSession.localization.counter > prevCounter;
-      if (!recognizedSinceStart) {
+      const localization = await requestImmersalLocalization(reason);
+      const { result, data, elapsed } = localization;
+
+      if (result?.success) {
+        const pose = restResultToPose(result);
+        feedPoseToTracker(pose, startedAt);
+        setDebug(
+          {
+            status: "tracking (sdk+proxy)",
+            immersal: "proxy recognized",
+            success: sdkSession.localization.counter,
+            failure: sdkFailureCount,
+            latency: `${data.elapsedMs ?? elapsed}ms`,
+            lastError: "none",
+            lastPose: getTrackedPoseSnapshot(performance.now()) ?? {
+              mode: "sdk+proxy",
+              ...pose,
+            },
+          },
+          "代理识别成功，Tracker 已续跟",
+          result,
+        );
+      } else {
         sdkFailureCount += 1;
+        const failReason = result?.error && result.error !== "none"
+          ? result.error
+          : "场景未匹配（success=false）";
+        const trackedPose = getTrackedPoseSnapshot(performance.now());
+        setDebug(
+          {
+            status: trackedPose ? "tracking (sdk+proxy)" : "sdk not recognized",
+            immersal: trackedPose ? "proxy tracking (last pose)" : "proxy no match",
+            success: sdkSession.localization.counter,
+            failure: sdkFailureCount,
+            latency: `${data.elapsedMs ?? elapsed}ms`,
+            lastError: trackedPose ? "none" : failReason,
+            lastPose: trackedPose ?? result ?? null,
+          },
+          trackedPose ? "本次未匹配，继续沿用上一帧 Tracker pose" : "代理暂未识别",
+          { result, failReason },
+        );
       }
-      const message = typeof err === "string" ? err : err?.message || String(err);
+    } catch (err) {
+      sdkFailureCount += 1;
+      const trackedPose = getTrackedPoseSnapshot(performance.now());
       setDebug(
         {
-          status: recognizedSinceStart ? "tracking (sdk)" : "sdk not recognized",
-          immersal: recognizedSinceStart ? "sdk server recognized" : "sdk server no match",
+          status: trackedPose ? "tracking (sdk+proxy)" : "sdk localize failed",
+          immersal: trackedPose ? "proxy tracking (last pose)" : "proxy/upstream error",
           success: sdkSession.localization.counter,
           failure: sdkFailureCount,
-          latency: `${elapsed}ms`,
-          lastError: recognizedSinceStart ? "none" : message,
+          latency: `${Math.round(performance.now() - startedAt)}ms`,
+          lastError: err?.message || String(err),
+          lastPose: trackedPose ?? debugState.lastPose,
         },
-        recognizedSinceStart ? "SDK 服务端识别成功" : "SDK 服务端暂未识别",
-        message,
+        trackedPose ? "代理请求失败，继续沿用上一帧 Tracker pose" : "代理识别失败",
+        err?.message || String(err),
       );
     } finally {
       sdkLocalizePending = false;
@@ -568,13 +660,9 @@ export function bootstrapArScene(rootEl) {
     const tick = (now) => {
       if (!sdkSession) return;
 
-      if (
-        !sdkLocalizePending &&
-        !sdkSession.localization.localizing &&
-        now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS
-      ) {
+      if (!sdkLocalizePending && now - sdkLastLocalizeAt >= SDK_LOCALIZE_INTERVAL_MS) {
         sdkLastLocalizeAt = now;
-        runSdkServerLocalization("interval");
+        runSdkProxyLocalization("interval");
       }
 
       updateSdkDebug(now);
@@ -582,7 +670,7 @@ export function bootstrapArScene(rootEl) {
     };
 
     sdkFrameId = requestAnimationFrame(tick);
-    runSdkServerLocalization("start");
+    runSdkProxyLocalization("start");
   }
 
   async function startImmersalSdkLocalization() {
@@ -614,10 +702,10 @@ export function bootstrapArScene(rootEl) {
         {
           status: "sdk ready",
           camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
-          immersal: "sdk server tracking",
+          immersal: "sdk+proxy tracking",
           lastError: "none",
         },
-        "Immersal SDK 摄像头已启动，使用服务端连续定位",
+        "Immersal SDK 摄像头已启动，定位走 Vercel 代理 + Tracker 续跟",
         { width: session.camera.width, height: session.camera.height },
       );
 
@@ -732,7 +820,7 @@ export function bootstrapArScene(rootEl) {
 
   localizeNowBtn?.addEventListener("click", () => {
     if (sdkSession) {
-      runSdkServerLocalization("manual");
+      runSdkProxyLocalization("manual");
       return;
     }
     localizeOnce("manual");
