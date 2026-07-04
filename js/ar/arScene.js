@@ -23,6 +23,10 @@ function multiplyQuat(a, b) {
   };
 }
 
+function quatInvert(q) {
+  return { x: -q.x, y: -q.y, z: -q.z, w: q.w };
+}
+
 function quatFromAxisAngle(axis, angle) {
   const half = angle * 0.5;
   const s = Math.sin(half);
@@ -174,6 +178,7 @@ export function bootstrapArScene(rootEl) {
   let restRenderFrameId = null;
   let agentLastRendererPoseLogAt = 0;
   let agentLastRestSubstituteLogAt = 0;
+  let lastLocalizationGyro = { x: 0, y: 0, z: 0, w: 1 };
 
   const debugState = {
     status: "idle",
@@ -191,6 +196,41 @@ export function bootstrapArScene(rootEl) {
     video: null,
     logs: [],
   };
+
+  function captureLocalizationGyro() {
+    let gyro = null;
+    if (sdkSession?.gyroData) {
+      gyro = {
+        x: sdkSession.gyroData.x,
+        y: sdkSession.gyroData.y,
+        z: sdkSession.gyroData.z,
+        w: sdkSession.gyroData.w,
+      };
+      sdkSession.localization?.lastGyro?.set(gyro.x, gyro.y, gyro.z, gyro.w);
+    } else if (hasGyro) {
+      gyro = { ...deviceQuaternion };
+    }
+    if (gyro) {
+      lastLocalizationGyro = gyro;
+    }
+    return gyro;
+  }
+
+  function getLastLocalizationGyro() {
+    if (sdkSession?.localization?.lastGyro) {
+      const g = sdkSession.localization.lastGyro;
+      return { x: g.x, y: g.y, z: g.z, w: g.w };
+    }
+    return lastLocalizationGyro;
+  }
+
+  function applyImmersalPoseCorrection(rotation) {
+    let corrected = multiplyQuat(rotation, AXIS_ROT);
+    if (hasGyro) {
+      corrected = multiplyQuat(corrected, quatInvert(getLastLocalizationGyro()));
+    }
+    return corrected;
+  }
 
   function getGyroQuaternion() {
     if (sdkSession?.gyroData) {
@@ -257,17 +297,18 @@ export function bootstrapArScene(rootEl) {
     if (!options.keepLastMapPose) {
       lastMapPose = pose;
     }
-    const gyro = options.skipGyro ? null : getGyroQuaternion();
+    const gyro = options.skipGyro || localizationMode === "sdk" ? null : getGyroQuaternion();
     const vFov = getRendererVFov();
     const now = performance.now();
     if (now - agentLastRendererPoseLogAt > 1000) {
       agentLastRendererPoseLogAt = now;
       // #region agent log
-      agentDebugLog("initial", "H1,H2,H4,H5", "js/ar/arScene.js:updateArRendererPose", "Pose handed to AR renderer", {
+      agentDebugLog("post-fix", "H1", "js/ar/arScene.js:updateArRendererPose", "Pose handed to AR renderer", {
         localizationMode,
         options,
         pose,
         gyro,
+        skipGyroReason: localizationMode === "sdk" ? "sdk-tracked-full-pose" : options.skipGyro ? "explicit" : "none",
         vFov,
         hasGyro,
         cameraZoom,
@@ -663,6 +704,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function requestImmersalLocalization(reason = "auto") {
+    captureLocalizationGyro();
     const capture = captureFrameDataUrl();
     const payload = getLocalizationPayload(capture);
     const startedAt = performance.now();
@@ -691,17 +733,38 @@ export function bootstrapArScene(rootEl) {
   function feedPoseToTracker(pose, time = performance.now()) {
     if (!sdkSession || typeof window.icvPosePut !== "function") return false;
 
+    const correctedRotation = applyImmersalPoseCorrection(pose.rotation);
     const position = new Float32Array([pose.position.x, pose.position.y, pose.position.z]);
-    const rotation = new Float32Array([pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w]);
+    const rotation = new Float32Array([
+      correctedRotation.x,
+      correctedRotation.y,
+      correctedRotation.z,
+      correctedRotation.w,
+    ]);
     window.icvPosePut(time, new Uint8Array(position.buffer), new Uint8Array(rotation.buffer));
 
     sdkSession.localizeInfo.handle = pose.map ?? sdkSession.localizeInfo.handle;
     sdkSession.localizeInfo.position.x = pose.position.x;
     sdkSession.localizeInfo.position.y = pose.position.y;
     sdkSession.localizeInfo.position.z = pose.position.z;
-    sdkSession.localizeInfo.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w);
+    sdkSession.localizeInfo.rotation.set(
+      correctedRotation.x,
+      correctedRotation.y,
+      correctedRotation.z,
+      correctedRotation.w,
+    );
     sdkSession.localizeInfo.elapsedTime = 0;
     sdkSession.localization.counter += 1;
+
+    // #region agent log
+    agentDebugLog("post-fix", "H2", "js/ar/arScene.js:feedPoseToTracker", "Pose corrected before tracker feed", {
+      rawRotation: pose.rotation,
+      correctedRotation,
+      lastLocalizationGyro: getLastLocalizationGyro(),
+      position: pose.position,
+    });
+    // #endregion
+
     return true;
   }
 
@@ -755,9 +818,13 @@ export function bootstrapArScene(rootEl) {
       if (result?.success) {
         debugState.success += 1;
         markLocalizationSuccess();
-        const pose = restResultToPose(result);
+        const rawPose = restResultToPose(result);
+        const pose = {
+          ...rawPose,
+          rotation: applyImmersalPoseCorrection(rawPose.rotation),
+        };
         lastMapPose = poseForRenderer(pose);
-        updateArRendererPose(pose);
+        updateArRendererPose(pose, { skipGyro: true });
         logArRendererStatus();
         setDebug(
           {
