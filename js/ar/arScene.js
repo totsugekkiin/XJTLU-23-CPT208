@@ -3,6 +3,8 @@ import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
 const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
+const SDK_REST_ASSIST_INTERVAL_MS = 800;
+const SDK_DEVICE_WATCHDOG_MS = 8000;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -169,6 +171,11 @@ export function bootstrapArScene(rootEl) {
   let hasGyro = false;
   let lastIntrinsics = { fx: 0, fy: 0, ox: 0, oy: 0 };
   let sdkFailureCount = 0;
+  let sdkRestAssistPending = false;
+  let sdkLastRestAssistAt = 0;
+  let sdkRestAssistEnabled = false;
+  let sdkDeviceWatchdogTimer = null;
+  let sdkLastLocalizeCounter = 0;
   let sdkLastDebugAt = 0;
   let arRenderer = null;
   let lastMapPose = null;
@@ -228,6 +235,26 @@ export function bootstrapArScene(rootEl) {
       corrected = multiplyQuat(corrected, quatInvert(getLastLocalizationGyro()));
     }
     return corrected;
+  }
+
+  async function waitForDeviceGyro(timeoutMs = 3000) {
+    if (hasGyro) return;
+    await new Promise((resolve) => {
+      const deadline = performance.now() + timeoutMs;
+      const tick = () => {
+        if (hasGyro || performance.now() >= deadline) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  }
+
+  function syncSdkSolverType() {
+    if (!sdkSession) return;
+    sdkSession.solverType = hasGyro ? 1 : 0;
   }
 
   function getGyroQuaternion() {
@@ -728,6 +755,34 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
+  function feedPoseToTracker(pose, time = performance.now()) {
+    if (!sdkSession || typeof window.icvPosePut !== "function") return false;
+
+    const correctedRotation = applyImmersalPoseCorrection(pose.rotation);
+    const position = new Float32Array([pose.position.x, pose.position.y, pose.position.z]);
+    const rotation = new Float32Array([
+      correctedRotation.x,
+      correctedRotation.y,
+      correctedRotation.z,
+      correctedRotation.w,
+    ]);
+    window.icvPosePut(time, new Uint8Array(position.buffer), new Uint8Array(rotation.buffer));
+
+    sdkSession.localizeInfo.handle = pose.map ?? sdkSession.localizeInfo.handle;
+    sdkSession.localizeInfo.position.x = pose.position.x;
+    sdkSession.localizeInfo.position.y = pose.position.y;
+    sdkSession.localizeInfo.position.z = pose.position.z;
+    sdkSession.localizeInfo.rotation.set(
+      correctedRotation.x,
+      correctedRotation.y,
+      correctedRotation.z,
+      correctedRotation.w,
+    );
+    sdkSession.localizeInfo.elapsedTime = 0;
+    sdkSession.localization.counter += 1;
+    return true;
+  }
+
   function getTrackedPoseSnapshot(now) {
     if (!sdkSession || sdkSession.localization.counter <= 0) return null;
 
@@ -742,7 +797,7 @@ export function bootstrapArScene(rootEl) {
 
     const info = sdkSession.localizeInfo;
     return {
-      mode: "sdk-device",
+      mode: sdkRestAssistEnabled ? "sdk-device+rest" : "sdk-device",
       mapHandle: info.handle,
       position: estimatedPose
         ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
@@ -836,12 +891,30 @@ export function bootstrapArScene(rootEl) {
     if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
     sdkLastDebugAt = now;
 
+    const counter = sdkSession.localization.counter;
+    if (counter > sdkLastLocalizeCounter) {
+      sdkLastLocalizeCounter = counter;
+      markLocalizationSuccess();
+    }
+
     const trackedPose = getTrackedPoseSnapshot(now);
     const hasPose = Boolean(trackedPose);
+    const immersalLabel = sdkRestAssistEnabled
+      ? sdkRestAssistPending
+        ? "device + rest requesting"
+        : "device + rest assist"
+      : sdkSession.localization.localizing
+        ? "device requesting"
+        : "device tracking";
+
     setDebug({
-      status: hasPose ? "tracking (sdk-device)" : "sdk localizing",
-      immersal: sdkSession.localization.localizing ? "device requesting" : "device tracking",
-      success: sdkSession.localization.counter,
+      status: hasPose
+        ? sdkRestAssistEnabled
+          ? "tracking (sdk-device+rest)"
+          : "tracking (sdk-device)"
+        : "sdk localizing",
+      immersal: immersalLabel,
+      success: counter,
       failure: sdkFailureCount,
       latency: sdkSession.localizeInfo.elapsedTime
         ? `${Math.round(sdkSession.localizeInfo.elapsedTime)}ms`
@@ -852,12 +925,67 @@ export function bootstrapArScene(rootEl) {
     if (hasPose) logArRendererStatus();
   }
 
+  async function runSdkRestAssist(reason = "assist") {
+    if (!sdkSession || sdkRestAssistPending) return;
+
+    sdkRestAssistPending = true;
+    sdkLastRestAssistAt = performance.now();
+    const startedAt = performance.now();
+
+    try {
+      const localization = await requestImmersalLocalization(reason);
+      const { result, data, elapsed } = localization;
+
+      if (result?.success) {
+        const pose = restResultToPose(result);
+        feedPoseToTracker(pose, startedAt);
+        const tracked = getTrackedPoseSnapshot(performance.now()) ?? poseForRenderer(pose);
+        lastMapPose = tracked;
+        updateArRendererPose(tracked);
+        logDebug("REST 辅助识别成功，Tracker 已初始化", { reason, elapsed: data.elapsedMs ?? elapsed });
+      } else {
+        sdkFailureCount += 1;
+        logDebug("REST 辅助识别未匹配", { reason, result });
+      }
+    } catch (err) {
+      sdkFailureCount += 1;
+      logDebug("REST 辅助识别失败", err?.message || String(err));
+    } finally {
+      sdkRestAssistPending = false;
+    }
+  }
+
+  function startSdkDeviceWatchdog() {
+    if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
+    sdkDeviceWatchdogTimer = window.setTimeout(() => {
+      sdkDeviceWatchdogTimer = null;
+      if (!sdkSession || sdkSession.localization.counter > 0) return;
+      sdkRestAssistEnabled = true;
+      logDebug(
+        `设备端 ${SDK_DEVICE_WATCHDOG_MS / 1000}s 内未成功，启用 REST 辅助识别`,
+        { hasGyro, solverType: sdkSession.solverType },
+      );
+      runSdkRestAssist("watchdog");
+    }, SDK_DEVICE_WATCHDOG_MS);
+  }
+
   function startSdkFrameLoop() {
     const tick = (now) => {
       if (!sdkSession) return;
 
+      syncSdkSolverType();
+
       if (sdkMapHandle >= 0 && sdkSession.continuousLocalization) {
         sdkSession.localizeDevice(now);
+      }
+
+      if (
+        sdkRestAssistEnabled &&
+        sdkSession.localization.counter <= 0 &&
+        !sdkRestAssistPending &&
+        now - sdkLastRestAssistAt >= SDK_REST_ASSIST_INTERVAL_MS
+      ) {
+        runSdkRestAssist("interval");
       }
 
       if (sdkSession.localization.counter > 0) {
@@ -893,6 +1021,7 @@ export function bootstrapArScene(rootEl) {
     }
 
     setDebug({ status: "sdk initializing", immersal: "loading sdk" }, "开始初始化 Immersal SDK");
+    await waitForDeviceGyro();
 
     let session = null;
     try {
@@ -909,6 +1038,7 @@ export function bootstrapArScene(rootEl) {
       });
 
       sdkSession = session;
+      syncSdkSolverType();
       localizationMode = "sdk";
       rootEl.classList.add("is-sdk-camera");
       arRenderer?.bringCanvasToFront();
@@ -928,6 +1058,7 @@ export function bootstrapArScene(rootEl) {
       );
 
       startSdkFrameLoop();
+      startSdkDeviceWatchdog();
     } catch (err) {
       session?.dispose?.();
       sdkSession = null;
@@ -950,10 +1081,26 @@ export function bootstrapArScene(rootEl) {
     if (!CLIENT_IMMERSAL_TOKEN) {
       throw new Error("未配置 VITE_IMMERSAL_TOKEN，请在环境变量中设置 Immersal developer token。");
     }
+
+    let restAssistReady = false;
+    try {
+      const response = await fetch("/api/immersal");
+      const data = await response.json().catch(() => null);
+      restAssistReady = Boolean(response.ok && data?.hasToken);
+    } catch {
+      restAssistReady = false;
+    }
+
     setDebug(
-      { immersal: `ready (map ${IMMERSAL_MAP_ID}, on-device)` },
-      "Immersal token 已配置，优先使用设备端识别",
-      { mapId: IMMERSAL_MAP_ID, hasToken: true },
+      {
+        immersal: restAssistReady
+          ? `ready (map ${IMMERSAL_MAP_ID}, device + REST fallback)`
+          : `ready (map ${IMMERSAL_MAP_ID}, device only)`,
+      },
+      restAssistReady
+        ? "Immersal 已配置：优先设备端，失败时 REST 辅助"
+        : "Immersal 已配置：仅设备端（REST 辅助不可用）",
+      { mapId: IMMERSAL_MAP_ID, hasToken: true, restAssistReady },
     );
   }
 
@@ -1033,6 +1180,7 @@ export function bootstrapArScene(rootEl) {
   localizeNowBtn?.addEventListener("click", async () => {
     if (sdkSession) {
       setDebug({ status: "sdk localizing (manual)", immersal: "device requesting" });
+      syncSdkSolverType();
       try {
         await sdkSession.localizeDeviceAsync();
         markLocalizationSuccess();
@@ -1042,7 +1190,7 @@ export function bootstrapArScene(rootEl) {
         }
         setDebug(
           {
-            status: "tracking (sdk-device)",
+            status: sdkRestAssistEnabled ? "tracking (sdk-device+rest)" : "tracking (sdk-device)",
             immersal: "device recognized",
             success: sdkSession.localization.counter,
             lastError: "none",
@@ -1053,6 +1201,12 @@ export function bootstrapArScene(rootEl) {
         );
       } catch (err) {
         sdkFailureCount += 1;
+        if (!sdkRestAssistEnabled) {
+          sdkRestAssistEnabled = true;
+          logDebug("手动设备端识别失败，尝试 REST 辅助");
+          await runSdkRestAssist("manual-fallback");
+          return;
+        }
         setDebug(
           {
             status: "sdk not recognized",
@@ -1088,6 +1242,7 @@ export function bootstrapArScene(rootEl) {
 
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);
+    if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
     if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
     if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
     arRenderer?.dispose();
