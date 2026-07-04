@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { IMMERSAL_MAP_ID } from "../../js/ar/arAnchors.js";
 
 export function ArPage() {
   useEffect(() => {
@@ -29,7 +30,7 @@ export function ArPage() {
       <div id="ar-ui">
         <div id="ar-start-overlay">
           <h1>Immersal 场景识别测试</h1>
-          <p>打开摄像头后，系统会针对 Map 148549 持续发起定位请求。请在现场已建图区域缓慢移动手机。</p>
+          <p>打开摄像头后，系统会针对 Map {IMMERSAL_MAP_ID} 持续发起定位请求。请在现场已建图区域缓慢移动手机。</p>
           <button id="ar-start-btn" type="button">
             打开摄像头并开始识别
           </button>
@@ -66,7 +67,7 @@ export function ArPage() {
         </div>
 
         <div id="ar-hint" className="is-hidden">
-          <p>对准 Map 148549 覆盖区域。定位成功后叠加 AR 模型。走动时需持续识别成功，否则位置会漂移。</p>
+          <p>对准 Map {IMMERSAL_MAP_ID} 覆盖区域。定位成功后叠加 AR 模型。走动时需持续识别成功，否则位置会漂移。</p>
           <button id="ar-hint-toggle" type="button" aria-expanded="true" aria-label="最小化提示信息">
             -
           </button>
@@ -92,7 +93,7 @@ export function ArPage() {
             </div>
             <div className="ar-debug__item">
               <span>Map ID</span>
-              <strong id="ar-debug-map">148549</strong>
+              <strong id="ar-debug-map">{IMMERSAL_MAP_ID}</strong>
             </div>
             <div className="ar-debug__item">
               <span>摄像头</span>

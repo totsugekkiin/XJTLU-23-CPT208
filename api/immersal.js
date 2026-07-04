@@ -2,7 +2,7 @@
 // Vercel Node Serverless Function. Keeps the Immersal token out of the browser bundle.
 
 const IMMERSAL_BASE_URL = "https://api.immersal.com";
-const DEFAULT_MAP_ID = 148549;
+const DEFAULT_MAP_ID = 148688;
 
 function safeJsonParse(maybeJson) {
   if (maybeJson == null) return null;

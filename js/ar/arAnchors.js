@@ -1,5 +1,5 @@
 /** Immersal 地图 ID，与 arScene.js 保持一致 */
-export const IMMERSAL_MAP_ID = 148549;
+export const IMMERSAL_MAP_ID = 148688;
 
 /**
  * AR 锚点配置（地图坐标系，单位：米）
