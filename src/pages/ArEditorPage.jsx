@@ -57,6 +57,9 @@ export function ArEditorPage() {
               重置视角
             </button>
           </div>
+          <p className="ar-editor-hint">
+            方向键 / WASD 平移视角，Q/E 升降，Shift 加速（输入框聚焦时无效）。
+          </p>
         </section>
 
         <section className="ar-editor-section">

@@ -7,6 +7,8 @@ import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
 
 const IMMERSAL_BASE = "https://api.immersal.com";
 const CLIENT_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
+const CAMERA_KEY_MOVE_SPEED = 4;
+const CAMERA_KEY_BOOST = 3;
 
 function radToDeg(r) {
   return (r * 180) / Math.PI;
@@ -108,6 +110,11 @@ export function bootstrapArPlacementEditor(rootEl) {
   let gridVisible = true;
   let modelObject = null;
   let isSyncingUi = false;
+  const pressedKeys = new Set();
+  let cameraBoost = false;
+  const cameraMoveForward = new THREE.Vector3();
+  const cameraMoveRight = new THREE.Vector3();
+  const cameraMoveDelta = new THREE.Vector3();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -239,6 +246,84 @@ export function bootstrapArPlacementEditor(rootEl) {
     orbitControls.target.copy(center);
     camera.position.copy(center).add(new THREE.Vector3(radius * 1.4, radius * 0.9, radius * 1.4));
     orbitControls.update();
+  }
+
+  function isTypingTarget(target) {
+    return (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
+    );
+  }
+
+  const CAMERA_MOVE_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "KeyQ",
+    "KeyE",
+    "PageUp",
+    "PageDown",
+  ]);
+
+  function moveCameraFromKeys(delta) {
+    if (!orbitControls.enabled || pressedKeys.size === 0) return;
+
+    cameraMoveDelta.set(0, 0, 0);
+    camera.getWorldDirection(cameraMoveForward);
+    cameraMoveForward.y = 0;
+    if (cameraMoveForward.lengthSq() > 1e-8) {
+      cameraMoveForward.normalize();
+      cameraMoveRight.crossVectors(cameraMoveForward, camera.up).normalize();
+    } else {
+      cameraMoveForward.set(0, 0, -1);
+      cameraMoveRight.set(1, 0, 0);
+    }
+
+    if (pressedKeys.has("ArrowUp") || pressedKeys.has("KeyW")) cameraMoveDelta.add(cameraMoveForward);
+    if (pressedKeys.has("ArrowDown") || pressedKeys.has("KeyS")) cameraMoveDelta.sub(cameraMoveForward);
+    if (pressedKeys.has("ArrowLeft") || pressedKeys.has("KeyA")) cameraMoveDelta.sub(cameraMoveRight);
+    if (pressedKeys.has("ArrowRight") || pressedKeys.has("KeyD")) cameraMoveDelta.add(cameraMoveRight);
+    if (pressedKeys.has("KeyQ") || pressedKeys.has("PageUp")) cameraMoveDelta.y += 1;
+    if (pressedKeys.has("KeyE") || pressedKeys.has("PageDown")) cameraMoveDelta.y -= 1;
+
+    if (cameraMoveDelta.lengthSq() === 0) return;
+
+    const speed = CAMERA_KEY_MOVE_SPEED * (cameraBoost ? CAMERA_KEY_BOOST : 1) * delta;
+    cameraMoveDelta.normalize().multiplyScalar(speed);
+    camera.position.add(cameraMoveDelta);
+    orbitControls.target.add(cameraMoveDelta);
+  }
+
+  function onCameraKeyDown(event) {
+    if (isTypingTarget(event.target)) return;
+
+    if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+      cameraBoost = true;
+      return;
+    }
+
+    if (!CAMERA_MOVE_KEYS.has(event.code)) return;
+    event.preventDefault();
+    pressedKeys.add(event.code);
+  }
+
+  function onCameraKeyUp(event) {
+    if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+      cameraBoost = false;
+      return;
+    }
+    pressedKeys.delete(event.code);
+  }
+
+  function onCameraWindowBlur() {
+    pressedKeys.clear();
+    cameraBoost = false;
   }
 
   function clearReference() {
@@ -505,8 +590,16 @@ export function bootstrapArPlacementEditor(rootEl) {
   const ro = new ResizeObserver(resize);
   ro.observe(rootEl);
 
+  window.addEventListener("keydown", onCameraKeyDown);
+  window.addEventListener("keyup", onCameraKeyUp);
+  window.addEventListener("blur", onCameraWindowBlur);
+
   let frameId = 0;
-  const tick = () => {
+  let lastFrameTime = performance.now();
+  const tick = (now) => {
+    const delta = Math.min((now - lastFrameTime) / 1000, 0.05);
+    lastFrameTime = now;
+    moveCameraFromKeys(delta);
     orbitControls.update();
     renderer.render(scene, camera);
     frameId = requestAnimationFrame(tick);
@@ -529,6 +622,10 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   return () => {
     cancelAnimationFrame(frameId);
+    window.removeEventListener("keydown", onCameraKeyDown);
+    window.removeEventListener("keyup", onCameraKeyUp);
+    window.removeEventListener("blur", onCameraWindowBlur);
+    pressedKeys.clear();
     ro.disconnect();
     transformControls.detach();
     transformControls.dispose();
