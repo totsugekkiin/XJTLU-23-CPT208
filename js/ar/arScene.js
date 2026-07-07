@@ -1,4 +1,9 @@
-import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
+import {
+  formatMapIdList,
+  getAnchorsForMap,
+  getMapProfilesForIds,
+  resolveActiveMapIds,
+} from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
@@ -112,12 +117,7 @@ function restResultToPose(result) {
     position: pose.position,
     rotationMatrix,
     rotation,
-    anchors: AR_ANCHORS.map((anchor) => ({
-      id: anchor.id,
-      position: anchor.position,
-      rotation: anchor.rotation,
-      scale: anchor.scale,
-    })),
+    anchors: getAnchorsForMap(pose.map),
   });
   // #endregion
 
@@ -156,13 +156,21 @@ export function bootstrapArScene(rootEl) {
     pose: rootEl.querySelector("#ar-debug-pose"),
   };
 
+  const mapSelect = rootEl.querySelector("#ar-map-select");
+  const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
+  const mapProfiles = getMapProfilesForIds(requestedMapIds);
+  const activeMapIds = mapProfiles.map((profile) => profile.mapId);
+  const activeMapLabel = formatMapIdList(activeMapIds);
+  const totalAnchorCount = mapProfiles.reduce((sum, profile) => sum + profile.anchors.length, 0);
+  let localizedMapId = activeMapIds.length === 1 ? activeMapIds[0] : null;
+
   let mediaStream = null;
   let orientationHandler = null;
   let localizeTimer = null;
   let sdkSession = null;
   let sdkFrameId = null;
   let sdkResizeHandler = null;
-  let sdkMapHandle = null;
+  let sdkMapHandles = {};
   let localizationMode = "rest";
   let localizing = false;
   let captureCanvas = null;
@@ -189,7 +197,9 @@ export function bootstrapArScene(rootEl) {
 
   const debugState = {
     status: "idle",
-    mapId: IMMERSAL_MAP_ID,
+    mapId: activeMapLabel,
+    localizedMapId,
+    activeMapIds,
     camera: "waiting",
     cameraZoom: "1.00x",
     webxr: "checking",
@@ -203,6 +213,16 @@ export function bootstrapArScene(rootEl) {
     video: null,
     logs: [],
   };
+
+  function applyLocalizedMapId(mapId) {
+    const id = Number(mapId);
+    if (!Number.isFinite(id) || !activeMapIds.includes(id)) return;
+    localizedMapId = id;
+    arRenderer?.setActiveMapId(id);
+    debugState.localizedMapId = id;
+    debugState.mapId = activeMapIds.length > 1 ? `${activeMapLabel} → ${id}` : String(id);
+    updateDebugPanel();
+  }
 
   function captureLocalizationGyro() {
     let gyro = null;
@@ -364,11 +384,15 @@ export function bootstrapArScene(rootEl) {
     const { createArRenderer } = await import("./arRenderer.js");
     arRenderer = createArRenderer(cameraWrap, {
       getCameraViewport: () => sdkSession?.camera?.el ?? null,
+      mapProfiles,
     });
+    if (localizedMapId != null) {
+      arRenderer.setActiveMapId(localizedMapId);
+    }
     arRenderer.start();
     try {
       await arRenderer.ready;
-      logDebug(`AR 模型已加载（${AR_ANCHORS.length} 个锚点）`);
+      logDebug(`AR 模型已加载（${mapProfiles.length} 张地图，${totalAnchorCount} 个锚点）`);
     } catch (err) {
       logDebug("AR 模型加载失败", err?.message || String(err));
     }
@@ -728,7 +752,8 @@ export function bootstrapArScene(rootEl) {
 
     return {
       action: "localize",
-      mapId: IMMERSAL_MAP_ID,
+      mapIds: activeMapIds,
+      mapId: activeMapIds[0],
       imageBase64: capture.imageBase64,
       camera: {
         fx: intrinsics.fx,
@@ -783,8 +808,12 @@ export function bootstrapArScene(rootEl) {
     }
 
     const info = sdkSession.localizeInfo;
+    const mapData = sdkSession.getMapDataByHandle?.(info.handle);
+    const mapId = mapData?.id ?? null;
     return {
       mode: sdkServerAssistEnabled ? "sdk-device+server" : "sdk-device",
+      map: mapId,
+      mapId,
       mapHandle: info.handle,
       position: estimatedPose
         ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
@@ -825,6 +854,7 @@ export function bootstrapArScene(rootEl) {
           ...rawPose,
           rotation: applyImmersalPoseCorrection(rawPose.rotation),
         };
+        applyLocalizedMapId(rawPose.map);
         lastMapPose = poseForRenderer(pose);
         updateArRendererPose(pose, { skipGyro: true });
         logArRendererStatus();
@@ -943,6 +973,7 @@ export function bootstrapArScene(rootEl) {
       markLocalizationSuccess();
       const tracked = getTrackedPoseSnapshot(performance.now());
       if (tracked) {
+        if (tracked.mapId != null) applyLocalizedMapId(tracked.mapId);
         lastMapPose = tracked;
         updateArRendererPose(tracked);
       }
@@ -986,13 +1017,14 @@ export function bootstrapArScene(rootEl) {
         now - sdkLastServerAssistAt >= SDK_SERVER_ASSIST_INTERVAL_MS
       ) {
         runSdkServerAssist("interval");
-      } else if (sdkMapHandle >= 0 && sdkSession.continuousLocalization) {
+      } else if (Object.values(sdkMapHandles).some((handle) => handle >= 0) && sdkSession.continuousLocalization) {
         sdkSession.localizeDevice(now);
       }
 
       if (sdkSession.localization.counter > 0) {
         const trackedPose = getTrackedPoseSnapshot(now);
         if (trackedPose) {
+          if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
           updateArRendererPose(trackedPose);
         }
       } else if (lastMapPose) {
@@ -1033,7 +1065,7 @@ export function bootstrapArScene(rootEl) {
       const cameraWrap = rootEl.querySelector("#ar-camera-wrap") ?? rootEl;
       session = await Immersal.Initialize(cameraWrap, {
         developerToken: CLIENT_IMMERSAL_TOKEN,
-        mapIds: [IMMERSAL_MAP_ID],
+        mapIds: activeMapIds,
         continuousLocalization: true,
         continuousInterval: SDK_DEVICE_LOCALIZE_INTERVAL_MS,
         solverType: hasGyro ? 1 : 0,
@@ -1050,7 +1082,10 @@ export function bootstrapArScene(rootEl) {
       arRenderer?.resize();
 
       setDebug({ status: "sdk loading map", immersal: "loading map" }, "正在下载并加载地图到设备…");
-      sdkMapHandle = await session.loadMap(IMMERSAL_MAP_ID);
+      sdkMapHandles = {};
+      for (const mapId of activeMapIds) {
+        sdkMapHandles[mapId] = await session.loadMap(mapId);
+      }
 
       setDebug(
         {
@@ -1060,7 +1095,12 @@ export function bootstrapArScene(rootEl) {
           lastError: "none",
         },
         "Immersal SDK 设备端连续识别已启动",
-        { width: session.camera.width, height: session.camera.height, mapHandle: sdkMapHandle },
+        {
+          width: session.camera.width,
+          height: session.camera.height,
+          mapIds: activeMapIds,
+          mapHandles: sdkMapHandles,
+        },
       );
 
       startSdkFrameLoop();
@@ -1068,7 +1108,7 @@ export function bootstrapArScene(rootEl) {
     } catch (err) {
       session?.dispose?.();
       sdkSession = null;
-      sdkMapHandle = null;
+      sdkMapHandles = {};
       localizationMode = "rest";
       rootEl.classList.remove("is-sdk-camera");
       throw err;
@@ -1099,12 +1139,12 @@ export function bootstrapArScene(rootEl) {
 
     setDebug(
       {
-        immersal: `ready (map ${IMMERSAL_MAP_ID}, SDK device + SDK server)`,
+        immersal: `ready (maps ${activeMapLabel}, SDK device + SDK server)`,
       },
       proxyFallbackReady
         ? "Immersal 已配置：SDK 设备端优先，失败时用 SDK server 辅助；代理仅作 SDK 初始化失败兜底"
         : "Immersal 已配置：SDK 设备端优先，失败时用 SDK server 辅助",
-      { mapId: IMMERSAL_MAP_ID, hasToken: true, proxyFallbackReady },
+      { mapIds: activeMapIds, hasToken: true, proxyFallbackReady },
     );
   }
 
@@ -1115,6 +1155,9 @@ export function bootstrapArScene(rootEl) {
     setDebug({ status: "initializing", lastError: "none" }, "开始 Immersal 测试");
 
     try {
+      if (activeMapIds.length === 0) {
+        throw new Error("未找到可用的地图配置，请检查 js/ar/arAnchors.js 或 URL 参数。");
+      }
       await checkImmersalConfig();
       await checkWebXrSupport();
       await requestOrientationPermission();
@@ -1190,6 +1233,7 @@ export function bootstrapArScene(rootEl) {
         markLocalizationSuccess();
         const trackedPose = getTrackedPoseSnapshot(performance.now());
         if (trackedPose) {
+          if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
           updateArRendererPose(trackedPose);
         }
         setDebug(
@@ -1242,7 +1286,7 @@ export function bootstrapArScene(rootEl) {
   });
 
   startBtn.addEventListener("click", startExperience);
-  setDebug({ mapId: IMMERSAL_MAP_ID });
+  setDebug({ mapId: activeMapLabel, activeMapIds });
 
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);
@@ -1253,10 +1297,12 @@ export function bootstrapArScene(rootEl) {
       sdkSession?.removeEventListener?.("resize", sdkResizeHandler);
     }
     arRenderer?.dispose();
-    if (sdkMapHandle != null) {
-      sdkSession?.freeMap(sdkMapHandle).catch((err) => {
-        console.warn("[Immersal] freeMap failed", err);
-      });
+    for (const handle of Object.values(sdkMapHandles)) {
+      if (handle != null) {
+        sdkSession?.freeMap(handle).catch((err) => {
+          console.warn("[Immersal] freeMap failed", err);
+        });
+      }
     }
     sdkSession?.dispose?.();
     rootEl.classList.remove("is-sdk-camera");

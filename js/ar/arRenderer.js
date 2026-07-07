@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { AR_ANCHORS } from "./arAnchors.js";
 import { agentDebugLog } from "./agentDebugLog.js";
 
 const POSE_LERP = 0.28;
@@ -26,7 +25,7 @@ function prepareModelMaterials(object) {
  * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
  */
 export function createArRenderer(cameraWrap, options = {}) {
-  const { getCameraViewport = null } = options;
+  const { getCameraViewport = null, mapProfiles = [] } = options;
   const canvas = document.createElement("canvas");
   canvas.id = "ar-three-canvas";
   cameraWrap.appendChild(canvas);
@@ -62,56 +61,68 @@ export function createArRenderer(cameraWrap, options = {}) {
   let resizeObserver = null;
   let agentLastCameraLogAt = 0;
   let lastPoseUpdateTime = 0;
+  let activeMapId = mapProfiles.length === 1 ? mapProfiles[0].mapId : null;
+  let anchorCount = 0;
 
   const loadPromise = (async () => {
     const loader = new GLTFLoader();
-    await Promise.all(
-      AR_ANCHORS.map(async (anchor) => {
-        const gltf = await loader.loadAsync(anchor.url);
-        const model = gltf.scene.clone(true);
-        model.name = `anchor-${anchor.id}`;
-        const pos = anchor.position ?? [0, 0, 0];
-        const rot = anchor.rotation ?? [0, 0, 0];
-        const scl = anchor.scale ?? [1, 1, 1];
-        model.position.set(pos[0], pos[1], pos[2]);
-        model.rotation.set(rot[0], rot[1], rot[2]);
-        model.scale.set(scl[0], scl[1], scl[2]);
-        prepareModelMaterials(model);
-        model.visible = false;
-        scene.add(model);
-        model.updateMatrixWorld(true);
-        const worldPosition = new THREE.Vector3();
-        const worldQuaternion = new THREE.Quaternion();
-        const worldScale = new THREE.Vector3();
-        model.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
-        const worldEuler = new THREE.Euler().setFromQuaternion(worldQuaternion, "XYZ");
-        const worldBox = new THREE.Box3().setFromObject(model);
-        const worldBoxSize = worldBox.getSize(new THREE.Vector3());
-        // #region agent log
-        agentDebugLog("initial", "H3,H5", "js/ar/arRenderer.js:modelLoad", "Anchor model loaded with renderer world transform", {
-          anchor: {
-            id: anchor.id,
-            position: pos,
-            rotation: rot,
-            scale: scl,
-          },
-          local: {
-            position: model.position.toArray(),
-            rotation: [model.rotation.x, model.rotation.y, model.rotation.z],
-            quaternion: model.quaternion.toArray(),
-            scale: model.scale.toArray(),
-          },
-          world: {
-            position: worldPosition.toArray(),
-            quaternion: worldQuaternion.toArray(),
-            euler: [worldEuler.x, worldEuler.y, worldEuler.z],
-            scale: worldScale.toArray(),
-            boxSize: worldBoxSize.toArray(),
-          },
-        });
-        // #endregion
-      }),
-    );
+    const loadTasks = [];
+
+    for (const profile of mapProfiles) {
+      for (const anchor of profile.anchors) {
+        loadTasks.push(
+          loader.loadAsync(anchor.url).then((gltf) => {
+            const model = gltf.scene.clone(true);
+            model.name = `anchor-${profile.mapId}-${anchor.id}`;
+            model.userData.arMapId = profile.mapId;
+            const pos = anchor.position ?? [0, 0, 0];
+            const rot = anchor.rotation ?? [0, 0, 0];
+            const scl = anchor.scale ?? [1, 1, 1];
+            model.position.set(pos[0], pos[1], pos[2]);
+            model.rotation.set(rot[0], rot[1], rot[2]);
+            model.scale.set(scl[0], scl[1], scl[2]);
+            prepareModelMaterials(model);
+            model.visible = false;
+            scene.add(model);
+            model.updateMatrixWorld(true);
+            const worldPosition = new THREE.Vector3();
+            const worldQuaternion = new THREE.Quaternion();
+            const worldScale = new THREE.Vector3();
+            model.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+            const worldEuler = new THREE.Euler().setFromQuaternion(worldQuaternion, "XYZ");
+            const worldBox = new THREE.Box3().setFromObject(model);
+            const worldBoxSize = worldBox.getSize(new THREE.Vector3());
+            // #region agent log
+            agentDebugLog("initial", "H3,H5", "js/ar/arRenderer.js:modelLoad", "Anchor model loaded with renderer world transform", {
+              mapId: profile.mapId,
+              anchor: {
+                id: anchor.id,
+                position: pos,
+                rotation: rot,
+                scale: scl,
+              },
+              local: {
+                position: model.position.toArray(),
+                rotation: [model.rotation.x, model.rotation.y, model.rotation.z],
+                quaternion: model.quaternion.toArray(),
+                scale: model.scale.toArray(),
+              },
+              world: {
+                position: worldPosition.toArray(),
+                quaternion: worldQuaternion.toArray(),
+                euler: [worldEuler.x, worldEuler.y, worldEuler.z],
+                scale: worldScale.toArray(),
+                boxSize: worldBoxSize.toArray(),
+              },
+            });
+            // #endregion
+          }),
+        );
+      }
+    }
+
+    await Promise.all(loadTasks);
+    anchorCount = loadTasks.length;
     modelsReady = true;
   })();
 
@@ -123,8 +134,20 @@ export function createArRenderer(cameraWrap, options = {}) {
   function setModelsVisible(visible) {
     scene.children.forEach((child) => {
       if (child.isLight) return;
-      child.visible = visible;
+      if (child.userData?.arMapId == null) return;
+      if (!visible) {
+        child.visible = false;
+        return;
+      }
+      child.visible = activeMapId == null || child.userData.arMapId === activeMapId;
     });
+  }
+
+  function setActiveMapId(mapId) {
+    const nextMapId = Number(mapId);
+    if (!Number.isFinite(nextMapId)) return;
+    activeMapId = nextMapId;
+    if (hasPose) setModelsVisible(true);
   }
 
   function getViewportSize() {
@@ -243,7 +266,8 @@ export function createArRenderer(cameraWrap, options = {}) {
       hasPose,
       loadError,
       renderCount,
-      anchorCount: AR_ANCHORS.length,
+      anchorCount,
+      activeMapId,
     };
   }
 
@@ -280,6 +304,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     bringCanvasToFront,
     resize,
     updateCameraFromPose,
+    setActiveMapId,
     renderFrame,
     getStatus,
     dispose,

@@ -2,7 +2,7 @@
 // Vercel Node Serverless Function. Keeps the Immersal token out of the browser bundle.
 
 const IMMERSAL_BASE_URL = "https://api.immersal.com";
-const DEFAULT_MAP_ID = 148753;
+const DEFAULT_MAP_ID = 148688;
 
 function safeJsonParse(maybeJson) {
   if (maybeJson == null) return null;
@@ -40,8 +40,18 @@ function toMapId(value) {
   return Number.isFinite(mapId) ? mapId : DEFAULT_MAP_ID;
 }
 
+function toMapIds(body) {
+  if (Array.isArray(body.mapIds) && body.mapIds.length > 0) {
+    const ids = body.mapIds
+      .map((value) => toMapId(value))
+      .filter((id, index, list) => list.indexOf(id) === index);
+    if (ids.length > 0) return ids;
+  }
+  return [toMapId(body.mapId)];
+}
+
 async function forwardLocalize({ token, body }) {
-  const mapId = toMapId(body.mapId);
+  const mapIds = toMapIds(body);
   const camera = body.camera ?? {};
   const rotation = body.rotation ?? {};
   const imageBuffer = decodeBase64Image(body.imageBase64);
@@ -57,7 +67,7 @@ async function forwardLocalize({ token, body }) {
     qz: toNumber(rotation.qz),
     qw: toNumber(rotation.qw, 1),
     solverType: Number.isFinite(Number(body.solverType)) ? Number(body.solverType) : 1,
-    mapIds: [{ id: mapId }],
+    mapIds: mapIds.map((id) => ({ id })),
   };
 
   const payload = Buffer.concat([
@@ -79,7 +89,7 @@ async function forwardLocalize({ token, body }) {
     status: response.status,
     elapsedMs: Date.now() - startedAt,
     bytes: imageBuffer.byteLength,
-    mapId,
+    mapIds,
     upstream: upstreamJson ?? upstreamText,
   };
 }
@@ -130,7 +140,8 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      mapId: result.mapId,
+      mapIds: result.mapIds,
+      mapId: result.upstream?.map ?? result.mapIds[0],
       elapsedMs: result.elapsedMs,
       imageBytes: result.bytes,
       result: result.upstream,

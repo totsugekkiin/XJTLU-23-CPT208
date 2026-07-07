@@ -110,6 +110,26 @@ body {
   color: rgba(244, 241, 234, 0.75);
 }
 
+.ar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: min(100%, 18rem);
+  font-size: 0.78rem;
+  color: rgba(244, 241, 234, 0.8);
+  text-align: left;
+}
+
+.ar-field select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(244, 241, 234, 0.25);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.45);
+  color: #f4f1ea;
+  font: inherit;
+}
+
 #ar-start-btn {
   margin-top: 0.5rem;
   padding: 0.85rem 2rem;

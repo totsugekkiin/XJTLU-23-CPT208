@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { IMMERSAL_MAP_ID } from "../../js/ar/arAnchors.js";
+import { AR_MAP_PROFILES, DEFAULT_MAP_ID } from "../../js/ar/arAnchors.js";
 
 export function ArEditorPage() {
   useEffect(() => {
@@ -33,7 +33,19 @@ export function ArEditorPage() {
 
         <section className="ar-editor-section">
           <h2>地图参考</h2>
-          <p className="ar-editor-hint">Map {IMMERSAL_MAP_ID} · 白色为场景点，绿色为扫描轨迹</p>
+          <label className="ar-editor-field">
+            编辑地图
+            <select id="ar-editor-map-select" defaultValue={String(DEFAULT_MAP_ID)}>
+              {AR_MAP_PROFILES.map((profile) => (
+                <option key={profile.mapId} value={profile.mapId}>
+                  {profile.label} ({profile.mapId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <p id="ar-editor-map-hint" className="ar-editor-hint">
+            Map {DEFAULT_MAP_ID} · 白色为场景点，绿色为扫描轨迹
+          </p>
           <div className="ar-editor-row">
             <button id="ar-editor-load-sparse" type="button">
               加载稀疏点云

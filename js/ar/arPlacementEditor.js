@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { AR_ANCHORS, IMMERSAL_MAP_ID } from "./arAnchors.js";
+import { AR_MAP_PROFILES, DEFAULT_MAP_ID, resolveActiveMapIds } from "./arAnchors.js";
 
 const IMMERSAL_BASE = "https://api.immersal.com";
 const CLIENT_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
@@ -41,35 +41,103 @@ function anchorToState(anchor) {
   };
 }
 
-function generateAnchorsModule(anchors, mapId) {
-  const body = anchors
-    .map((a) => {
-      const pos = a.position.map(formatNum);
-      const rot = a.rotation.map(formatNum);
-      const scl = a.scale.map(formatNum);
+function formatAnchorExport(anchor) {
+  const pos = anchor.position.map(formatNum);
+  const rot = anchor.rotation.map(formatNum);
+  const scl = anchor.scale.map(formatNum);
+  return `      {
+        id: ${JSON.stringify(anchor.id)},
+        label: ${JSON.stringify(anchor.label)},
+        url: ${JSON.stringify(anchor.url)},
+        position: [${pos.join(", ")}],
+        rotation: [${rot.join(", ")}],
+        scale: [${scl.join(", ")}],
+      }`;
+}
+
+function generateAnchorsModule(profiles) {
+  const profilesBody = profiles
+    .map((profile) => {
+      const anchorsBody = profile.anchors.map(formatAnchorExport).join(",\n");
       return `  {
-    id: ${JSON.stringify(a.id)},
-    label: ${JSON.stringify(a.label)},
-    url: ${JSON.stringify(a.url)},
-    position: [${pos.join(", ")}],
-    rotation: [${rot.join(", ")}],
-    scale: [${scl.join(", ")}],
+    mapId: ${profile.mapId},
+    label: ${JSON.stringify(profile.label)},
+    anchors: [
+${anchorsBody},
+    ],
   }`;
     })
     .join(",\n");
 
-  return `/** Immersal 地图 ID，与 arScene.js 保持一致 */
-export const IMMERSAL_MAP_ID = ${mapId};
+  const defaultMapId = profiles[0]?.mapId ?? DEFAULT_MAP_ID;
+
+  return `/** 默认测试地图（单地图模式或未指定时使用） */
+export const DEFAULT_MAP_ID = ${defaultMapId};
 
 /**
- * AR 锚点配置（地图坐标系，单位：米）
- * - position: [x, y, z]
- * - rotation: 欧拉角 [x, y, z]，弧度，Three.js XYZ 顺序
- * - scale: [x, y, z]
+ * 多地图 AR 配置：每张 Immersal 地图可有独立锚点
+ * - mapId: Immersal 地图 ID
+ * - label: 显示名称
+ * - anchors: 该地图坐标系下的模型锚点
  */
-export const AR_ANCHORS = [
-${body},
+export const AR_MAP_PROFILES = [
+${profilesBody},
 ];
+
+export function getAllMapIds() {
+  return AR_MAP_PROFILES.map((profile) => profile.mapId);
+}
+
+export function getMapProfile(mapId) {
+  const id = Number(mapId);
+  return AR_MAP_PROFILES.find((profile) => profile.mapId === id) ?? null;
+}
+
+export function getAnchorsForMap(mapId) {
+  return getMapProfile(mapId)?.anchors ?? [];
+}
+
+export function getMapProfilesForIds(mapIds) {
+  const idSet = new Set(mapIds.map(Number));
+  return AR_MAP_PROFILES.filter((profile) => idSet.has(profile.mapId));
+}
+
+export function resolveActiveMapIds(options = {}) {
+  const search = options.search ?? (typeof window !== "undefined" ? window.location.search : "");
+  const selectedValue = options.selectedValue ?? "all";
+  const params = new URLSearchParams(search);
+
+  if (params.has("map")) {
+    const id = Number(params.get("map"));
+    if (Number.isFinite(id)) return [id];
+  }
+
+  if (params.has("maps")) {
+    const ids = params
+      .get("maps")
+      .split(",")
+      .map((part) => Number(part.trim()))
+      .filter(Number.isFinite);
+    if (ids.length > 0) return ids;
+  }
+
+  if (selectedValue !== "all") {
+    const id = Number(selectedValue);
+    if (Number.isFinite(id)) return [id];
+  }
+
+  return getAllMapIds();
+}
+
+export function formatMapIdList(mapIds) {
+  return mapIds.join(", ");
+}
+
+/** @deprecated 使用 DEFAULT_MAP_ID 或 resolveActiveMapIds */
+export const IMMERSAL_MAP_ID = DEFAULT_MAP_ID;
+
+/** @deprecated 使用 getAnchorsForMap(mapId) */
+export const AR_ANCHORS = getAnchorsForMap(DEFAULT_MAP_ID);
 `;
 }
 
@@ -91,6 +159,8 @@ export function bootstrapArPlacementEditor(rootEl) {
   const importFileInput = rootEl.querySelector("#ar-editor-import-file");
   const toggleRefBtn = rootEl.querySelector("#ar-editor-toggle-ref");
   const toggleGridBtn = rootEl.querySelector("#ar-editor-toggle-grid");
+  const mapSelect = rootEl.querySelector("#ar-editor-map-select");
+  const mapHintEl = rootEl.querySelector("#ar-editor-map-hint");
   const numInputs = {
     px: rootEl.querySelector("#ar-editor-px"),
     py: rootEl.querySelector("#ar-editor-py"),
@@ -103,7 +173,19 @@ export function bootstrapArPlacementEditor(rootEl) {
     sz: rootEl.querySelector("#ar-editor-sz"),
   };
 
-  let anchorStates = AR_ANCHORS.map(anchorToState);
+  const profileStates = new Map(
+    AR_MAP_PROFILES.map((profile) => [
+      profile.mapId,
+      {
+        mapId: profile.mapId,
+        label: profile.label,
+        anchors: profile.anchors.map(anchorToState),
+      },
+    ]),
+  );
+  const initialMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? String(DEFAULT_MAP_ID) });
+  let activeMapId = initialMapIds[0] ?? AR_MAP_PROFILES[0]?.mapId ?? DEFAULT_MAP_ID;
+  let anchorStates = profileStates.get(activeMapId)?.anchors ?? [];
   let activeAnchorId = anchorStates[0]?.id ?? null;
   let referenceRoot = null;
   let referenceVisible = true;
@@ -153,6 +235,56 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   const plyLoader = new PLYLoader();
   const gltfLoader = new GLTFLoader();
+
+  function getActiveProfile() {
+    return profileStates.get(activeMapId) ?? null;
+  }
+
+  function saveCurrentProfileAnchors() {
+    const profile = getActiveProfile();
+    if (!profile) return;
+    profile.anchors = anchorStates.map((state) => ({
+      ...state,
+      position: [...state.position],
+      rotation: [...state.rotation],
+      scale: [...state.scale],
+    }));
+  }
+
+  function updateMapHint() {
+    if (!mapHintEl) return;
+    mapHintEl.textContent = `Map ${activeMapId} · 白色为场景点，绿色为扫描轨迹`;
+  }
+
+  function switchMapProfile(mapId) {
+    const nextMapId = Number(mapId);
+    if (!Number.isFinite(nextMapId) || !profileStates.has(nextMapId)) return;
+    saveCurrentProfileAnchors();
+    activeMapId = nextMapId;
+    if (mapSelect) mapSelect.value = String(activeMapId);
+    anchorStates = profileStates.get(activeMapId)?.anchors ?? [];
+    activeAnchorId = anchorStates[0]?.id ?? null;
+    populateAnchorSelect();
+    updateMapHint();
+    clearReference();
+    if (activeAnchorId) loadModelFromState(getActiveState());
+  }
+
+  function getExportProfiles() {
+    saveCurrentProfileAnchors();
+    return Array.from(profileStates.values()).map((profile) => ({
+      mapId: profile.mapId,
+      label: profile.label,
+      anchors: profile.anchors.map((anchor) => ({
+        id: anchor.id,
+        label: anchor.label,
+        url: anchor.url,
+        position: [...anchor.position],
+        rotation: [...anchor.rotation],
+        scale: [...anchor.scale],
+      })),
+    }));
+  }
 
   function setStatus(message, isError = false) {
     if (!statusEl) return;
@@ -379,9 +511,9 @@ export function bootstrapArPlacementEditor(rootEl) {
       return;
     }
     const endpoint = kind === "dense" ? "dense" : "sparse";
-    setStatus(`正在下载 Map ${IMMERSAL_MAP_ID} ${endpoint} 点云…`);
+    setStatus(`正在下载 Map ${activeMapId} ${endpoint} 点云…`);
     try {
-      const url = `${IMMERSAL_BASE}/${endpoint}?token=${encodeURIComponent(CLIENT_TOKEN)}&id=${IMMERSAL_MAP_ID}`;
+      const url = `${IMMERSAL_BASE}/${endpoint}?token=${encodeURIComponent(CLIENT_TOKEN)}&id=${activeMapId}`;
       const geometry = await plyLoader.loadAsync(url);
       addPlyGeometry(geometry, kind === "dense" ? "稠密点云" : "稀疏点云");
     } catch (err) {
@@ -471,7 +603,7 @@ export function bootstrapArPlacementEditor(rootEl) {
   }
 
   function exportConfig() {
-    const moduleText = generateAnchorsModule(anchorStates, IMMERSAL_MAP_ID);
+    const moduleText = generateAnchorsModule(getExportProfiles());
     const blob = new Blob([moduleText], { type: "text/javascript;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -483,7 +615,7 @@ export function bootstrapArPlacementEditor(rootEl) {
   }
 
   async function copyConfig() {
-    const text = generateAnchorsModule(anchorStates, IMMERSAL_MAP_ID);
+    const text = generateAnchorsModule(getExportProfiles());
     try {
       await navigator.clipboard.writeText(text);
       setStatus("配置已复制到剪贴板");
@@ -493,23 +625,62 @@ export function bootstrapArPlacementEditor(rootEl) {
   }
 
   function importConfigFromJson(data) {
+    if (Array.isArray(data?.profiles)) {
+      data.profiles.forEach((profile, index) => {
+        const mapId = Number(profile.mapId);
+        if (!Number.isFinite(mapId)) return;
+        profileStates.set(mapId, {
+          mapId,
+          label: profile.label ?? `Map ${mapId}`,
+          anchors: (profile.anchors ?? []).map((item, anchorIndex) =>
+            anchorToState({
+              id: item.id ?? `anchor-${anchorIndex}`,
+              label: item.label ?? item.id ?? `锚点 ${anchorIndex + 1}`,
+              url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
+              position: item.position,
+              rotation: item.rotation,
+              scale: item.scale,
+            }),
+          ),
+        });
+      });
+      populateMapSelect();
+      switchMapProfile(Number(data.profiles[0]?.mapId) || activeMapId);
+      return;
+    }
+
     if (!Array.isArray(data?.anchors) && !Array.isArray(data)) {
-      throw new Error("JSON 需包含 anchors 数组");
+      throw new Error("JSON 需包含 profiles 或 anchors 数组");
     }
     const list = Array.isArray(data?.anchors) ? data.anchors : data;
     anchorStates = list.map((item, index) =>
       anchorToState({
         id: item.id ?? `anchor-${index}`,
         label: item.label ?? item.id ?? `锚点 ${index + 1}`,
-        url: item.url ?? AR_ANCHORS[0]?.url ?? "",
+        url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
         position: item.position,
         rotation: item.rotation,
         scale: item.scale,
       }),
     );
+    const profile = getActiveProfile();
+    if (profile) profile.anchors = anchorStates;
     activeAnchorId = anchorStates[0]?.id ?? null;
     populateAnchorSelect();
     if (activeAnchorId) loadModelFromState(getActiveState());
+  }
+
+  function populateMapSelect() {
+    if (!mapSelect) return;
+    mapSelect.replaceChildren(
+      ...Array.from(profileStates.values()).map((profile) => {
+        const opt = document.createElement("option");
+        opt.value = String(profile.mapId);
+        opt.textContent = `${profile.label} (${profile.mapId})`;
+        return opt;
+      }),
+    );
+    mapSelect.value = String(activeMapId);
   }
 
   transformControls.addEventListener("dragging-changed", (event) => {
@@ -522,6 +693,11 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   Object.values(numInputs).forEach((input) => {
     input?.addEventListener("input", applyUiToState);
+  });
+
+  mapSelect?.addEventListener("change", () => {
+    switchMapProfile(mapSelect.value);
+    if (CLIENT_TOKEN) loadImmersalPly("sparse");
   });
 
   anchorSelect?.addEventListener("change", () => {
@@ -605,7 +781,9 @@ export function bootstrapArPlacementEditor(rootEl) {
     frameId = requestAnimationFrame(tick);
   };
 
+  populateMapSelect();
   populateAnchorSelect();
+  updateMapHint();
   setTransformMode("translate");
   resize();
   tick();
