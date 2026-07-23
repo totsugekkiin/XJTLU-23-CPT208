@@ -1,0 +1,126 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #050505;
+}
+
+.marker-test-ui {
+  position: fixed;
+  z-index: 20;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  width: min(92vw, 520px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.marker-test-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 16px;
+  color: #fff;
+  background: rgb(8 10 12 / 82%);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 28%);
+  backdrop-filter: blur(12px);
+}
+
+.marker-test-card strong,
+.marker-test-card small {
+  display: block;
+}
+
+.marker-test-card strong {
+  font-size: 15px;
+}
+
+.marker-test-card small {
+  margin-top: 2px;
+  color: rgb(255 255 255 / 68%);
+  font-size: 12px;
+}
+
+.marker-status-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffb020;
+  box-shadow: 0 0 0 5px rgb(255 176 32 / 15%);
+}
+
+.marker-test-ui.is-tracking .marker-status-dot {
+  background: #38e58c;
+  box-shadow: 0 0 0 5px rgb(56 229 140 / 16%);
+}
+
+.marker-test-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 9px;
+  pointer-events: auto;
+}
+
+.marker-test-actions button,
+.marker-test-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(8 10 12 / 78%);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.marker-test-actions button:active,
+.marker-test-actions a:active {
+  transform: scale(0.97);
+}
+
+.marker-test-legend {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 9px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: 0 1px 5px #000;
+}
+
+.legend-near {
+  color: #ff776f;
+}
+
+.legend-far {
+  color: #72e5ff;
+}
+
+a-scene {
+  position: fixed !important;
+  inset: 0;
+}
+
+video {
+  object-fit: cover !important;
+}

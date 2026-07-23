@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>阊门窗口标记追踪测试</title>
+    <link rel="stylesheet" href="/css/marker-ar.css" />
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/aframe/build/aframe-ar.js"></script>
+  </head>
+  <body>
+    <div class="marker-test-ui" aria-live="polite">
+      <div class="marker-test-card">
+        <span id="marker-status-dot" class="marker-status-dot"></span>
+        <div>
+          <strong id="marker-status">正在启动相机…</strong>
+          <small id="marker-detail">请将完整 Hiro 标记放入画面</small>
+        </div>
+      </div>
+      <div class="marker-test-actions">
+        <a href="/print/changgate-portal-marker-a3.pdf" download>下载A3标记</a>
+        <button id="flip-window-offset" type="button">上下翻转</button>
+        <button id="flip-depth" type="button">深度翻转</button>
+      </div>
+      <p class="marker-test-legend">
+        <span class="legend-near">红框：近端洞口</span>
+        <span class="legend-far">蓝框：40 cm远端</span>
+      </p>
+    </div>
+
+    <a-scene
+      embedded
+      vr-mode-ui="enabled: false"
+      renderer="alpha: true; antialias: true; colorManagement: true"
+      arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+    >
+      <a-marker
+        id="portal-marker"
+        preset="hiro"
+        size="0.08"
+        emitevents="true"
+        smooth="true"
+        smooth-count="10"
+        smooth-tolerance="0.008"
+        smooth-threshold="2"
+      >
+        <a-entity id="portal-rig" position="0 0 0.185">
+          <!-- Near aperture: 20 cm wide x 26 cm high, in the marker plane. -->
+          <a-box position="0 0 0.133" width="0.212" height="0.008" depth="0.006" color="#ff3b30"></a-box>
+          <a-box position="0 0 -0.133" width="0.212" height="0.008" depth="0.006" color="#ff3b30"></a-box>
+          <a-box position="-0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#ff3b30"></a-box>
+          <a-box position="0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#ff3b30"></a-box>
+
+          <!-- Far aperture, 40 cm behind the near wall plane. -->
+          <a-entity class="depth-node" data-base-y="-0.4" position="0 -0.4 0">
+            <a-box position="0 0 0.133" width="0.212" height="0.008" depth="0.006" color="#30d5ff"></a-box>
+            <a-box position="0 0 -0.133" width="0.212" height="0.008" depth="0.006" color="#30d5ff"></a-box>
+            <a-box position="-0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#30d5ff"></a-box>
+            <a-box position="0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#30d5ff"></a-box>
+          </a-entity>
+
+          <!-- Four depth guides make incorrect depth direction obvious on site. -->
+          <a-box class="depth-guide" data-base-y="-0.2" position="-0.103 -0.2 -0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-y="-0.2" position="0.103 -0.2 -0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-y="-0.2" position="-0.103 -0.2 0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-y="-0.2" position="0.103 -0.2 0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
+        </a-entity>
+      </a-marker>
+      <a-entity camera></a-entity>
+    </a-scene>
+
+    <script type="module" src="/js/ar/markerPortalTest.js"></script>
+  </body>
+</html>
