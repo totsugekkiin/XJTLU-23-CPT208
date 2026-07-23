@@ -103,6 +103,7 @@ startCameraButton?.addEventListener("click", startCamera);
 
 scene?.addEventListener("loaded", () => {
   resolveArSystem();
+  scene.renderer?.setClearColor(0x000000, 0);
   if (statusText) statusText.textContent = "等待你打开摄像头";
   if (statusDetail) statusDetail.textContent = "点击“允许并打开摄像头”开始测试";
 });
