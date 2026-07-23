@@ -12,11 +12,15 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 #ar-editor-app {
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-columns: 1fr min(360px, 38vw);
+  grid-template-columns: minmax(0, 1fr) min(410px, 42vw);
 }
 
 #ar-editor-canvas {
@@ -38,6 +42,15 @@ body {
   margin: 0 0 0.35rem;
   font-size: 1.15rem;
   font-weight: 600;
+}
+
+.ar-editor-kicker {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #43d7f3;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 .ar-editor-panel__header p {
@@ -143,6 +156,130 @@ button.ar-editor-primary {
   background: #1a2028;
   color: inherit;
   font: inherit;
+}
+
+.ar-editor-sliders {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.55rem 0;
+}
+
+.ar-editor-sliders label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem 0.6rem;
+  font-size: 0.74rem;
+  color: #9bacbd;
+}
+
+.ar-editor-sliders output {
+  color: #dce9f4;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-editor-sliders input {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #43d7f3;
+}
+
+.ar-editor-portal-section {
+  padding: 0.85rem;
+  border: 1px solid rgba(67, 215, 243, 0.22);
+  border-radius: 8px;
+  background: rgba(34, 123, 145, 0.08);
+}
+
+.ar-editor-view-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.ar-editor-view-presets button {
+  padding-inline: 0.25rem;
+}
+
+.ar-editor-step-field {
+  display: grid;
+  grid-template-columns: 1fr 8rem;
+  align-items: center;
+}
+
+.ar-editor-step-field select {
+  margin: 0;
+}
+
+.ar-editor-nudge-list {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.ar-editor-nudge {
+  display: grid;
+  grid-template-columns: 1fr 2rem 5.2rem 2rem;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ar-editor-nudge span,
+.ar-editor-rotation-nudge > span {
+  font-size: 0.74rem;
+  color: #9bacbd;
+}
+
+.ar-editor-nudge button,
+.ar-editor-rotation-nudge button {
+  padding: 0.28rem;
+  font-weight: 700;
+}
+
+.ar-editor-nudge output {
+  text-align: center;
+  color: #f1f8fb;
+  font: 0.78rem ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.ar-editor-rotation-nudge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+.ar-editor-rotation-nudge > span {
+  margin-right: auto;
+}
+
+.ar-editor-rotation-nudge div {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.ar-editor-rotation-nudge b {
+  margin-right: 0.15rem;
+  font-size: 0.68rem;
+  color: #d4e2ee;
+}
+
+.ar-editor-summary {
+  margin: 0.6rem 0 0;
+  padding: 0.55rem;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #aeeafa;
+  font: 0.68rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.ar-editor-details summary {
+  margin-bottom: 0.65rem;
+  cursor: pointer;
+  color: #8fa1b3;
+  font-size: 0.78rem;
 }
 
 .ar-editor-modes {

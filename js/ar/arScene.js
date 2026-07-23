@@ -1058,7 +1058,10 @@ export function bootstrapArScene(rootEl) {
 
     let session = null;
     try {
-      const sdkUrl = "/vendor/immersal/immersal.js";
+      // Keep the SDK in public/vendor so its relative WASM imports continue to
+      // resolve, but turn it into a runtime URL so Vite does not try to
+      // transform a public asset during development.
+      const sdkUrl = new URL("/vendor/immersal/immersal.js", window.location.origin).href;
       const { Immersal, createOrientationSensor } = await import(/* @vite-ignore */ sdkUrl);
       await createOrientationSensor?.();
       await waitForDeviceGyro();

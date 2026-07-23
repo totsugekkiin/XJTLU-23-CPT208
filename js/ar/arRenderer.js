@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { agentDebugLog } from "./agentDebugLog.js";
+import { createPortalTestScene } from "./portalTestScene.js";
 
 const POSE_LERP = 0.28;
 const POSE_LERP_DT_SCALE = 0.025;
@@ -20,6 +21,26 @@ function prepareModelMaterials(object) {
   });
 }
 
+function createPortalAnchor(anchor, mapId) {
+  const [wallDepth = 0.4, apertureHeight = 0.26, apertureWidth = 0.2] = anchor.scale ?? [];
+  const root = createPortalTestScene({
+    mapId,
+    wallDepth,
+    apertureHeight,
+    apertureWidth,
+  });
+  root.name = `anchor-${mapId}-${anchor.id}`;
+  root.userData.arMapId = mapId;
+  root.userData.arAnchorType = "portal";
+
+  const pos = anchor.position ?? [0, 0, 0];
+  const rot = anchor.rotation ?? [0, 0, 0];
+  root.position.set(pos[0], pos[1], pos[2]);
+  root.rotation.set(rot[0], rot[1], rot[2]);
+
+  return root;
+}
+
 /**
  * Immersal 官方示例思路：模型固定在地图坐标，相机随设备 pose 移动。
  * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
@@ -34,6 +55,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     canvas,
     alpha: true,
     antialias: true,
+    stencil: true,
     powerPreference: "high-performance",
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -70,6 +92,13 @@ export function createArRenderer(cameraWrap, options = {}) {
 
     for (const profile of mapProfiles) {
       for (const anchor of profile.anchors) {
+        if (anchor.type === "portal") {
+          const portal = createPortalAnchor(anchor, profile.mapId);
+          portal.visible = false;
+          scene.add(portal);
+          loadTasks.push(Promise.resolve());
+          continue;
+        }
         loadTasks.push(
           loader.loadAsync(anchor.url).then((gltf) => {
             const model = gltf.scene.clone(true);

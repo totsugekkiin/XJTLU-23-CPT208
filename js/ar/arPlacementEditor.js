@@ -4,6 +4,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_MAP_PROFILES, DEFAULT_MAP_ID, resolveActiveMapIds } from "./arAnchors.js";
+import { createPortalTestScene, disposePortalTestScene } from "./portalTestScene.js";
 
 const IMMERSAL_BASE = "https://api.immersal.com";
 const CLIENT_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
@@ -33,8 +34,10 @@ function formatNum(n) {
 function anchorToState(anchor) {
   return {
     id: anchor.id,
+    type: anchor.type ?? "model",
     label: anchor.label ?? anchor.id,
-    url: anchor.url,
+    url: anchor.url ?? "",
+    content: anchor.content ?? null,
     position: [...(anchor.position ?? [0, 0, 0])],
     rotation: [...(anchor.rotation ?? [0, 0, 0])],
     scale: [...(anchor.scale ?? [1, 1, 1])],
@@ -45,10 +48,14 @@ function formatAnchorExport(anchor) {
   const pos = anchor.position.map(formatNum);
   const rot = anchor.rotation.map(formatNum);
   const scl = anchor.scale.map(formatNum);
+  const typeLine = anchor.type && anchor.type !== "model"
+    ? `\n        type: ${JSON.stringify(anchor.type)},`
+    : "";
+  const urlLine = anchor.url ? `\n        url: ${JSON.stringify(anchor.url)},` : "";
+  const contentLine = anchor.content ? `\n        content: ${JSON.stringify(anchor.content)},` : "";
   return `      {
         id: ${JSON.stringify(anchor.id)},
-        label: ${JSON.stringify(anchor.label)},
-        url: ${JSON.stringify(anchor.url)},
+        label: ${JSON.stringify(anchor.label)},${typeLine}${urlLine}${contentLine}
         position: [${pos.join(", ")}],
         rotation: [${rot.join(", ")}],
         scale: [${scl.join(", ")}],
@@ -88,8 +95,17 @@ export function getAllMapIds() {
   return AR_MAP_PROFILES.map((profile) => profile.mapId);
 }
 
-export function getMapProfile(mapId) {
+const MAP_ID_ALIASES = new Map([
+  [148752, 149467],
+]);
+
+function normalizeMapId(mapId) {
   const id = Number(mapId);
+  return MAP_ID_ALIASES.get(id) ?? id;
+}
+
+export function getMapProfile(mapId) {
+  const id = normalizeMapId(mapId);
   return AR_MAP_PROFILES.find((profile) => profile.mapId === id) ?? null;
 }
 
@@ -98,7 +114,7 @@ export function getAnchorsForMap(mapId) {
 }
 
 export function getMapProfilesForIds(mapIds) {
-  const idSet = new Set(mapIds.map(Number));
+  const idSet = new Set(mapIds.map(normalizeMapId));
   return AR_MAP_PROFILES.filter((profile) => idSet.has(profile.mapId));
 }
 
@@ -108,7 +124,7 @@ export function resolveActiveMapIds(options = {}) {
   const params = new URLSearchParams(search);
 
   if (params.has("map")) {
-    const id = Number(params.get("map"));
+    const id = normalizeMapId(params.get("map"));
     if (Number.isFinite(id)) return [id];
   }
 
@@ -116,13 +132,13 @@ export function resolveActiveMapIds(options = {}) {
     const ids = params
       .get("maps")
       .split(",")
-      .map((part) => Number(part.trim()))
+      .map((part) => normalizeMapId(part.trim()))
       .filter(Number.isFinite);
     if (ids.length > 0) return ids;
   }
 
   if (selectedValue !== "all") {
-    const id = Number(selectedValue);
+    const id = normalizeMapId(selectedValue);
     if (Number.isFinite(id)) return [id];
   }
 
@@ -161,6 +177,19 @@ export function bootstrapArPlacementEditor(rootEl) {
   const toggleGridBtn = rootEl.querySelector("#ar-editor-toggle-grid");
   const mapSelect = rootEl.querySelector("#ar-editor-map-select");
   const mapHintEl = rootEl.querySelector("#ar-editor-map-hint");
+  const portalSection = rootEl.querySelector("#ar-editor-portal-section");
+  const modelFileField = rootEl.querySelector("#ar-editor-model-file-field");
+  const portalSummary = rootEl.querySelector("#ar-editor-portal-summary");
+  const nudgeStepSelect = rootEl.querySelector("#ar-editor-nudge-step");
+  const resetAnchorBtn = rootEl.querySelector("#ar-editor-reset-anchor");
+  const copyCurrentBtn = rootEl.querySelector("#ar-editor-copy-current");
+  const pointSizeInput = rootEl.querySelector("#ar-editor-point-size");
+  const pointSizeOutput = rootEl.querySelector("#ar-editor-point-size-output");
+  const pointOpacityInput = rootEl.querySelector("#ar-editor-point-opacity");
+  const pointOpacityOutput = rootEl.querySelector("#ar-editor-point-opacity-output");
+  const portalOpacityInput = rootEl.querySelector("#ar-editor-portal-opacity");
+  const portalOpacityOutput = rootEl.querySelector("#ar-editor-portal-opacity-output");
+  const togglePortalTestBtn = rootEl.querySelector("#ar-editor-toggle-portal-test");
   const numInputs = {
     px: rootEl.querySelector("#ar-editor-px"),
     py: rootEl.querySelector("#ar-editor-py"),
@@ -183,14 +212,24 @@ export function bootstrapArPlacementEditor(rootEl) {
       },
     ]),
   );
+  const initialAnchorStates = new Map(
+    AR_MAP_PROFILES.flatMap((profile) =>
+      profile.anchors.map((anchor) => [`${profile.mapId}:${anchor.id}`, anchorToState(anchor)]),
+    ),
+  );
   const initialMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? String(DEFAULT_MAP_ID) });
   let activeMapId = initialMapIds[0] ?? AR_MAP_PROFILES[0]?.mapId ?? DEFAULT_MAP_ID;
   let anchorStates = profileStates.get(activeMapId)?.anchors ?? [];
   let activeAnchorId = anchorStates[0]?.id ?? null;
   let referenceRoot = null;
+  let referencePointsMaterial = null;
   let referenceVisible = true;
   let gridVisible = true;
   let modelObject = null;
+  let portalPreviewMaterials = [];
+  let portalTestRoot = null;
+  let portalTestDimensionsKey = "";
+  let portalTestVisible = true;
   let isSyncingUi = false;
   const pressedKeys = new Set();
   let cameraBoost = false;
@@ -198,7 +237,12 @@ export function bootstrapArPlacementEditor(rootEl) {
   const cameraMoveRight = new THREE.Vector3();
   const cameraMoveDelta = new THREE.Vector3();
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true,
+    alpha: false,
+    stencil: true,
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -277,8 +321,10 @@ export function bootstrapArPlacementEditor(rootEl) {
       label: profile.label,
       anchors: profile.anchors.map((anchor) => ({
         id: anchor.id,
+        type: anchor.type,
         label: anchor.label,
         url: anchor.url,
+        content: anchor.content,
         position: [...anchor.position],
         rotation: [...anchor.rotation],
         scale: [...anchor.scale],
@@ -293,7 +339,7 @@ export function bootstrapArPlacementEditor(rootEl) {
   }
 
   function resize() {
-    const { clientWidth, clientHeight } = rootEl;
+    const { clientWidth, clientHeight } = canvas;
     if (!clientWidth || !clientHeight) return;
     camera.aspect = clientWidth / clientHeight;
     camera.updateProjectionMatrix();
@@ -304,11 +350,42 @@ export function bootstrapArPlacementEditor(rootEl) {
     return anchorStates.find((a) => a.id === activeAnchorId) ?? null;
   }
 
+  function clearPortalTestWorld() {
+    if (!portalTestRoot) return;
+    scene.remove(portalTestRoot);
+    disposePortalTestScene(portalTestRoot);
+    portalTestRoot = null;
+    portalTestDimensionsKey = "";
+  }
+
+  function updatePortalTestWorld(state) {
+    if (state?.type !== "portal") {
+      clearPortalTestWorld();
+      return;
+    }
+    const dimensionsKey = state.scale.map((value) => formatNum(value)).join(":");
+    if (!portalTestRoot || dimensionsKey !== portalTestDimensionsKey) {
+      clearPortalTestWorld();
+      portalTestRoot = createPortalTestScene({
+        mapId: activeMapId,
+        wallDepth: state.scale[0],
+        apertureHeight: state.scale[1],
+        apertureWidth: state.scale[2],
+      });
+      portalTestDimensionsKey = dimensionsKey;
+      scene.add(portalTestRoot);
+    }
+    portalTestRoot.position.copy(vec3FromArray(state.position));
+    portalTestRoot.rotation.copy(eulerFromArray(state.rotation));
+    portalTestRoot.visible = portalTestVisible;
+  }
+
   function applyStateToObject(state) {
     if (!modelObject || !state) return;
     modelObject.position.copy(vec3FromArray(state.position));
     modelObject.rotation.copy(eulerFromArray(state.rotation));
     modelObject.scale.copy(vec3FromArray(state.scale, 1));
+    updatePortalTestWorld(state);
   }
 
   function readStateFromObject() {
@@ -329,6 +406,7 @@ export function bootstrapArPlacementEditor(rootEl) {
       formatNum(modelObject.scale.y),
       formatNum(modelObject.scale.z),
     ];
+    updatePortalTestWorld(state);
     syncUiFromState();
   }
 
@@ -345,6 +423,26 @@ export function bootstrapArPlacementEditor(rootEl) {
     numInputs.sx.value = String(state.scale[0]);
     numInputs.sy.value = String(state.scale[1]);
     numInputs.sz.value = String(state.scale[2]);
+    Object.entries(numInputs).forEach(([key, input]) => {
+      const output = rootEl.querySelector(`#ar-editor-${key}-readout`);
+      if (output) output.value = Number.parseFloat(input.value || "0").toFixed(3);
+    });
+    const isPortal = state.type === "portal";
+    portalSection?.toggleAttribute("hidden", !isPortal);
+    modelFileField?.toggleAttribute("hidden", isPortal);
+    const sxLabel = rootEl.querySelector("#ar-editor-sx-label");
+    const syLabel = rootEl.querySelector("#ar-editor-sy-label");
+    const szLabel = rootEl.querySelector("#ar-editor-sz-label");
+    if (sxLabel) sxLabel.textContent = isPortal ? "墙深 X" : "缩放 X";
+    if (syLabel) syLabel.textContent = isPortal ? "洞高 Y" : "缩放 Y";
+    if (szLabel) szLabel.textContent = isPortal ? "洞宽 Z" : "缩放 Z";
+    if (portalSummary && isPortal) {
+      portalSummary.textContent = [
+        `position: [${state.position.map((value) => formatNum(value)).join(", ")}]`,
+        `rotation: [${state.rotation.map((value) => formatNum(value)).join(", ")}]`,
+        `scale:    [${state.scale.map((value) => formatNum(value)).join(", ")}]  // 墙深, 洞高, 洞宽`,
+      ].join("\n");
+    }
     isSyncingUi = false;
   }
 
@@ -367,6 +465,17 @@ export function bootstrapArPlacementEditor(rootEl) {
       Number.parseFloat(numInputs.sz.value) || 1,
     ];
     applyStateToObject(state);
+    syncUiFromState();
+  }
+
+  function nudgeField(field, sign) {
+    const input = numInputs[field];
+    if (!input) return;
+    const baseStep = Number.parseFloat(nudgeStepSelect?.value || "0.005");
+    const step = field.startsWith("r") ? 0.5 : baseStep;
+    const next = (Number.parseFloat(input.value) || 0) + sign * step;
+    input.value = String(formatNum(next));
+    applyUiToState();
   }
 
   function focusOnObject(object) {
@@ -378,6 +487,49 @@ export function bootstrapArPlacementEditor(rootEl) {
     orbitControls.target.copy(center);
     camera.position.copy(center).add(new THREE.Vector3(radius * 1.4, radius * 0.9, radius * 1.4));
     orbitControls.update();
+  }
+
+  function setPortalView(view) {
+    const state = getActiveState();
+    if (!modelObject || state?.type !== "portal") return;
+
+    const target = modelObject.position.clone();
+    const radius = Math.max(state.scale[0], state.scale[1], state.scale[2], 0.25);
+    const offsets = {
+      entrance: new THREE.Vector3(radius * 4, 0, 0),
+      perspective: new THREE.Vector3(radius * 3, radius * 1.8, radius * 2.6),
+      side: new THREE.Vector3(0, radius * 0.2, radius * 4),
+      top: new THREE.Vector3(0, radius * 4, 0.001),
+    };
+    const localOffset = offsets[view] ?? offsets.perspective;
+    localOffset.applyQuaternion(modelObject.quaternion);
+    camera.position.copy(target).add(localOffset);
+    camera.up.set(0, 1, 0).applyQuaternion(modelObject.quaternion);
+    camera.lookAt(target);
+    orbitControls.target.copy(target);
+    orbitControls.update();
+  }
+
+  function updatePointAppearance() {
+    const size = Number.parseFloat(pointSizeInput?.value || "0.018");
+    const opacity = Number.parseFloat(pointOpacityInput?.value || "1");
+    if (referencePointsMaterial) {
+      referencePointsMaterial.size = size;
+      referencePointsMaterial.opacity = opacity;
+      referencePointsMaterial.transparent = opacity < 1;
+      referencePointsMaterial.needsUpdate = true;
+    }
+    if (pointSizeOutput) pointSizeOutput.value = size.toFixed(3);
+    if (pointOpacityOutput) pointOpacityOutput.value = `${Math.round(opacity * 100)}%`;
+  }
+
+  function updatePortalAppearance() {
+    const opacity = Number.parseFloat(portalOpacityInput?.value || "0.28");
+    portalPreviewMaterials.forEach((material) => {
+      material.opacity = opacity;
+      material.needsUpdate = true;
+    });
+    if (portalOpacityOutput) portalOpacityOutput.value = `${Math.round(opacity * 100)}%`;
   }
 
   function isTypingTarget(target) {
@@ -469,6 +621,7 @@ export function bootstrapArPlacementEditor(rootEl) {
         }
       });
       referenceRoot = null;
+      referencePointsMaterial = null;
     }
   }
 
@@ -478,11 +631,14 @@ export function bootstrapArPlacementEditor(rootEl) {
 
     const hasColors = Boolean(geometry.getAttribute("color"));
     const material = new THREE.PointsMaterial({
-      size: 0.03,
+      size: Number.parseFloat(pointSizeInput?.value || "0.018"),
       sizeAttenuation: true,
       vertexColors: hasColors,
       color: hasColors ? 0xffffff : 0xddff19,
+      opacity: Number.parseFloat(pointOpacityInput?.value || "1"),
+      transparent: Number.parseFloat(pointOpacityInput?.value || "1") < 1,
     });
+    referencePointsMaterial = material;
 
     const points = new THREE.Points(geometry, material);
     referenceRoot = new THREE.Group();
@@ -546,7 +702,86 @@ export function bootstrapArPlacementEditor(rootEl) {
   async function loadModelFromState(state) {
     modelRoot.clear();
     modelObject = null;
+    portalPreviewMaterials = [];
     transformControls.detach();
+
+    if (state.type === "portal") {
+      const portalPreview = new THREE.Group();
+      const loopSegments = (x) => [
+        x, -0.5, -0.5, x, -0.5, 0.5,
+        x, -0.5, 0.5, x, 0.5, 0.5,
+        x, 0.5, 0.5, x, 0.5, -0.5,
+        x, 0.5, -0.5, x, -0.5, -0.5,
+      ];
+      const frontGeometry = new THREE.BufferGeometry();
+      frontGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(loopSegments(0), 3),
+      );
+      portalPreview.add(
+        new THREE.LineSegments(frontGeometry, new THREE.LineBasicMaterial({ color: 0x38d9ff })),
+      );
+
+      const backGeometry = new THREE.BufferGeometry();
+      backGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(loopSegments(-1), 3),
+      );
+      portalPreview.add(
+        new THREE.LineSegments(backGeometry, new THREE.LineBasicMaterial({ color: 0xffc857 })),
+      );
+
+      const tunnelGeometry = new THREE.BufferGeometry();
+      tunnelGeometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          [
+            0, -0.5, -0.5, -1, -0.5, -0.5,
+            0, -0.5, 0.5, -1, -0.5, 0.5,
+            0, 0.5, 0.5, -1, 0.5, 0.5,
+            0, 0.5, -0.5, -1, 0.5, -0.5,
+          ],
+          3,
+        ),
+      );
+      portalPreview.add(
+        new THREE.LineSegments(tunnelGeometry, new THREE.LineBasicMaterial({ color: 0xffffff })),
+      );
+
+      const apertureMaterial = new THREE.MeshBasicMaterial({
+        color: 0x7deaff,
+        transparent: true,
+        opacity: Number.parseFloat(portalOpacityInput?.value || "0.28"),
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      portalPreviewMaterials.push(apertureMaterial);
+      const aperture = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), apertureMaterial);
+      aperture.rotation.y = Math.PI / 2;
+      aperture.position.x = -0.998;
+      portalPreview.add(aperture);
+
+      const direction = new THREE.ArrowHelper(
+        new THREE.Vector3(-1, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+        1,
+        0xffc857,
+        0.12,
+        0.07,
+      );
+      direction.name = "portal-depth-direction";
+      portalPreview.add(direction);
+
+      modelObject = portalPreview;
+      modelObject.name = `anchor-${state.id}`;
+      applyStateToObject(state);
+      modelRoot.add(modelObject);
+      transformControls.attach(modelObject);
+      syncUiFromState();
+      setStatus(`Portal 已加载：${state.label}（X/Y/Z = 墙深/洞高/洞宽）`);
+      return;
+    }
+
     setStatus(`正在加载模型 ${state.label}…`);
     try {
       const gltf = await gltfLoader.loadAsync(state.url);
@@ -624,6 +859,41 @@ export function bootstrapArPlacementEditor(rootEl) {
     }
   }
 
+  async function copyCurrentAnchor() {
+    const state = getActiveState();
+    if (!state) return;
+    const text = JSON.stringify(
+      {
+        mapId: activeMapId,
+        id: state.id,
+        type: state.type,
+        position: state.position.map(formatNum),
+        rotation: state.rotation.map(formatNum),
+        scale: state.scale.map(formatNum),
+      },
+      null,
+      2,
+    );
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("当前遮罩参数已复制");
+    } catch {
+      setStatus("复制失败，请从下方参数框手动复制", true);
+    }
+  }
+
+  function resetCurrentAnchor() {
+    const state = getActiveState();
+    const initial = state && initialAnchorStates.get(`${activeMapId}:${state.id}`);
+    if (!state || !initial) return;
+    state.position = [...initial.position];
+    state.rotation = [...initial.rotation];
+    state.scale = [...initial.scale];
+    applyStateToObject(state);
+    syncUiFromState();
+    setStatus("已恢复代码中的初始遮罩参数");
+  }
+
   function importConfigFromJson(data) {
     if (Array.isArray(data?.profiles)) {
       data.profiles.forEach((profile, index) => {
@@ -635,8 +905,10 @@ export function bootstrapArPlacementEditor(rootEl) {
           anchors: (profile.anchors ?? []).map((item, anchorIndex) =>
             anchorToState({
               id: item.id ?? `anchor-${anchorIndex}`,
+              type: item.type,
               label: item.label ?? item.id ?? `锚点 ${anchorIndex + 1}`,
               url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
+              content: item.content,
               position: item.position,
               rotation: item.rotation,
               scale: item.scale,
@@ -656,8 +928,10 @@ export function bootstrapArPlacementEditor(rootEl) {
     anchorStates = list.map((item, index) =>
       anchorToState({
         id: item.id ?? `anchor-${index}`,
+        type: item.type,
         label: item.label ?? item.id ?? `锚点 ${index + 1}`,
         url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
+        content: item.content,
         position: item.position,
         rotation: item.rotation,
         scale: item.scale,
@@ -693,6 +967,28 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   Object.values(numInputs).forEach((input) => {
     input?.addEventListener("input", applyUiToState);
+  });
+
+  rootEl.querySelectorAll("[data-ar-nudge]").forEach((button) => {
+    button.addEventListener("click", () => {
+      nudgeField(button.dataset.arNudge, Number(button.dataset.arSign) || 1);
+    });
+  });
+
+  rootEl.querySelectorAll("[data-ar-view]").forEach((button) => {
+    button.addEventListener("click", () => setPortalView(button.dataset.arView));
+  });
+
+  pointSizeInput?.addEventListener("input", updatePointAppearance);
+  pointOpacityInput?.addEventListener("input", updatePointAppearance);
+  portalOpacityInput?.addEventListener("input", updatePortalAppearance);
+  togglePortalTestBtn?.addEventListener("click", () => {
+    portalTestVisible = !portalTestVisible;
+    if (portalTestRoot) portalTestRoot.visible = portalTestVisible;
+    togglePortalTestBtn.textContent = portalTestVisible
+      ? "隐藏透视测试场景"
+      : "显示透视测试场景";
+    togglePortalTestBtn.classList.toggle("ar-editor-primary", portalTestVisible);
   });
 
   mapSelect?.addEventListener("change", () => {
@@ -735,6 +1031,8 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   exportBtn?.addEventListener("click", exportConfig);
   copyBtn?.addEventListener("click", copyConfig);
+  copyCurrentBtn?.addEventListener("click", copyCurrentAnchor);
+  resetAnchorBtn?.addEventListener("click", resetCurrentAnchor);
 
   importBtn?.addEventListener("click", () => importFileInput?.click());
   importFileInput?.addEventListener("change", async () => {
@@ -785,6 +1083,8 @@ export function bootstrapArPlacementEditor(rootEl) {
   populateAnchorSelect();
   updateMapHint();
   setTransformMode("translate");
+  updatePointAppearance();
+  updatePortalAppearance();
   resize();
   tick();
 
@@ -809,6 +1109,7 @@ export function bootstrapArPlacementEditor(rootEl) {
     transformControls.dispose();
     orbitControls.dispose();
     clearReference();
+    clearPortalTestWorld();
     renderer.dispose();
   };
 }

@@ -37,3 +37,6 @@ bin/
 ### Node / Vite ###
 node_modules/
 .vite/
+
+### Local AR map data ###
+.local/

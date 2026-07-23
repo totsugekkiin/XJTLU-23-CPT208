@@ -23,16 +23,20 @@ export const AR_MAP_PROFILES = [
     ],
   },
   {
-    mapId: 148752,
-    label: "小悬眼",
+    mapId: 149467,
+    label: "小悬眼（新扫描）",
     anchors: [
       {
-        id: "vast-land",
-        label: "The Vast Land",
-        url: "/models/the_vast_land_no_background.glb",
-        position: [2.8569, 1.0034, 22.1759],
-        rotation: [0, 0.1613, 0],
-        scale: [0.05, 0.05, 0.05],
+        id: "small-opening-portal",
+        type: "portal",
+        label: "小悬眼 Portal（20×26×40 cm）",
+        // 新点云中悬眼入口面的初始估计；现场只需微调位置和旋转。
+        position: [0.0147, -0.1179, 0.3236],
+        // Portal 本地 +X 朝向观察者，-X 穿过 40 cm 墙体进入虚拟场景。
+        rotation: [0.1085, 1.3233, -0.1044],
+        // [X 墙深, Y 洞口高度, Z 洞口宽度]，单位为米。
+        scale: [0.4, 0.26, 0.2],
+        content: "calibration-grid",
       },
     ],
   },
@@ -84,8 +88,18 @@ export function getAllMapIds() {
   return AR_MAP_PROFILES.map((profile) => profile.mapId);
 }
 
-export function getMapProfile(mapId) {
+const MAP_ID_ALIASES = new Map([
+  // 148752 是同一悬眼的旧扫描；旧链接自动进入新地图。
+  [148752, 149467],
+]);
+
+function normalizeMapId(mapId) {
   const id = Number(mapId);
+  return MAP_ID_ALIASES.get(id) ?? id;
+}
+
+export function getMapProfile(mapId) {
+  const id = normalizeMapId(mapId);
   return AR_MAP_PROFILES.find((profile) => profile.mapId === id) ?? null;
 }
 
@@ -94,7 +108,7 @@ export function getAnchorsForMap(mapId) {
 }
 
 export function getMapProfilesForIds(mapIds) {
-  const idSet = new Set(mapIds.map(Number));
+  const idSet = new Set(mapIds.map(normalizeMapId));
   return AR_MAP_PROFILES.filter((profile) => idSet.has(profile.mapId));
 }
 
@@ -104,7 +118,7 @@ export function resolveActiveMapIds(options = {}) {
   const params = new URLSearchParams(search);
 
   if (params.has("map")) {
-    const id = Number(params.get("map"));
+    const id = normalizeMapId(params.get("map"));
     if (Number.isFinite(id)) return [id];
   }
 
@@ -112,13 +126,13 @@ export function resolveActiveMapIds(options = {}) {
     const ids = params
       .get("maps")
       .split(",")
-      .map((part) => Number(part.trim()))
+      .map((part) => normalizeMapId(part.trim()))
       .filter(Number.isFinite);
     if (ids.length > 0) return ids;
   }
 
   if (selectedValue !== "all") {
-    const id = Number(selectedValue);
+    const id = normalizeMapId(selectedValue);
     if (Number.isFinite(id)) return [id];
   }
 
