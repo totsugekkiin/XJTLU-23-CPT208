@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>阊门窗口标记追踪测试</title>
     <link rel="stylesheet" href="/css/marker-ar.css" />
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/aframe/build/aframe-ar.js"></script>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   </head>
   <body>
     <div class="marker-test-ui" aria-live="polite">
@@ -18,12 +18,11 @@
         <span id="marker-status-dot" class="marker-status-dot"></span>
         <div>
           <strong id="marker-status">正在启动相机…</strong>
-          <small id="marker-detail">请将完整 Hiro 标记放入画面</small>
+          <small id="marker-detail">请将四边纹样完整放入画面</small>
         </div>
       </div>
       <div class="marker-test-actions">
         <a href="/print/changgate-portal-marker-a3.pdf" download>下载A3标记</a>
-        <button id="flip-window-offset" type="button">上下翻转</button>
         <button id="flip-depth" type="button">深度翻转</button>
       </div>
       <p class="marker-test-legend">
@@ -36,40 +35,32 @@
       embedded
       vr-mode-ui="enabled: false"
       renderer="alpha: true; antialias: true; colorManagement: true"
-      arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+      mindar-image="imageTargetSrc: /markers/changgate-window-frame.mind; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 3; missTolerance: 8;"
+      color-space="sRGB"
+      device-orientation-permission-ui="enabled: false"
     >
-      <a-marker
-        id="portal-marker"
-        preset="hiro"
-        size="0.08"
-        emitevents="true"
-        smooth="true"
-        smooth-count="10"
-        smooth-tolerance="0.008"
-        smooth-threshold="2"
-      >
-        <a-entity id="portal-rig" position="0 0 0.185">
-          <!-- Near aperture: 20 cm wide x 26 cm high, in the marker plane. -->
-          <a-box position="0 0 0.133" width="0.212" height="0.008" depth="0.006" color="#ff3b30"></a-box>
-          <a-box position="0 0 -0.133" width="0.212" height="0.008" depth="0.006" color="#ff3b30"></a-box>
-          <a-box position="-0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#ff3b30"></a-box>
-          <a-box position="0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#ff3b30"></a-box>
+      <a-entity id="portal-target" mindar-image-target="targetIndex: 0">
+        <a-entity id="portal-rig">
+          <!-- MindAR normalizes target width (24 cm) to 1 unit. -->
+          <a-box position="0 0.547 0" width="0.852" height="0.018" depth="0.012" color="#ff3b30"></a-box>
+          <a-box position="0 -0.547 0" width="0.852" height="0.018" depth="0.012" color="#ff3b30"></a-box>
+          <a-box position="-0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#ff3b30"></a-box>
+          <a-box position="0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#ff3b30"></a-box>
 
-          <!-- Far aperture, 40 cm behind the near wall plane. -->
-          <a-entity class="depth-node" data-base-y="-0.4" position="0 -0.4 0">
-            <a-box position="0 0 0.133" width="0.212" height="0.008" depth="0.006" color="#30d5ff"></a-box>
-            <a-box position="0 0 -0.133" width="0.212" height="0.008" depth="0.006" color="#30d5ff"></a-box>
-            <a-box position="-0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#30d5ff"></a-box>
-            <a-box position="0.103 0 0" width="0.006" height="0.008" depth="0.26" color="#30d5ff"></a-box>
+          <!-- Far aperture, 40 cm / 24 cm = 1.667 target units behind. -->
+          <a-entity class="depth-node" data-base-z="-1.667" position="0 0 -1.667">
+            <a-box position="0 0.547 0" width="0.852" height="0.018" depth="0.012" color="#30d5ff"></a-box>
+            <a-box position="0 -0.547 0" width="0.852" height="0.018" depth="0.012" color="#30d5ff"></a-box>
+            <a-box position="-0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#30d5ff"></a-box>
+            <a-box position="0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#30d5ff"></a-box>
           </a-entity>
 
-          <!-- Four depth guides make incorrect depth direction obvious on site. -->
-          <a-box class="depth-guide" data-base-y="-0.2" position="-0.103 -0.2 -0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-y="-0.2" position="0.103 -0.2 -0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-y="-0.2" position="-0.103 -0.2 0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-y="-0.2" position="0.103 -0.2 0.13" width="0.006" height="0.4" depth="0.006" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-z="-0.8335" position="-0.417 0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-z="-0.8335" position="0.417 0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-z="-0.8335" position="-0.417 -0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
+          <a-box class="depth-guide" data-base-z="-0.8335" position="0.417 -0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
         </a-entity>
-      </a-marker>
+      </a-entity>
       <a-entity camera></a-entity>
     </a-scene>
 

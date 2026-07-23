@@ -1,54 +1,41 @@
-const marker = document.querySelector("#portal-marker");
-const rig = document.querySelector("#portal-rig");
+const target = document.querySelector("#portal-target");
 const statusUi = document.querySelector(".marker-test-ui");
 const statusText = document.querySelector("#marker-status");
 const statusDetail = document.querySelector("#marker-detail");
-const flipOffsetButton = document.querySelector("#flip-window-offset");
 const flipDepthButton = document.querySelector("#flip-depth");
 
-const WINDOW_OFFSET_METERS = 0.185;
-let offsetDirection = 1;
 let depthDirection = 1;
 let foundAt = 0;
 
 function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
-  if (statusText) statusText.textContent = tracking ? "标记已锁定" : "标记暂时丢失";
+  if (statusText) statusText.textContent = tracking ? "纹样框已锁定" : "纹样框暂时丢失";
   if (statusDetail) {
     statusDetail.textContent = tracking
       ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒`
-      : "让完整黑框进入画面，并避免反光";
+      : "让四边和四个角尽量完整进入画面";
   }
-}
-
-function applyWindowOffset() {
-  if (!rig) return;
-  rig.setAttribute("position", `0 0 ${WINDOW_OFFSET_METERS * offsetDirection}`);
 }
 
 function applyDepthDirection() {
   document.querySelectorAll(".depth-node").forEach((node) => {
-    const baseY = Number(node.dataset.baseY);
-    node.setAttribute("position", `0 ${baseY * depthDirection} 0`);
+    const baseZ = Number(node.dataset.baseZ);
+    node.setAttribute("position", `0 0 ${baseZ * depthDirection}`);
   });
   document.querySelectorAll(".depth-guide").forEach((node) => {
-    const baseY = Number(node.dataset.baseY);
-    node.setAttribute("position", `${node.object3D.position.x} ${baseY * depthDirection} ${node.object3D.position.z}`);
+    const baseZ = Number(node.dataset.baseZ);
+    const { x, y } = node.object3D.position;
+    node.setAttribute("position", `${x} ${y} ${baseZ * depthDirection}`);
   });
 }
 
-marker?.addEventListener("markerFound", () => {
+target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
   setTrackingState(true);
 });
 
-marker?.addEventListener("markerLost", () => {
+target?.addEventListener("targetLost", () => {
   setTrackingState(false);
-});
-
-flipOffsetButton?.addEventListener("click", () => {
-  offsetDirection *= -1;
-  applyWindowOffset();
 });
 
 flipDepthButton?.addEventListener("click", () => {
@@ -61,6 +48,6 @@ window.setInterval(() => {
 }, 1000);
 
 window.addEventListener("load", () => {
-  if (statusText) statusText.textContent = "相机已启动，等待标记";
-  if (statusDetail) statusDetail.textContent = "请将打印页上方的完整 Hiro 标记放入画面";
+  if (statusText) statusText.textContent = "相机已启动，等待纹样框";
+  if (statusDetail) statusDetail.textContent = "请将20×26 cm窗口四周的纹样尽量完整放入画面";
 });
