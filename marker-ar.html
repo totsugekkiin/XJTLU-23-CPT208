@@ -13,6 +13,14 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   </head>
   <body>
+    <div id="camera-gate" class="camera-gate">
+      <div class="camera-gate-card">
+        <strong>启动窗口 AR 测试</strong>
+        <p id="camera-gate-detail">点击后浏览器会申请使用后置摄像头。</p>
+        <button id="start-camera" type="button">允许并打开摄像头</button>
+      </div>
+    </div>
+
     <div class="marker-test-ui" aria-live="polite">
       <div class="marker-test-card">
         <span id="marker-status-dot" class="marker-status-dot"></span>
@@ -35,7 +43,7 @@
       embedded
       vr-mode-ui="enabled: false"
       renderer="alpha: true; antialias: true; colorManagement: true"
-      mindar-image="imageTargetSrc: /markers/changgate-window-frame.mind; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 3; missTolerance: 8;"
+      mindar-image="imageTargetSrc: /markers/changgate-window-frame.mind; autoStart: false; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 3; missTolerance: 8;"
       color-space="sRGB"
       device-orientation-permission-ui="enabled: false"
     >
@@ -61,7 +69,7 @@
           <a-box class="depth-guide" data-base-z="-0.8335" position="0.417 -0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
         </a-entity>
       </a-entity>
-      <a-entity camera></a-entity>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
 
     <script type="module" src="/js/ar/markerPortalTest.js"></script>

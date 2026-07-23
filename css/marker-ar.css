@@ -17,6 +17,60 @@ body {
   background: #050505;
 }
 
+.camera-gate {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 38%, rgb(64 47 18 / 60%), transparent 46%),
+    #050505;
+}
+
+.camera-gate.is-hidden {
+  display: none;
+}
+
+.camera-gate-card {
+  width: min(88vw, 380px);
+  padding: 24px;
+  border: 1px solid rgb(255 213 74 / 35%);
+  border-radius: 20px;
+  color: #fff;
+  text-align: center;
+  background: #111;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 45%);
+}
+
+.camera-gate-card strong {
+  display: block;
+  font-size: 21px;
+}
+
+.camera-gate-card p {
+  margin: 10px 0 20px;
+  color: rgb(255 255 255 / 68%);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.camera-gate-card button {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  color: #171100;
+  background: #ffd54a;
+  font: inherit;
+  font-weight: 800;
+}
+
+.camera-gate-card button:disabled {
+  opacity: 0.6;
+}
+
 .marker-test-ui {
   position: fixed;
   z-index: 20;
