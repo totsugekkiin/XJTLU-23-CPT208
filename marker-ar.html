@@ -31,11 +31,13 @@
       </div>
       <div class="marker-test-actions">
         <a href="/print/changgate-portal-marker-a3.pdf" download>下载A3标记</a>
+        <button id="toggle-occlusion" type="button" aria-pressed="true">遮挡：开</button>
         <button id="flip-depth" type="button">深度翻转</button>
       </div>
       <p class="marker-test-legend">
         <span class="legend-near">红框：近端洞口</span>
         <span class="legend-far">蓝框：40 cm远端</span>
+        <span class="legend-mask">场景应只在红框内出现</span>
       </p>
     </div>
 
@@ -47,28 +49,7 @@
       color-space="sRGB"
       device-orientation-permission-ui="enabled: false"
     >
-      <a-entity id="portal-target" mindar-image-target="targetIndex: 0">
-        <a-entity id="portal-rig">
-          <!-- MindAR normalizes target width (24 cm) to 1 unit. -->
-          <a-box position="0 0.547 0" width="0.852" height="0.018" depth="0.012" color="#ff3b30"></a-box>
-          <a-box position="0 -0.547 0" width="0.852" height="0.018" depth="0.012" color="#ff3b30"></a-box>
-          <a-box position="-0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#ff3b30"></a-box>
-          <a-box position="0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#ff3b30"></a-box>
-
-          <!-- Far aperture, 40 cm / 24 cm = 1.667 target units behind. -->
-          <a-entity class="depth-node" data-base-z="-1.667" position="0 0 -1.667">
-            <a-box position="0 0.547 0" width="0.852" height="0.018" depth="0.012" color="#30d5ff"></a-box>
-            <a-box position="0 -0.547 0" width="0.852" height="0.018" depth="0.012" color="#30d5ff"></a-box>
-            <a-box position="-0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#30d5ff"></a-box>
-            <a-box position="0.426 0 0" width="0.018" height="1.083" depth="0.012" color="#30d5ff"></a-box>
-          </a-entity>
-
-          <a-box class="depth-guide" data-base-z="-0.8335" position="-0.417 0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-z="-0.8335" position="0.417 0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-z="-0.8335" position="-0.417 -0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
-          <a-box class="depth-guide" data-base-z="-0.8335" position="0.417 -0.542 -0.8335" width="0.012" height="0.012" depth="1.667" color="#ffd54a"></a-box>
-        </a-entity>
-      </a-entity>
+      <a-entity id="portal-target" mindar-image-target="targetIndex: 0"></a-entity>
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
     </a-scene>
 

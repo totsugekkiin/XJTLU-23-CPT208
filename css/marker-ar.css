@@ -131,6 +131,7 @@ body {
 
 .marker-test-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   margin-top: 9px;
@@ -160,6 +161,7 @@ body {
 
 .marker-test-legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 14px;
   margin: 9px 0 0;
@@ -174,6 +176,16 @@ body {
 
 .legend-far {
   color: #72e5ff;
+}
+
+.legend-mask {
+  flex-basis: 100%;
+  color: rgb(255 255 255 / 78%);
+  text-align: center;
+}
+
+.a-enter-vr {
+  display: none !important;
 }
 
 a-scene {

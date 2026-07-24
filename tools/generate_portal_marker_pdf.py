@@ -195,9 +195,9 @@ def create_pdf():
     pdf.setStrokeColor(HexColor("#EA3555"))
     pdf.setLineWidth(0.35 * mm)
     pdf.setDash(2.5 * mm, 1.5 * mm)
-    # Draw the cutting line 0.7 mm inside the removed area so none of the
-    # tracking texture is accidentally trimmed away.
-    inset = 0.7
+    # The centreline of this cutting guide is the exact 20 x 26 cm opening.
+    # Print at 100% and cut through the middle of the dashed stroke.
+    inset = 0
     pdf.rect(
         (cut_left_mm + inset) * mm,
         cut_bottom + inset * mm,

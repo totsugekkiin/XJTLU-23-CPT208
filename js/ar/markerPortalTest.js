@@ -1,14 +1,20 @@
+import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
+
+registerPortalOcclusionTest();
+
 const target = document.querySelector("#portal-target");
 const statusUi = document.querySelector(".marker-test-ui");
 const statusText = document.querySelector("#marker-status");
 const statusDetail = document.querySelector("#marker-detail");
 const flipDepthButton = document.querySelector("#flip-depth");
+const toggleOcclusionButton = document.querySelector("#toggle-occlusion");
 const scene = document.querySelector("a-scene");
 const cameraGate = document.querySelector("#camera-gate");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
 
-let depthDirection = 1;
+let depthDirection = -1;
+let occlusionEnabled = true;
 let foundAt = 0;
 let arSystem = null;
 let starting = false;
@@ -23,17 +29,10 @@ function setTrackingState(tracking) {
   }
 }
 
-function applyDepthDirection() {
-  document.querySelectorAll(".depth-node").forEach((node) => {
-    const baseZ = Number(node.dataset.baseZ);
-    node.setAttribute("position", `0 0 ${baseZ * depthDirection}`);
-  });
-  document.querySelectorAll(".depth-guide").forEach((node) => {
-    const baseZ = Number(node.dataset.baseZ);
-    const { x, y } = node.object3D.position;
-    node.setAttribute("position", `${x} ${y} ${baseZ * depthDirection}`);
-  });
-}
+target?.setAttribute("portal-occlusion-test", {
+  direction: depthDirection,
+  occlusion: occlusionEnabled,
+});
 
 target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
@@ -46,7 +45,23 @@ target?.addEventListener("targetLost", () => {
 
 flipDepthButton?.addEventListener("click", () => {
   depthDirection *= -1;
-  applyDepthDirection();
+  target?.setAttribute("portal-occlusion-test", "direction", depthDirection);
+  if (statusDetail) {
+    statusDetail.textContent =
+      depthDirection < 0 ? "场景位于纹样框后方40 cm处" : "深度已翻转，请确认场景是否回到墙后";
+  }
+});
+
+toggleOcclusionButton?.addEventListener("click", () => {
+  occlusionEnabled = !occlusionEnabled;
+  target?.setAttribute("portal-occlusion-test", "occlusion", occlusionEnabled);
+  toggleOcclusionButton.textContent = `遮挡：${occlusionEnabled ? "开" : "关"}`;
+  toggleOcclusionButton.setAttribute("aria-pressed", String(occlusionEnabled));
+  if (statusDetail) {
+    statusDetail.textContent = occlusionEnabled
+      ? "遮挡已开启：场景应只出现在洞口内"
+      : "遮挡已关闭：用于观察场景原本超出洞口的范围";
+  }
 });
 
 function setStartError(message) {
