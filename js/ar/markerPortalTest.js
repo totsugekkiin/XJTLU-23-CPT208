@@ -1,5 +1,11 @@
 import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
 import { createGaussianPortalRenderer } from "./gaussianPortalRenderer.js";
+import {
+  PORTAL_REFERENCE_VIEW_DISTANCE,
+  PORTAL_RUNTIME_SCENE,
+  PORTAL_VIEW_PRESET,
+  PORTAL_WORLD_SCALE,
+} from "./portalSceneConfig.js";
 
 registerPortalOcclusionTest();
 
@@ -14,17 +20,7 @@ const cameraGate = document.querySelector("#camera-gate");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
 
-const PORTAL_VIEW_PRESET = Object.freeze({
-  x: -1.05,
-  y: -2.787,
-  z: 0.891,
-  yaw: 11.293,
-  pitch: 17.08,
-  roll: -7.6,
-  fov: 75,
-});
-const PORTAL_WORLD_SCALE = 1000 / 260;
-const REFERENCE_VIEW_DISTANCE = 600 / 260;
+const REFERENCE_VIEW_DISTANCE = PORTAL_REFERENCE_VIEW_DISTANCE;
 
 let depthDirection = -1;
 let occlusionEnabled = true;
@@ -99,7 +95,8 @@ target?.addEventListener("portal-model-transform", (event) => {
 target?.addEventListener("gaussian-portal-loading", () => {
   if (statusText) statusText.textContent = "正在加载完整高斯场景…";
   if (statusDetail) {
-    statusDetail.textContent = "首次打开需要下载约 3.2 MB 场景";
+    statusDetail.textContent =
+      `首次打开需要下载约 ${PORTAL_RUNTIME_SCENE.megabytes} MB 场景`;
   }
 });
 

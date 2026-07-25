@@ -1,14 +1,18 @@
 import * as pc from "playcanvas";
+import {
+  PORTAL_REFERENCE_VIEW_DISTANCE,
+  PORTAL_RUNTIME_SCENE,
+  PORTAL_WORLD_SCALE,
+} from "./portalSceneConfig.js";
 
-const GAUSSIAN_URL = "/models/changgate-courtyard-cropped.sog";
-const GAUSSIAN_COUNT = 266512;
+const GAUSSIAN_URL = PORTAL_RUNTIME_SCENE.url;
+const GAUSSIAN_COUNT = PORTAL_RUNTIME_SCENE.gaussians;
 const TARGET_WIDTH_MM = 260;
 const OPENING_WIDTH = 200 / TARGET_WIDTH_MM;
 const OPENING_HEIGHT = 260 / TARGET_WIDTH_MM;
-const FAR_FRAME_DEPTH = 400 / TARGET_WIDTH_MM;
-const REFERENCE_VIEW_DISTANCE = 600 / TARGET_WIDTH_MM;
+const REFERENCE_VIEW_DISTANCE = PORTAL_REFERENCE_VIEW_DISTANCE;
 const EDITOR_HOME_PITCH = 35;
-const DEFAULT_MODEL_SCALE = 1000 / TARGET_WIDTH_MM;
+const DEFAULT_MODEL_SCALE = PORTAL_WORLD_SCALE;
 
 function editorCameraRotation(THREE, view) {
   const radians = THREE.MathUtils.degToRad;
@@ -241,14 +245,14 @@ class GaussianPortalRenderer {
     }
 
     const corners = [
-      [-OPENING_WIDTH / 2, OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
-      [OPENING_WIDTH / 2, OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
-      [OPENING_WIDTH / 2, -OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
-      [-OPENING_WIDTH / 2, -OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
+      [-OPENING_WIDTH / 2, OPENING_HEIGHT / 2],
+      [OPENING_WIDTH / 2, OPENING_HEIGHT / 2],
+      [OPENING_WIDTH / 2, -OPENING_HEIGHT / 2],
+      [-OPENING_WIDTH / 2, -OPENING_HEIGHT / 2],
     ];
-    const projected = corners.map(([x, y, z]) => {
+    const projected = corners.map(([x, y]) => {
       this.clipPoint
-        .set(x, y, z)
+        .set(x, y, 0)
         .applyMatrix4(this.anchorObject.matrixWorld)
         .project(camera);
       return `${((this.clipPoint.x + 1) * 50).toFixed(3)}% ${(
