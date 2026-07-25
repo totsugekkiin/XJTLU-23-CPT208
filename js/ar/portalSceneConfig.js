@@ -17,6 +17,16 @@ export const PORTAL_OPENING_WIDTH = 200 / PORTAL_TARGET_WIDTH_MM;
 export const PORTAL_OPENING_HEIGHT = 260 / PORTAL_TARGET_WIDTH_MM;
 
 export const PORTAL_VIEW_PRESET = Object.freeze({
+  x: -0.508,
+  y: 0.149,
+  z: -0.106,
+  yaw: 5.053,
+  pitch: 33.08,
+  roll: -7.6,
+  fov: 75,
+});
+
+const LEGACY_PORTAL_VIEW_PRESET = Object.freeze({
   x: -1.05,
   y: -2.787,
   z: 0.891,
@@ -25,6 +35,15 @@ export const PORTAL_VIEW_PRESET = Object.freeze({
   roll: -7.6,
   fov: 75,
 });
+const PORTAL_VIEW_KEYS = Object.freeze([
+  "x",
+  "y",
+  "z",
+  "yaw",
+  "pitch",
+  "roll",
+  "fov",
+]);
 
 export const PORTAL_CROP_BOUNDS = Object.freeze({
   min: Object.freeze([-5.1, -0.65, -13.05]),
@@ -53,6 +72,13 @@ export const PORTAL_EDITOR_FRAME_HEIGHT_RATIO = 0.598;
 function finiteNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function matchesPortalView(value, preset) {
+  return PORTAL_VIEW_KEYS.every((key) => {
+    const current = finiteNumber(value?.[key], Number.NaN);
+    return Math.abs(current - preset[key]) < 1e-4;
+  });
 }
 
 export function normalizePortalView(value, fallback = PORTAL_VIEW_PRESET) {
@@ -126,7 +152,9 @@ export function readPortalRuntimeConfig() {
     if (!serialized) return null;
     const parsed = JSON.parse(serialized);
     if (parsed?.version !== 1) return null;
-    const view = normalizePortalView(parsed.view);
+    const view = matchesPortalView(parsed.view, LEGACY_PORTAL_VIEW_PRESET)
+      ? { ...PORTAL_VIEW_PRESET }
+      : normalizePortalView(parsed.view);
     return {
       view,
       crop: normalizePortalCrop(parsed.crop),
