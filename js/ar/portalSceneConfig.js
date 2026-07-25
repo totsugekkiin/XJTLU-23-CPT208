@@ -65,6 +65,10 @@ export const PORTAL_CROP_BOX = Object.freeze({
 export const PORTAL_WORLD_SCALE = 1000 / 260;
 export const PORTAL_REFERENCE_VIEW_DISTANCE = 600 / 260;
 export const PORTAL_WALL_DEPTH = 400 / 260;
+export const PORTAL_PERSPECTIVE_MODES = Object.freeze({
+  PHYSICAL: "physical",
+  COMPOSITION: "composition",
+});
 // On wide screens the editor's central frame is 59.8% of the viewport height.
 // Saving its effective FOV keeps the selected content stable across devices.
 export const PORTAL_EDITOR_FRAME_HEIGHT_RATIO = 0.598;
@@ -115,6 +119,54 @@ export function normalizePortalFov(
   fallback = portalFrameFov(PORTAL_VIEW_PRESET.fov),
 ) {
   return Math.min(100, Math.max(5, finiteNumber(value, fallback)));
+}
+
+export function resolvePortalPerspectivePose({
+  eye,
+  referenceEye,
+  direction = -1,
+  virtualPortalDistance,
+}) {
+  // MindAR expresses the target width as one unit. Calibrating that physical
+  // space to the editor-selected view preserves the chosen composition at the
+  // reference distance while keeping subsequent movement metrically linear.
+  const farPlaneZ = (direction < 0 ? -1 : 1) * PORTAL_WALL_DEPTH;
+  const referencePlaneDistance = Number(referenceEye?.z) - farPlaneZ;
+  const eyePlaneDistance = Number(eye?.z) - farPlaneZ;
+  const virtualDistance = Number(virtualPortalDistance);
+  if (
+    !Number.isFinite(referencePlaneDistance) ||
+    !Number.isFinite(eyePlaneDistance) ||
+    !Number.isFinite(virtualDistance) ||
+    referencePlaneDistance <= 0 ||
+    eyePlaneDistance <= 0 ||
+    virtualDistance <= 0
+  ) {
+    return null;
+  }
+
+  const physicalToVirtualScale =
+    virtualDistance / referencePlaneDistance;
+  const deltaX =
+    (Number(eye?.x) - Number(referenceEye?.x)) *
+    physicalToVirtualScale;
+  const deltaY =
+    (Number(eye?.y) - Number(referenceEye?.y)) *
+    physicalToVirtualScale;
+  const deltaZ =
+    (Number(eye?.z) - Number(referenceEye?.z)) *
+    physicalToVirtualScale;
+  if (![deltaX, deltaY, deltaZ].every(Number.isFinite)) return null;
+
+  return {
+    deltaX,
+    deltaY,
+    deltaZ,
+    distance: eyePlaneDistance * physicalToVirtualScale,
+    physicalToVirtualScale,
+    eyeDistanceMm: Number(eye.z) * PORTAL_TARGET_WIDTH_MM,
+    farPlaneDistanceMm: eyePlaneDistance * PORTAL_TARGET_WIDTH_MM,
+  };
 }
 
 export function normalizePortalCrop(value, fallback = PORTAL_CROP_BOX) {

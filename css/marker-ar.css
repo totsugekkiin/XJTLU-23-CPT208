@@ -159,6 +159,16 @@ body {
   transform: scale(0.97);
 }
 
+.marker-test-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.marker-test-actions button[aria-pressed="true"] {
+  border-color: rgb(114 229 255 / 58%);
+  background: rgb(14 61 72 / 86%);
+}
+
 .marker-test-legend {
   display: flex;
   flex-wrap: wrap;
