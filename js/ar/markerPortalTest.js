@@ -1,10 +1,14 @@
 import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
-import { createGaussianPortalRenderer } from "./gaussianPortalRenderer.js";
 import {
+  PORTAL_CROP_BOX,
   PORTAL_REFERENCE_VIEW_DISTANCE,
   PORTAL_RUNTIME_SCENE,
   PORTAL_VIEW_PRESET,
   PORTAL_WORLD_SCALE,
+  normalizePortalFov,
+  portalFrameFov,
+  readPortalRuntimeConfig,
+  savePortalRuntimeConfig,
 } from "./portalSceneConfig.js";
 
 registerPortalOcclusionTest();
@@ -28,9 +32,15 @@ let foundAt = 0;
 let arSystem = null;
 let starting = false;
 let gaussianPortal = null;
+let gaussianPortalPromise = null;
+let targetTracking = false;
+let pageDestroyed = false;
 
 const query = new URLSearchParams(window.location.search);
 const debugPortal = query.get("debugPortal") === "1";
+const savedPortalConfig = readPortalRuntimeConfig();
+const configuredView = savedPortalConfig?.view ?? PORTAL_VIEW_PRESET;
+const configuredCrop = savedPortalConfig?.crop ?? PORTAL_CROP_BOX;
 
 function finiteQueryNumber(name, fallback = 0) {
   const rawValue = query.get(name);
@@ -40,14 +50,64 @@ function finiteQueryNumber(name, fallback = 0) {
 }
 
 const portalView = {
-  x: finiteQueryNumber("x", PORTAL_VIEW_PRESET.x),
-  y: finiteQueryNumber("y", PORTAL_VIEW_PRESET.y),
-  z: finiteQueryNumber("z", PORTAL_VIEW_PRESET.z),
-  yaw: finiteQueryNumber("yaw", PORTAL_VIEW_PRESET.yaw),
-  pitch: finiteQueryNumber("pitch", PORTAL_VIEW_PRESET.pitch),
-  roll: finiteQueryNumber("roll", PORTAL_VIEW_PRESET.roll),
-  fov: finiteQueryNumber("fov", PORTAL_VIEW_PRESET.fov),
+  x: finiteQueryNumber("x", configuredView.x),
+  y: finiteQueryNumber("y", configuredView.y),
+  z: finiteQueryNumber("z", configuredView.z),
+  yaw: finiteQueryNumber("yaw", configuredView.yaw),
+  pitch: finiteQueryNumber("pitch", configuredView.pitch),
+  roll: finiteQueryNumber("roll", configuredView.roll),
+  fov: finiteQueryNumber("fov", configuredView.fov),
 };
+const portalCrop = {
+  cx: finiteQueryNumber("cropCX", configuredCrop.cx),
+  cy: finiteQueryNumber("cropCY", configuredCrop.cy),
+  cz: finiteQueryNumber("cropCZ", configuredCrop.cz),
+  sx: finiteQueryNumber("cropSX", configuredCrop.sx),
+  sy: finiteQueryNumber("cropSY", configuredCrop.sy),
+  sz: finiteQueryNumber("cropSZ", configuredCrop.sz),
+};
+const portalFov = normalizePortalFov(
+  finiteQueryNumber(
+    "portalFov",
+    savedPortalConfig?.portalFov ?? portalFrameFov(portalView.fov),
+  ),
+);
+const hasPortalQuery = [
+  "x",
+  "y",
+  "z",
+  "yaw",
+  "pitch",
+  "roll",
+  "fov",
+  "cropCX",
+  "cropCY",
+  "cropCZ",
+  "cropSX",
+  "cropSY",
+  "cropSZ",
+  "portalFov",
+].some((name) => query.has(name));
+
+if (hasPortalQuery) {
+  try {
+    savePortalRuntimeConfig({
+      view: portalView,
+      crop: portalCrop,
+      portalFov,
+    });
+  } catch (error) {
+    console.warn("Unable to persist portal URL settings", error);
+  }
+}
+
+if (target) {
+  target.dataset.portalConfigSource = hasPortalQuery
+    ? "url"
+    : savedPortalConfig
+      ? "saved-editor"
+      : "built-in";
+}
 
 function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
@@ -107,7 +167,7 @@ target?.addEventListener("gaussian-portal-loaded", (event) => {
       event.detail?.gaussians ?? 0,
     ).toLocaleString("zh-CN");
     statusDetail.textContent =
-      `已加载 ${gaussians} 个高斯点，移动手机即可观察空间视差`;
+      `已加载 ${gaussians} 个高斯点，调试器选定构图已贴合蓝框`;
   }
   if (debugPortal && target?.object3D) {
     cameraGate?.classList.add("is-hidden");
@@ -156,11 +216,13 @@ target?.addEventListener("portal-model-error", () => {
 
 target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
+  targetTracking = true;
   gaussianPortal?.setTracking(true);
   setTrackingState(true);
 });
 
 target?.addEventListener("targetLost", () => {
+  targetTracking = false;
   gaussianPortal?.setTracking(false);
   setTrackingState(false);
 });
@@ -183,7 +245,7 @@ toggleOcclusionButton?.addEventListener("click", () => {
   toggleOcclusionButton.setAttribute("aria-pressed", String(occlusionEnabled));
   if (statusDetail) {
     statusDetail.textContent = occlusionEnabled
-      ? "遮挡已开启：场景应只出现在洞口内"
+      ? "遮挡已开启：场景只在蓝色远端窗眼内显示"
       : "遮挡已关闭：用于观察场景原本超出洞口的范围";
   }
 });
@@ -240,48 +302,79 @@ async function startCamera() {
 
 startCameraButton?.addEventListener("click", startCamera);
 
-function initializeGaussianPortal() {
-  if (gaussianPortal || !scene || !target) return;
-  const viewDistance = finiteQueryNumber(
-    "viewDistance",
-    REFERENCE_VIEW_DISTANCE,
-  );
-  const debugAnchor = debugPortal
-    ? new window.AFRAME.THREE.Object3D()
-    : null;
-  debugAnchor?.position.set(
-    finiteQueryNumber("debugX"),
-    finiteQueryNumber("debugY"),
-    -viewDistance,
-  );
-  debugAnchor?.updateMatrixWorld(true);
-  gaussianPortal = createGaussianPortalRenderer({
-    scene,
-    target,
-    view: portalView,
-    modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
-    viewDistance,
-    anchorObject: debugAnchor,
-  });
-  gaussianPortal.setOcclusion(occlusionEnabled);
-  gaussianPortal.setDirection(depthDirection);
+async function initializeGaussianPortal() {
+  if (gaussianPortal || gaussianPortalPromise || !scene || !target) {
+    return gaussianPortalPromise;
+  }
+  gaussianPortalPromise = import("./gaussianPortalRenderer.js")
+    .then(({ createGaussianPortalRenderer }) => {
+      if (pageDestroyed) return null;
+      const viewDistance = finiteQueryNumber(
+        "viewDistance",
+        REFERENCE_VIEW_DISTANCE,
+      );
+      const debugAnchor = debugPortal
+        ? new window.AFRAME.THREE.Object3D()
+        : null;
+      debugAnchor?.position.set(
+        finiteQueryNumber("debugX"),
+        finiteQueryNumber("debugY"),
+        -viewDistance,
+      );
+      debugAnchor?.rotation.set(
+        window.AFRAME.THREE.MathUtils.degToRad(
+          finiteQueryNumber("debugPitch"),
+        ),
+        window.AFRAME.THREE.MathUtils.degToRad(
+          finiteQueryNumber("debugYaw"),
+        ),
+        window.AFRAME.THREE.MathUtils.degToRad(
+          finiteQueryNumber("debugRoll"),
+        ),
+      );
+      debugAnchor?.updateMatrixWorld(true);
+      gaussianPortal = createGaussianPortalRenderer({
+        scene,
+        target,
+        view: portalView,
+        crop: portalCrop,
+        portalFov,
+        modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
+        viewDistance,
+        anchorObject: debugAnchor,
+      });
+      gaussianPortal.setOcclusion(occlusionEnabled);
+      gaussianPortal.setDirection(depthDirection);
+      gaussianPortal.setTracking(debugPortal || targetTracking);
+      return gaussianPortal;
+    })
+    .catch((error) => {
+      gaussianPortalPromise = null;
+      console.error("Unable to initialize Gaussian portal", error);
+      target.emit("gaussian-portal-error", {
+        message: error?.message ?? "unknown error",
+      });
+      return null;
+    });
+  return gaussianPortalPromise;
 }
 
 scene?.addEventListener("loaded", () => {
   resolveArSystem();
   scene.renderer?.setClearColor(0x000000, 0);
-  initializeGaussianPortal();
+  if (debugPortal) initializeGaussianPortal();
   if (statusText) statusText.textContent = "等待你打开摄像头";
   if (statusDetail) statusDetail.textContent = "点击“允许并打开摄像头”开始测试";
 });
 
-if (scene?.hasLoaded) initializeGaussianPortal();
+if (scene?.hasLoaded && debugPortal) initializeGaussianPortal();
 
 scene?.addEventListener("arReady", () => {
   starting = false;
   cameraGate?.classList.add("is-hidden");
   if (statusText) statusText.textContent = "摄像头已启动，等待纹样框";
   if (statusDetail) statusDetail.textContent = "请将20×26 cm窗口周围的纹样完整放入画面";
+  initializeGaussianPortal();
 });
 
 scene?.addEventListener("arError", () => {
@@ -298,6 +391,7 @@ window.addEventListener("load", () => {
 });
 
 window.addEventListener("beforeunload", () => {
+  pageDestroyed = true;
   gaussianPortal?.destroy();
   gaussianPortal = null;
 });

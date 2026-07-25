@@ -1,12 +1,26 @@
 import * as pc from "playcanvas";
 import {
+  installGaussianCropShader,
+  updateGaussianCropMaterial,
+} from "./gaussianCropShader.js";
+import {
   PORTAL_CROP_BOX,
+  PORTAL_CROP_BOUNDS,
+  PORTAL_RUNTIME_SCENE,
   PORTAL_SOURCE_SCENE,
   PORTAL_VIEW_PRESET,
+  portalFrameFov,
+  readPortalRuntimeConfig,
+  savePortalRuntimeConfig,
 } from "./portalSceneConfig.js";
 
-const GAUSSIAN_URL = PORTAL_SOURCE_SCENE.url;
-const GAUSSIAN_COUNT = PORTAL_SOURCE_SCENE.gaussians;
+const initialQuery = new URLSearchParams(window.location.search);
+const usingSourceScene = initialQuery.get("sourceScene") === "1";
+const sceneConfig = usingSourceScene
+  ? PORTAL_SOURCE_SCENE
+  : PORTAL_RUNTIME_SCENE;
+const GAUSSIAN_URL = sceneConfig.url;
+const GAUSSIAN_COUNT = sceneConfig.gaussians;
 const stage = document.querySelector("#preview-stage");
 const viewport = document.querySelector("#splat-viewport");
 const loadState = document.querySelector("#load-state");
@@ -14,6 +28,11 @@ const parameterOutput = document.querySelector("#parameter-output");
 const resetButton = document.querySelector("#reset-view");
 const levelButton = document.querySelector("#level-camera");
 const copyButton = document.querySelector("#copy-parameters");
+const applyToArButton = document.querySelector("#apply-to-ar");
+const copyArLinkButton = document.querySelector("#copy-ar-link");
+const toggleSceneSource = document.querySelector(
+  "#toggle-scene-source",
+);
 const toggleCropButton = document.querySelector("#toggle-crop-box");
 const cropRecommendedButton = document.querySelector("#crop-recommended");
 const cropFullButton = document.querySelector("#crop-full");
@@ -30,6 +49,7 @@ const fovInput = document.querySelector("#camera-fov");
 const pitchOutput = document.querySelector("#camera-pitch-output");
 const rollOutput = document.querySelector("#camera-roll-output");
 const fovOutput = document.querySelector("#camera-fov-output");
+const arViewFrame = document.querySelector(".ar-view-frame");
 const cropInputs = {
   cx: document.querySelector("#crop-center-x"),
   cy: document.querySelector("#crop-center-y"),
@@ -47,16 +67,17 @@ const FULL_CROP = Object.freeze({
   sy: 42.905,
   sz: 43.02,
 });
+const savedPortalConfig = readPortalRuntimeConfig();
 const RECOMMENDED_CROP = Object.freeze({
   ...PORTAL_CROP_BOX,
 });
 const cropState = {
-  ...RECOMMENDED_CROP,
+  ...(savedPortalConfig?.crop ?? RECOMMENDED_CROP),
   visible: true,
 };
 
 const defaults = {
-  ...PORTAL_VIEW_PRESET,
+  ...(savedPortalConfig?.view ?? PORTAL_VIEW_PRESET),
 };
 const EDITOR_HOME_PITCH = 35;
 const state = { ...defaults };
@@ -73,6 +94,10 @@ const cameraRotation = new pc.Quat();
 let dragging = null;
 let lastFrameTime = performance.now();
 let frameRequest = 0;
+let renderRequested = true;
+let forceNextRender = true;
+let lastRenderAt = Number.NEGATIVE_INFINITY;
+const EDITOR_RENDER_INTERVAL = 1000 / 30;
 
 const canvas = document.createElement("canvas");
 canvas.className = "splat-canvas";
@@ -87,6 +112,7 @@ const app = new pc.Application(canvas, {
 });
 app.setCanvasFillMode(pc.FILLMODE_NONE);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
+app.autoRender = false;
 
 const cameraEntity = new pc.Entity("free-camera");
 cameraEntity.addComponent("camera", {
@@ -128,77 +154,67 @@ const cropEdges = Array.from({ length: 12 }, (_, index) => {
 });
 
 const cropMaterials = new Set();
-const cropModifyGlsl = `
-uniform vec3 uCropMin;
-uniform vec3 uCropMax;
-uniform float uCropEnabled;
-
-void modifySplatCenter(inout vec3 center) {
-}
-
-void modifySplatRotationScale(
-  vec3 originalCenter,
-  vec3 modifiedCenter,
-  inout vec4 rotation,
-  inout vec3 scale
-) {
-}
-
-void modifySplatColor(vec3 center, inout vec4 color) {
-  bool outside =
-    any(lessThan(center, uCropMin)) ||
-    any(greaterThan(center, uCropMax));
-  if (uCropEnabled > 0.5 && outside) {
-    color.a = 0.0;
-  }
-}
-`;
-const cropModifyWgsl = `
-uniform uCropMin: vec3f;
-uniform uCropMax: vec3f;
-uniform uCropEnabled: f32;
-
-fn modifySplatCenter(center: ptr<function, vec3f>) {
-}
-
-fn modifySplatRotationScale(
-  originalCenter: vec3f,
-  modifiedCenter: vec3f,
-  rotation: ptr<function, vec4f>,
-  scale: ptr<function, vec3f>
-) {
-}
-
-fn modifySplatColor(center: vec3f, color: ptr<function, vec4f>) {
-  let outside =
-    any(center < uniform.uCropMin) ||
-    any(center > uniform.uCropMax);
-  if (uniform.uCropEnabled > 0.5 && outside) {
-    (*color).a = 0.0;
-  }
-}
-`;
 
 function updateCropMaterials() {
   const bounds = cropBounds();
   cropMaterials.forEach((material) => {
-    material.setParameter("uCropMin", bounds.min);
-    material.setParameter("uCropMax", bounds.max);
-    material.setParameter("uCropEnabled", cropState.visible ? 1 : 0);
+    updateGaussianCropMaterial(material, bounds, cropState.visible);
   });
 }
 
 app.systems.gsplat.on("material:created", (material) => {
-  material.shaderChunks.glsl.set("gsplatModifyVS", cropModifyGlsl);
-  material.shaderChunks.wgsl.set("gsplatModifyVS", cropModifyWgsl);
+  installGaussianCropShader(material);
   cropMaterials.add(material);
   updateCropMaterials();
   material.update();
+  requestRender(true);
+});
+app.systems.gsplat.on("frame:request", () => requestRender());
+app.on("update", () => {
+  if (!renderRequested) return;
+  const now = performance.now();
+  if (
+    !forceNextRender &&
+    now - lastRenderAt < EDITOR_RENDER_INTERVAL
+  ) {
+    return;
+  }
+  app.renderNextFrame = true;
+  renderRequested = false;
+  forceNextRender = false;
+  lastRenderAt = now;
 });
 app.start();
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Older mobile browsers expose the API but reject it; use the
+      // selection-based fallback while this click still has user activation.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard is unavailable");
+}
+
+function requestRender(force = false) {
+  renderRequested = true;
+  forceNextRender ||= force;
 }
 
 function resize() {
@@ -207,6 +223,7 @@ function resize() {
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   app.resizeCanvas(width, height);
+  requestRender(true);
 }
 
 function buildViewUrl() {
@@ -220,6 +237,34 @@ function buildViewUrl() {
       typeof value === "boolean" ? String(Number(value)) : Number(value).toFixed(3),
     );
   });
+  return url;
+}
+
+function currentPortalFov() {
+  const frameHeight = arViewFrame?.getBoundingClientRect().height ?? 0;
+  const viewportHeight = Math.max(1, viewport.clientHeight);
+  return portalFrameFov(
+    state.fov,
+    clamp(frameHeight / viewportHeight, 0.05, 1),
+  );
+}
+
+function buildArUrl(portalFov) {
+  const url = new URL("/marker-ar.html", window.location.href);
+  Object.entries(state).forEach(([key, value]) => {
+    url.searchParams.set(
+      key,
+      Number(value).toFixed(key === "fov" ? 1 : 3),
+    );
+  });
+  Object.entries(cropState).forEach(([key, value]) => {
+    if (key === "visible") return;
+    url.searchParams.set(
+      `crop${key.toUpperCase()}`,
+      Number(value).toFixed(3),
+    );
+  });
+  url.searchParams.set("portalFov", Number(portalFov).toFixed(3));
   return url;
 }
 
@@ -258,6 +303,14 @@ function cropBounds() {
       cropState.cz + hz,
     ],
   };
+}
+
+function cropExceedsRuntimeAsset(bounds = cropBounds()) {
+  return bounds.min.some(
+    (value, index) => value < PORTAL_CROP_BOUNDS.min[index] - 1e-4,
+  ) || bounds.max.some(
+    (value, index) => value > PORTAL_CROP_BOUNDS.max[index] + 1e-4,
+  );
 }
 
 function buildCropCommand() {
@@ -311,9 +364,13 @@ function applyCropBox() {
     `裁剪盒：${cropState.visible ? "显示" : "隐藏"}`;
   toggleCropButton.setAttribute("aria-pressed", String(cropState.visible));
   const bounds = cropBounds();
+  const runtimeLimit = cropExceedsRuntimeAsset(bounds)
+    ? "  ·  超出部分需重新生成裁后 SOG 才能进入 AR"
+    : "";
   cropBoundsOutput.textContent =
-    `保留范围  min ${bounds.min.map((value) => value.toFixed(2)).join(" / ")}  ·  max ${bounds.max.map((value) => value.toFixed(2)).join(" / ")}`;
+    `保留范围  min ${bounds.min.map((value) => value.toFixed(2)).join(" / ")}  ·  max ${bounds.max.map((value) => value.toFixed(2)).join(" / ")}${runtimeLimit}`;
   updateCropMaterials();
+  requestRender();
 }
 
 function renderHud() {
@@ -330,6 +387,14 @@ function renderHud() {
   fovOutput.textContent = `${Math.round(state.fov)}°`;
   const viewUrl = buildViewUrl();
   parameterOutput.textContent = `${viewUrl.pathname}${viewUrl.search}`;
+  const sourceToggleUrl = new URL(viewUrl);
+  if (!usingSourceScene) {
+    sourceToggleUrl.searchParams.set("sourceScene", "1");
+  }
+  toggleSceneSource.href = sourceToggleUrl.href;
+  toggleSceneSource.textContent = usingSourceScene
+    ? "返回 MindAR 快速场景"
+    : "加载完整源场景";
 
   const yawDelta = Math.abs(
     ((state.yaw - defaults.yaw + 540) % 360) - 180,
@@ -353,6 +418,7 @@ function applyCamera() {
   cameraEntity.rotateLocal(0, 0, state.roll);
   cameraEntity.camera.fov = state.fov;
   renderHud();
+  requestRender();
 }
 
 function setKeyVisual(code, active) {
@@ -388,6 +454,7 @@ function applyTapStep(code, boosted) {
 }
 
 function updateMovement(now) {
+  frameRequest = 0;
   const elapsed = Math.min((now - lastFrameTime) / 1000, 0.05);
   lastFrameTime = now;
   const boosted =
@@ -429,6 +496,27 @@ function updateMovement(now) {
     changed = true;
   }
   if (changed) applyCamera();
+  if (
+    [...pressedKeys].some((code) =>
+      [
+        "KeyQ",
+        "KeyW",
+        "KeyE",
+        "KeyA",
+        "KeyS",
+        "KeyD",
+        "KeyC",
+        "Space",
+      ].includes(code),
+    )
+  ) {
+    frameRequest = window.requestAnimationFrame(updateMovement);
+  }
+}
+
+function ensureMovementLoop() {
+  if (frameRequest) return;
+  lastFrameTime = performance.now();
   frameRequest = window.requestAnimationFrame(updateMovement);
 }
 
@@ -463,6 +551,7 @@ window.addEventListener("keydown", (event) => {
   pressedKeys.add(event.code);
   setKeyVisual(event.code, true);
   if (event.code === "ShiftRight") setKeyVisual("ShiftLeft", true);
+  ensureMovementLoop();
 });
 
 window.addEventListener("keyup", (event) => {
@@ -563,6 +652,12 @@ cropRecommendedButton.addEventListener("click", () => {
 
 cropFullButton.addEventListener("click", () => {
   Object.assign(cropState, FULL_CROP, { visible: true });
+  if (!usingSourceScene) {
+    const sourceUrl = buildViewUrl();
+    sourceUrl.searchParams.set("sourceScene", "1");
+    window.location.assign(sourceUrl);
+    return;
+  }
   applyCropBox();
 });
 
@@ -577,7 +672,7 @@ sceneCompass.addEventListener("click", returnToMainView);
 copyButton.addEventListener("click", async () => {
   const originalText = copyButton.textContent;
   try {
-    await navigator.clipboard.writeText(buildViewUrl().href);
+    await copyText(buildViewUrl().href);
     copyButton.textContent = "已复制";
   } catch {
     copyButton.textContent = "复制失败";
@@ -590,7 +685,7 @@ copyButton.addEventListener("click", async () => {
 copyCropButton.addEventListener("click", async () => {
   const originalText = copyCropButton.textContent;
   try {
-    await navigator.clipboard.writeText(buildCropCommand());
+    await copyText(buildCropCommand());
     copyCropButton.textContent = "命令已复制";
   } catch {
     copyCropButton.textContent = "复制失败";
@@ -598,6 +693,52 @@ copyCropButton.addEventListener("click", async () => {
   window.setTimeout(() => {
     copyCropButton.textContent = originalText;
   }, 1400);
+});
+
+function persistCurrentConfig() {
+  const portalFov = currentPortalFov();
+  const bounds = cropBounds();
+  const exceedsRuntimeCrop = cropExceedsRuntimeAsset(bounds);
+  savePortalRuntimeConfig({
+    view: state,
+    crop: cropState,
+    portalFov,
+  });
+  return {
+    url: buildArUrl(portalFov),
+    exceedsRuntimeCrop,
+  };
+}
+
+applyToArButton.addEventListener("click", () => {
+  try {
+    const { url, exceedsRuntimeCrop } = persistCurrentConfig();
+    applyToArButton.disabled = true;
+    applyToArButton.textContent = exceedsRuntimeCrop
+      ? "已应用可用范围，正在打开 AR…"
+      : "已应用，正在打开 AR…";
+    window.setTimeout(() => {
+      window.location.assign(url);
+    }, exceedsRuntimeCrop ? 850 : 250);
+  } catch (error) {
+    console.error("Unable to save portal settings", error);
+    applyToArButton.textContent = "保存失败，请重试";
+  }
+});
+
+copyArLinkButton.addEventListener("click", async () => {
+  const originalText = copyArLinkButton.textContent;
+  try {
+    const { url } = persistCurrentConfig();
+    await copyText(url.href);
+    copyArLinkButton.textContent = "手机 AR 链接已复制";
+  } catch (error) {
+    console.error("Unable to copy AR link", error);
+    copyArLinkButton.textContent = "复制失败";
+  }
+  window.setTimeout(() => {
+    copyArLinkButton.textContent = originalText;
+  }, 1800);
 });
 
 window.addEventListener("resize", resize);
@@ -619,8 +760,9 @@ function loadScene() {
       unified: true,
     });
     loadState.textContent =
-      `SOG 场景已就绪 · ${GAUSSIAN_COUNT.toLocaleString("zh-CN")} 高斯点`;
+      `${usingSourceScene ? "完整源场景" : "MindAR 裁后场景"}已就绪 · ${GAUSSIAN_COUNT.toLocaleString("zh-CN")} 高斯点`;
     loadState.className = "load-state is-ready";
+    requestRender(true);
   });
   asset.on("error", (error) => {
     console.error("SOG scene load failed", error);
@@ -634,5 +776,4 @@ readViewUrl();
 resize();
 applyCamera();
 applyCropBox();
-frameRequest = window.requestAnimationFrame(updateMovement);
 loadScene();
