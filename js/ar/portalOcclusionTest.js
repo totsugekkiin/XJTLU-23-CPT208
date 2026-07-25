@@ -1,8 +1,9 @@
 const COMPONENT_NAME = "portal-occlusion-test";
 
-const OPENING_WIDTH = 200 / 240;
-const OPENING_HEIGHT = 260 / 240;
-const WALL_DEPTH = 400 / 240;
+const TARGET_WIDTH_MM = 260;
+const OPENING_WIDTH = 200 / TARGET_WIDTH_MM;
+const OPENING_HEIGHT = 260 / TARGET_WIDTH_MM;
+const WALL_DEPTH = 400 / TARGET_WIDTH_MM;
 const WALL_COVERAGE = 1.5;
 
 function disposeObject(root) {

@@ -14,13 +14,13 @@ TARGET_IMAGE = ROOT / "public" / "markers" / "changgate-window-frame.png"
 OUTPUT = ROOT / "output" / "pdf" / "changgate-portal-marker-a3.pdf"
 PUBLIC_OUTPUT = ROOT / "public" / "print" / "changgate-portal-marker-a3.pdf"
 
-TARGET_WIDTH_MM = 240
-TARGET_HEIGHT_MM = 300
+TARGET_WIDTH_MM = 260
+TARGET_HEIGHT_MM = 320
 OPENING_WIDTH_MM = 200
 OPENING_HEIGHT_MM = 260
-OPENING_LEFT_MM = 20
-OPENING_TOP_MM = 20
-PIXELS_PER_MM = 6
+OPENING_LEFT_MM = 30
+OPENING_TOP_MM = 30
+PIXELS_PER_MM = 10
 
 
 def _px(mm_value):
@@ -53,59 +53,106 @@ def create_target_image():
     image = Image.new("RGB", (width, height), cream)
     draw = ImageDraw.Draw(image)
 
-    # One-centimetre frame immediately around the 20 x 26 cm opening.
-    _rect(draw, (10, 10, 230, 20), dark)
-    _rect(draw, (10, 280, 230, 290), brown)
-    _rect(draw, (10, 20, 20, 280), teal)
-    _rect(draw, (220, 20, 230, 280), red)
+    # The whole three-centimetre frame is high-contrast target material. Each
+    # side uses a different irregular rhythm and symbol sequence so that it
+    # remains distinctive after camera downscaling and perspective distortion.
+    top_segments = [14, 21, 17, 26, 12, 23, 18, 29, 15, 25]
+    bottom_segments = [19, 13, 27, 16, 22, 31, 14, 24, 18, 16]
+    left_segments = [17, 24, 13, 29, 19, 31, 16, 26, 22, 28, 15, 20]
+    right_segments = [23, 14, 28, 17, 32, 19, 25, 12, 30, 21, 16, 23]
 
-    # Non-repeating edge texture. Each side has a different rhythm so the
-    # target cannot be mistaken for its 90/180-degree rotations.
-    top_segments = [8, 14, 11, 19, 9, 16, 12, 21, 10, 17, 13, 15, 18]
-    cursor = 11
-    for index, length in enumerate(top_segments):
-        end = min(229, cursor + length)
-        color = gold if index % 3 == 0 else (cream if index % 3 == 1 else teal)
-        _polygon(draw, [(cursor, 11), (end, 11), (end - 3, 19), (cursor + 2, 19)], color)
-        cursor = end + 2
+    horizontal_palettes = [
+        [gold, cream, teal, red, cream, brown, gold, teal, cream, red],
+        [teal, gold, cream, brown, gold, red, cream, teal, brown, gold],
+    ]
+    for side_index, (top, segments, palette) in enumerate(
+        [
+            (0, top_segments, horizontal_palettes[0]),
+            (290, bottom_segments, horizontal_palettes[1]),
+        ]
+    ):
+        cursor = 30
+        for index, (length, color) in enumerate(zip(segments, palette)):
+            end = cursor + length
+            _rect(draw, (cursor, top, end, top + 30), color, dark, 0.8)
+            symbol = cream if color in (teal, red, brown) else dark
+            if (index + side_index) % 4 == 0:
+                _line(draw, [(cursor + 3, top + 25), (end - 3, top + 5)], symbol, 1.2)
+            elif (index + side_index) % 4 == 1:
+                _line(draw, [(cursor + 3, top + 5), (end - 3, top + 25)], symbol, 1)
+                _line(draw, [(cursor + 3, top + 25), (end - 3, top + 5)], symbol, 1)
+            elif (index + side_index) % 4 == 2:
+                radius = min(6, length / 4)
+                centre_x = (cursor + end) / 2
+                draw.ellipse(
+                    (
+                        _px(centre_x - radius),
+                        _px(top + 15 - radius),
+                        _px(centre_x + radius),
+                        _px(top + 15 + radius),
+                    ),
+                    fill=symbol,
+                )
+                draw.ellipse(
+                    (
+                        _px(centre_x - radius / 2),
+                        _px(top + 15 - radius / 2),
+                        _px(centre_x + radius / 2),
+                        _px(top + 15 + radius / 2),
+                    ),
+                    fill=color,
+                )
+            else:
+                _rect(draw, (cursor + 3, top + 5, end - 3, top + 25), None, symbol, 1.2)
+            cursor = end
 
-    bottom_segments = [17, 9, 22, 12, 15, 8, 19, 11, 23, 10, 14, 18]
-    cursor = 11
-    for index, length in enumerate(bottom_segments):
-        end = min(229, cursor + length)
-        color = teal if index % 3 == 0 else (gold if index % 3 == 1 else cream)
-        _rect(draw, (cursor, 281, end, 289), color)
-        if index % 2 == 0:
-            _line(draw, [(cursor + 2, 288), (end - 2, 282)], dark, 0.8)
-        cursor = end + 2
+    vertical_palettes = [
+        [cream, teal, gold, brown, cream, red, gold, teal, cream, brown, gold, teal],
+        [gold, red, cream, teal, brown, gold, cream, red, teal, gold, brown, cream],
+    ]
+    for side_index, (left, segments, palette) in enumerate(
+        [
+            (0, left_segments, vertical_palettes[0]),
+            (230, right_segments, vertical_palettes[1]),
+        ]
+    ):
+        cursor = 30
+        for index, (length, color) in enumerate(zip(segments, palette)):
+            end = cursor + length
+            _rect(draw, (left, cursor, left + 30, end), color, dark, 0.8)
+            symbol = cream if color in (teal, red, brown) else dark
+            if (index + side_index * 2) % 4 == 0:
+                _line(draw, [(left + 5, cursor + 3), (left + 25, end - 3)], symbol, 1.2)
+            elif (index + side_index * 2) % 4 == 1:
+                _line(draw, [(left + 25, cursor + 3), (left + 5, end - 3)], symbol, 1)
+                _line(draw, [(left + 5, cursor + 3), (left + 25, end - 3)], symbol, 1)
+            elif (index + side_index * 2) % 4 == 2:
+                radius = min(6, length / 4)
+                centre_y = (cursor + end) / 2
+                draw.ellipse(
+                    (
+                        _px(left + 15 - radius),
+                        _px(centre_y - radius),
+                        _px(left + 15 + radius),
+                        _px(centre_y + radius),
+                    ),
+                    fill=symbol,
+                )
+                draw.ellipse(
+                    (
+                        _px(left + 15 - radius / 2),
+                        _px(centre_y - radius / 2),
+                        _px(left + 15 + radius / 2),
+                        _px(centre_y + radius / 2),
+                    ),
+                    fill=color,
+                )
+            else:
+                _rect(draw, (left + 5, cursor + 3, left + 25, end - 3), None, symbol, 1.2)
+            cursor = end
 
-    left_segments = [13, 21, 9, 17, 12, 24, 10, 15, 19, 8, 22, 11, 16]
-    cursor = 21
-    for index, length in enumerate(left_segments):
-        end = min(279, cursor + length)
-        color = cream if index % 3 == 0 else (gold if index % 3 == 1 else brown)
-        _polygon(draw, [(11, cursor), (19, cursor + 2), (19, end), (11, end - 3)], color)
-        cursor = end + 2
-
-    right_segments = [20, 8, 15, 23, 11, 18, 9, 25, 12, 16, 21, 10]
-    cursor = 21
-    for index, length in enumerate(right_segments):
-        end = min(279, cursor + length)
-        color = gold if index % 3 == 0 else (teal if index % 3 == 1 else cream)
-        _rect(draw, (221, cursor, 229, end), color)
-        if index % 2:
-            _line(draw, [(222, cursor + 2), (228, end - 2)], dark, 0.8)
-        cursor = end + 2
-
-    # Four 3 x 3 cm asymmetric corner flowers. The opening mask below removes
-    # their inner quarter, leaving an L-shaped ornament around each corner.
-    corners = {
-        "tl": (0, 0, 30, 30),
-        "tr": (210, 0, 240, 30),
-        "bl": (0, 270, 30, 300),
-        "br": (210, 270, 240, 300),
-    }
-    for box in corners.values():
+    # Four fully different 3 x 3 cm corner motifs anchor orientation.
+    for box in [(0, 0, 30, 30), (230, 0, 260, 30), (0, 290, 30, 320), (230, 290, 260, 320)]:
         _rect(draw, box, dark)
 
     # Top-left: concentric square and offset dot.
@@ -115,26 +162,26 @@ def create_target_image():
     draw.ellipse((_px(4), _px(19), _px(10), _px(25)), fill=brown)
 
     # Top-right: diagonal fan.
-    _polygon(draw, [(212, 2), (238, 2), (238, 8)], gold)
-    _polygon(draw, [(212, 5), (238, 12), (238, 18)], teal)
-    _polygon(draw, [(212, 12), (238, 21), (238, 28), (228, 28)], cream)
-    _line(draw, [(214, 27), (236, 4)], brown, 2)
+    _polygon(draw, [(232, 2), (258, 2), (258, 8)], gold)
+    _polygon(draw, [(232, 5), (258, 12), (258, 18)], teal)
+    _polygon(draw, [(232, 12), (258, 21), (258, 28), (248, 28)], cream)
+    _line(draw, [(234, 27), (256, 4)], brown, 2)
 
     # Bottom-left: stepped key pattern.
-    _rect(draw, (2, 272, 28, 298), teal)
-    _line(draw, [(5, 294), (5, 276), (13, 276), (13, 288), (21, 288), (21, 280), (27, 280)], gold, 3)
-    _rect(draw, (8, 291, 14, 297), cream)
+    _rect(draw, (2, 292, 28, 318), teal)
+    _line(draw, [(5, 314), (5, 296), (13, 296), (13, 308), (21, 308), (21, 300), (27, 300)], gold, 3)
+    _rect(draw, (8, 311, 14, 317), cream)
 
     # Bottom-right: asymmetric rays.
-    _rect(draw, (212, 272, 238, 298), brown)
+    _rect(draw, (232, 292, 258, 318), brown)
     for end_x, end_y, color in [
-        (237, 274, gold),
-        (237, 283, teal),
-        (232, 297, cream),
-        (220, 297, gold),
+        (257, 294, gold),
+        (257, 303, teal),
+        (252, 317, cream),
+        (240, 317, gold),
     ]:
-        _polygon(draw, [(213, 273), (end_x, end_y), (214, 281)], color)
-    draw.ellipse((_px(214), _px(273), _px(222), _px(281)), fill=dark)
+        _polygon(draw, [(233, 293), (end_x, end_y), (234, 301)], color)
+    draw.ellipse((_px(234), _px(293), _px(242), _px(301)), fill=dark)
 
     # The physical centre is cut out. Keeping it featureless in the reference
     # image ensures the compiler extracts features only from the printed frame.
@@ -148,9 +195,16 @@ def create_target_image():
         ),
         "#FFFFFF",
     )
+    _rect(draw, (0, 0, TARGET_WIDTH_MM, TARGET_HEIGHT_MM), None, dark, 1.2)
+    _rect(draw, (28.5, 28.5, 231.5, 291.5), None, dark, 1.5)
 
     TARGET_IMAGE.parent.mkdir(parents=True, exist_ok=True)
-    image.save(TARGET_IMAGE, format="PNG", dpi=(300, 300), optimize=True)
+    image.save(
+        TARGET_IMAGE,
+        format="PNG",
+        dpi=(PIXELS_PER_MM * 25.4, PIXELS_PER_MM * 25.4),
+        optimize=True,
+    )
     return image
 
 
@@ -177,7 +231,7 @@ def create_pdf():
     pdf.setFont("Helvetica", 8)
     pdf.drawRightString(width - 12 * mm, top_y(height, 11), "DO NOT FIT TO PAGE")
     pdf.setFont("Helvetica-Bold", 9)
-    pdf.drawCentredString(width / 2, top_y(height, 28), "1 cm PATTERN FRAME + FOUR 3 cm CORNER TARGETS")
+    pdf.drawCentredString(width / 2, top_y(height, 28), "FULL 3 cm HIGH-CONTRAST PATTERN FRAME")
 
     pdf.drawImage(
         ImageReader(image),
@@ -227,7 +281,7 @@ def create_pdf():
 
     pdf.setFillColor(HexColor("#5A5A5A"))
     pdf.setFont("Helvetica", 7)
-    pdf.drawRightString(width - 12 * mm, 12 * mm, "Target outer size: 24 x 30 cm. Opening: 20 x 26 cm.")
+    pdf.drawRightString(width - 12 * mm, 12 * mm, "Target outer size: 26 x 32 cm. Opening: 20 x 26 cm.")
 
     pdf.showPage()
     pdf.save()
