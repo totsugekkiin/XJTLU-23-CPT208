@@ -28,6 +28,9 @@
           <button id="copy-parameters" class="hud-button" type="button">
             复制视角参数
           </button>
+          <button id="toggle-crop-box" class="hud-button" type="button" aria-pressed="true">
+            裁剪盒：显示
+          </button>
         </div>
       </header>
 
@@ -85,6 +88,50 @@
           <input id="camera-fov" type="range" min="30" max="100" step="1" value="75" />
           <output id="camera-fov-output">75°</output>
         </label>
+      </aside>
+
+      <aside class="crop-hud" aria-label="高斯场景空间裁剪盒">
+        <div class="crop-hud__heading">
+          <div>
+            <span>LOSSLESS SPATIAL CROP</span>
+            <strong>空间裁剪盒</strong>
+          </div>
+          <small>隐藏盒外点，但不会修改原文件</small>
+        </div>
+        <div class="crop-fields">
+          <label>
+            <b>中心 X</b>
+            <input id="crop-center-x" type="number" step="0.1" />
+          </label>
+          <label>
+            <b>尺寸 X</b>
+            <input id="crop-size-x" type="number" min="0.5" step="0.1" />
+          </label>
+          <label>
+            <b>中心 Y</b>
+            <input id="crop-center-y" type="number" step="0.1" />
+          </label>
+          <label>
+            <b>尺寸 Y</b>
+            <input id="crop-size-y" type="number" min="0.5" step="0.1" />
+          </label>
+          <label>
+            <b>中心 Z</b>
+            <input id="crop-center-z" type="number" step="0.1" />
+          </label>
+          <label>
+            <b>尺寸 Z</b>
+            <input id="crop-size-z" type="number" min="0.5" step="0.1" />
+          </label>
+        </div>
+        <div class="crop-actions">
+          <button id="crop-recommended" type="button">建议范围</button>
+          <button id="crop-full" type="button">覆盖全图</button>
+          <button id="copy-crop-command" class="is-primary" type="button">
+            复制裁剪命令
+          </button>
+        </div>
+        <code id="crop-bounds-output">正在准备裁剪范围…</code>
       </aside>
 
       <aside class="pose-hud" aria-live="polite">
