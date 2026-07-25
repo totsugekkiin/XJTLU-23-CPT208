@@ -7,12 +7,14 @@ import {
   PORTAL_CROP_BOX,
   PORTAL_OPENING_HEIGHT,
   PORTAL_OPENING_WIDTH,
+  PORTAL_PERSPECTIVE_MODES,
   PORTAL_REFERENCE_VIEW_DISTANCE,
   PORTAL_RUNTIME_SCENE,
   PORTAL_WALL_DEPTH,
   PORTAL_WORLD_SCALE,
   portalCropBounds,
   portalFrameFov,
+  resolvePortalPerspectivePose,
 } from "./portalSceneConfig.js";
 
 const GAUSSIAN_URL = PORTAL_RUNTIME_SCENE.url;
@@ -27,6 +29,8 @@ const CAMERA_FAR = 1000;
 const MOBILE_RENDER_INTERVAL = 1000 / 30;
 const DESKTOP_RENDER_INTERVAL = 1000 / 45;
 const EYE_MOVEMENT_EPSILON = 0.003;
+const EYE_DEPTH_SMOOTHING_MS = 55;
+const EYE_DEPTH_SNAP_DISTANCE = 0.08;
 const PROJECTED_POINT_EPSILON = 0.15;
 
 function applyEditorCameraPose(entity, view) {
@@ -115,6 +119,7 @@ class GaussianPortalRenderer {
     portalFov = portalFrameFov(view.fov),
     modelScale = PORTAL_WORLD_SCALE,
     viewDistance = PORTAL_REFERENCE_VIEW_DISTANCE,
+    perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL,
   }) {
     this.scene = scene;
     this.target = target;
@@ -146,11 +151,21 @@ class GaussianPortalRenderer {
     this.viewportBounds = null;
     this.frustumValid = true;
     this.hasRenderedEye = false;
-    this.hasReferenceEye = false;
+    this.perspectiveMode =
+      perspectiveMode === PORTAL_PERSPECTIVE_MODES.COMPOSITION
+        ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
+        : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+    this.hasReferenceEye =
+      this.perspectiveMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+    this.distanceCalibrated = false;
+    this.hasSmoothedEye = false;
+    this.lastEyeSampleAt = 0;
+    this.lastPerspectiveEmitAt = 0;
 
     this.worldPoint = new this.THREE.Vector3();
     this.cameraPoint = new this.THREE.Vector3();
     this.relativeCameraMatrix = new this.THREE.Matrix4();
+    this.rawRuntimeEye = new this.THREE.Vector3();
     this.runtimeEye = new this.THREE.Vector3();
     this.lastRenderedEye = new this.THREE.Vector3();
     this.referenceEye = new this.THREE.Vector3(
@@ -364,14 +379,33 @@ class GaussianPortalRenderer {
       .copy(this.anchorObject.matrixWorld)
       .invert()
       .multiply(camera.matrixWorld);
-    this.runtimeEye.setFromMatrixPosition(this.relativeCameraMatrix);
+    this.rawRuntimeEye.setFromMatrixPosition(this.relativeCameraMatrix);
     if (
-      !Number.isFinite(this.runtimeEye.x) ||
-      !Number.isFinite(this.runtimeEye.y) ||
-      !Number.isFinite(this.runtimeEye.z)
+      !Number.isFinite(this.rawRuntimeEye.x) ||
+      !Number.isFinite(this.rawRuntimeEye.y) ||
+      !Number.isFinite(this.rawRuntimeEye.z)
     ) {
       return false;
     }
+
+    const now = performance.now();
+    if (!this.hasSmoothedEye) {
+      this.runtimeEye.copy(this.rawRuntimeEye);
+      this.hasSmoothedEye = true;
+    } else {
+      const elapsed = Math.max(0, now - this.lastEyeSampleAt);
+      const depthDifference = this.rawRuntimeEye.z - this.runtimeEye.z;
+      const depthAlpha =
+        Math.abs(depthDifference) >= EYE_DEPTH_SNAP_DISTANCE
+          ? 1
+          : 1 - Math.exp(-elapsed / EYE_DEPTH_SMOOTHING_MS);
+      this.runtimeEye.set(
+        this.rawRuntimeEye.x,
+        this.rawRuntimeEye.y,
+        this.runtimeEye.z + depthDifference * depthAlpha,
+      );
+    }
+    this.lastEyeSampleAt = now;
 
     if (!this.hasReferenceEye) {
       this.referenceEye.copy(this.runtimeEye);
@@ -391,14 +425,18 @@ class GaussianPortalRenderer {
   }
 
   applyRuntimeEye(eye) {
-    const deltaX = (eye.x - this.referenceEye.x) / this.modelScale;
-    const deltaY = (eye.y - this.referenceEye.y) / this.modelScale;
-    const deltaZ = (eye.z - this.referenceEye.z) / this.modelScale;
-    const distance = this.virtualPortalDistance + deltaZ;
-    if (!Number.isFinite(distance) || distance <= CAMERA_NEAR * 1.05) {
+    const pose = resolvePortalPerspectivePose({
+      eye,
+      referenceEye: this.referenceEye,
+      direction: this.direction,
+      virtualPortalDistance: this.virtualPortalDistance,
+    });
+    if (!pose || pose.distance <= CAMERA_NEAR * 1.05) {
       this.frustumValid = false;
       return false;
     }
+
+    const { deltaX, deltaY, deltaZ, distance } = pose;
 
     this.virtualEyeLocal.set(deltaX, deltaY, deltaZ);
     this.baseCameraRotation.transformVector(
@@ -420,6 +458,57 @@ class GaussianPortalRenderer {
       (this.virtualOpeningHeight / 2 - deltaY) * nearOverDistance;
     this.frustumValid = true;
     return true;
+  }
+
+  emitPerspectiveState(force = false) {
+    const now = performance.now();
+    if (!force && now - this.lastPerspectiveEmitAt < 500) return;
+    this.lastPerspectiveEmitAt = now;
+    const pose = resolvePortalPerspectivePose({
+      eye: this.runtimeEye,
+      referenceEye: this.referenceEye,
+      direction: this.direction,
+      virtualPortalDistance: this.virtualPortalDistance,
+    });
+    this.target.emit("gaussian-portal-perspective", {
+      mode: this.perspectiveMode,
+      calibrated: this.distanceCalibrated,
+      eyeDistanceMm: pose?.eyeDistanceMm ?? null,
+      farPlaneDistanceMm: pose?.farPlaneDistanceMm ?? null,
+    });
+  }
+
+  setPerspectiveMode(mode) {
+    const nextMode =
+      mode === PORTAL_PERSPECTIVE_MODES.COMPOSITION
+        ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
+        : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+    if (nextMode === this.perspectiveMode && this.hasReferenceEye) return;
+    this.perspectiveMode = nextMode;
+    this.distanceCalibrated = false;
+    if (nextMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL) {
+      this.referenceEye.set(0, 0, this.viewDistance);
+      this.hasReferenceEye = true;
+    } else {
+      this.hasReferenceEye = false;
+    }
+    this.hasRenderedEye = false;
+    this.poseRenderRequested = true;
+    this.requestRender(true);
+    this.emitPerspectiveState(true);
+  }
+
+  calibrateCurrentDistance() {
+    if (!this.hasSmoothedEye) return null;
+    this.perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+    this.referenceEye.set(0, 0, this.runtimeEye.z);
+    this.hasReferenceEye = true;
+    this.distanceCalibrated = true;
+    this.hasRenderedEye = false;
+    this.poseRenderRequested = true;
+    this.requestRender(true);
+    this.emitPerspectiveState(true);
+    return this.runtimeEye.z;
   }
 
   setTracking(tracking) {
@@ -454,6 +543,7 @@ class GaussianPortalRenderer {
     this.lastTransform = "";
     this.poseRenderRequested = true;
     this.requestRender(true);
+    this.emitPerspectiveState(true);
   }
 
   setProjected(projected) {
@@ -650,6 +740,7 @@ class GaussianPortalRenderer {
       this.renderRequested = false;
       this.forceNextRender = false;
       this.poseRenderRequested = false;
+      this.emitPerspectiveState();
     }
   }
 

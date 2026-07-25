@@ -1,6 +1,7 @@
 import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
 import {
   PORTAL_CROP_BOX,
+  PORTAL_PERSPECTIVE_MODES,
   PORTAL_REFERENCE_VIEW_DISTANCE,
   PORTAL_RUNTIME_SCENE,
   PORTAL_VIEW_PRESET,
@@ -19,6 +20,8 @@ const statusText = document.querySelector("#marker-status");
 const statusDetail = document.querySelector("#marker-detail");
 const flipDepthButton = document.querySelector("#flip-depth");
 const toggleOcclusionButton = document.querySelector("#toggle-occlusion");
+const togglePerspectiveButton = document.querySelector("#toggle-perspective");
+const calibrateDistanceButton = document.querySelector("#calibrate-distance");
 const scene = document.querySelector("a-scene");
 const cameraGate = document.querySelector("#camera-gate");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
@@ -36,9 +39,14 @@ let gaussianPortalPromise = null;
 let debugAnchorObject = null;
 let targetTracking = false;
 let pageDestroyed = false;
+let perspectiveState = null;
 
 const query = new URLSearchParams(window.location.search);
 const debugPortal = query.get("debugPortal") === "1";
+let perspectiveMode =
+  query.get("perspective") === PORTAL_PERSPECTIVE_MODES.COMPOSITION
+    ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
+    : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
 const savedPortalConfig = readPortalRuntimeConfig();
 const configuredView = savedPortalConfig?.view ?? PORTAL_VIEW_PRESET;
 const configuredCrop = savedPortalConfig?.crop ?? PORTAL_CROP_BOX;
@@ -114,11 +122,51 @@ function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
   if (statusText) statusText.textContent = tracking ? "纹样框已锁定" : "纹样框暂时丢失";
   if (statusDetail) {
+    const distance = Number(perspectiveState?.eyeDistanceMm);
+    const distanceText = Number.isFinite(distance)
+      ? ` · 镜头约 ${(distance / 10).toFixed(0)} cm`
+      : "";
+    const perspectiveText =
+      perspectiveMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL
+        ? perspectiveState?.calibrated
+          ? "物理透视（已校准）"
+          : "物理透视"
+        : "构图优先";
     statusDetail.textContent = tracking
-      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒`
+      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒 · ${perspectiveText}${distanceText}`
       : "让四边和四个角尽量完整进入画面";
   }
 }
+
+function updatePerspectiveControls() {
+  const physical = perspectiveMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+  if (togglePerspectiveButton) {
+    const label = `透视：${physical ? "物理" : "构图"}`;
+    if (togglePerspectiveButton.textContent !== label) {
+      togglePerspectiveButton.textContent = label;
+    }
+    if (
+      togglePerspectiveButton.getAttribute("aria-pressed") !== String(physical)
+    ) {
+      togglePerspectiveButton.setAttribute("aria-pressed", String(physical));
+    }
+  }
+  if (calibrateDistanceButton) {
+    const disabled =
+      !gaussianPortal || !Number.isFinite(perspectiveState?.eyeDistanceMm);
+    if (calibrateDistanceButton.disabled !== disabled) {
+      calibrateDistanceButton.disabled = disabled;
+    }
+    const label = perspectiveState?.calibrated
+      ? "当前距离已校准"
+      : "以当前距离校准";
+    if (calibrateDistanceButton.textContent !== label) {
+      calibrateDistanceButton.textContent = label;
+    }
+  }
+}
+
+updatePerspectiveControls();
 
 target?.setAttribute("portal-occlusion-test", {
   direction: depthDirection,
@@ -206,6 +254,15 @@ target?.addEventListener("gaussian-portal-loaded", (event) => {
   }
 });
 
+target?.addEventListener("gaussian-portal-perspective", (event) => {
+  perspectiveState = event.detail ?? null;
+  perspectiveMode =
+    perspectiveState?.mode === PORTAL_PERSPECTIVE_MODES.COMPOSITION
+      ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
+      : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+  updatePerspectiveControls();
+});
+
 target?.addEventListener("gaussian-portal-error", () => {
   target?.setAttribute("portal-occlusion-test", "loadModel", true);
   if (statusText) statusText.textContent = "高斯场景不可用，启用网格回退";
@@ -243,6 +300,7 @@ target?.addEventListener("targetLost", () => {
   targetTracking = false;
   gaussianPortal?.setTracking(false);
   setTrackingState(false);
+  if (calibrateDistanceButton) calibrateDistanceButton.disabled = true;
 });
 
 flipDepthButton?.addEventListener("click", () => {
@@ -265,6 +323,35 @@ toggleOcclusionButton?.addEventListener("click", () => {
     statusDetail.textContent = occlusionEnabled
       ? "遮挡已开启：场景只在蓝色远端窗眼内显示"
       : "遮挡已关闭：用于观察场景原本超出洞口的范围";
+  }
+});
+
+togglePerspectiveButton?.addEventListener("click", () => {
+  perspectiveMode =
+    perspectiveMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL
+      ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
+      : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+  perspectiveState = null;
+  gaussianPortal?.setPerspectiveMode(perspectiveMode);
+  updatePerspectiveControls();
+  if (statusDetail) {
+    statusDetail.textContent =
+      perspectiveMode === PORTAL_PERSPECTIVE_MODES.PHYSICAL
+        ? "已启用物理透视：初始距离、横移和倾斜都会参与计算"
+        : "已启用构图优先：当前锁定位置作为调试构图基准";
+  }
+});
+
+calibrateDistanceButton?.addEventListener("click", () => {
+  const distance = gaussianPortal?.calibrateCurrentDistance();
+  if (!Number.isFinite(distance)) {
+    if (statusDetail) statusDetail.textContent = "请先稳定锁定纹样框再校准";
+    return;
+  }
+  perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL;
+  if (statusDetail) {
+    statusDetail.textContent =
+      `已将当前约 ${(distance * 26).toFixed(0)} cm 设为调试构图基准；继续移动仍会实时改变透视`;
   }
 });
 
@@ -364,6 +451,7 @@ async function initializeGaussianPortal() {
         portalFov,
         modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
         viewDistance,
+        perspectiveMode,
         anchorObject: debugAnchor,
       });
       gaussianPortal.setOcclusion(occlusionEnabled);
