@@ -166,6 +166,18 @@ class GaussianPortalRenderer {
       x: Number.NaN,
       y: Number.NaN,
     }));
+    this.nearProjectedCorners = Array.from({ length: 4 }, () => ({
+      x: 0,
+      y: 0,
+    }));
+    this.lastNearProjectedCorners = Array.from(
+      { length: 4 },
+      () => ({
+        x: Number.NaN,
+        y: Number.NaN,
+      }),
+    );
+    this.lastNearClipPath = "";
     this.clipCorners = [
       new this.THREE.Vector3(
         -PORTAL_OPENING_WIDTH / 2,
@@ -189,12 +201,17 @@ class GaussianPortalRenderer {
       ),
     ];
 
+    this.clipLayer = document.createElement("div");
+    this.clipLayer.className = "gaussian-portal-clip";
+    this.clipLayer.setAttribute("aria-hidden", "true");
+    this.scene.before(this.clipLayer);
+
     this.canvas = document.createElement("canvas");
     this.canvas.className = "gaussian-portal-canvas";
     this.canvas.setAttribute("aria-hidden", "true");
     this.canvas.style.width = `${TEXTURE_WIDTH}px`;
     this.canvas.style.height = `${TEXTURE_HEIGHT}px`;
-    this.scene.before(this.canvas);
+    this.clipLayer.append(this.canvas);
 
     this.app = new pc.Application(this.canvas, {
       graphicsDeviceOptions: {
@@ -321,6 +338,11 @@ class GaussianPortalRenderer {
       point.x = Number.NaN;
       point.y = Number.NaN;
     }
+    for (const point of this.lastNearProjectedCorners) {
+      point.x = Number.NaN;
+      point.y = Number.NaN;
+    }
+    this.lastNearClipPath = "";
     this.requestRender(true);
   }
 
@@ -419,6 +441,11 @@ class GaussianPortalRenderer {
   setOcclusion(enabled) {
     this.occlusion = enabled;
     this.lastTransform = "";
+    if (!enabled) {
+      this.setNearClipPath("none");
+    } else {
+      this.lastNearClipPath = "";
+    }
     this.requestRender(true);
   }
 
@@ -439,6 +466,73 @@ class GaussianPortalRenderer {
     this.canvas.style.transform = transform;
   }
 
+  setNearClipPath(clipPath) {
+    if (clipPath === this.lastNearClipPath) return;
+    this.lastNearClipPath = clipPath;
+    this.clipLayer.style.clipPath = clipPath;
+    this.clipLayer.style.webkitClipPath = clipPath;
+  }
+
+  projectPortalCorners(camera, z, sourceBounds, output) {
+    for (let index = 0; index < this.clipCorners.length; index += 1) {
+      const corner = this.clipCorners[index];
+      this.worldPoint
+        .set(corner.x, corner.y, z)
+        .applyMatrix4(this.anchorObject.matrixWorld);
+      this.cameraPoint
+        .copy(this.worldPoint)
+        .applyMatrix4(camera.matrixWorldInverse);
+      if (
+        !Number.isFinite(this.cameraPoint.z) ||
+        this.cameraPoint.z >= -camera.near
+      ) {
+        return false;
+      }
+
+      this.worldPoint.project(camera);
+      if (
+        !Number.isFinite(this.worldPoint.x) ||
+        !Number.isFinite(this.worldPoint.y)
+      ) {
+        return false;
+      }
+      output[index].x =
+        sourceBounds.left +
+        ((this.worldPoint.x + 1) * sourceBounds.width) / 2;
+      output[index].y =
+        sourceBounds.top +
+        ((1 - this.worldPoint.y) * sourceBounds.height) / 2;
+    }
+    return true;
+  }
+
+  updateNearClipPath() {
+    let changed = !this.lastNearClipPath;
+    for (let index = 0; index < this.nearProjectedCorners.length; index += 1) {
+      const projected = this.nearProjectedCorners[index];
+      const previous = this.lastNearProjectedCorners[index];
+      if (
+        Math.abs(projected.x - previous.x) >=
+          PROJECTED_POINT_EPSILON ||
+        Math.abs(projected.y - previous.y) >= PROJECTED_POINT_EPSILON
+      ) {
+        changed = true;
+      }
+    }
+    if (!changed) return;
+
+    const clipPath = `polygon(${this.nearProjectedCorners
+      .map((point) => `${point.x.toFixed(2)}px ${point.y.toFixed(2)}px`)
+      .join(",")})`;
+    for (let index = 0; index < this.nearProjectedCorners.length; index += 1) {
+      this.lastNearProjectedCorners[index].x =
+        this.nearProjectedCorners[index].x;
+      this.lastNearProjectedCorners[index].y =
+        this.nearProjectedCorners[index].y;
+    }
+    this.setNearClipPath(clipPath);
+  }
+
   updatePortalTransform(camera) {
     if (!this.occlusion) {
       const scale = Math.min(
@@ -450,6 +544,7 @@ class GaussianPortalRenderer {
       this.setTransform(
         `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) scale(${scale.toFixed(5)})`,
       );
+      this.setNearClipPath("none");
       this.setProjected(true);
       return;
     }
@@ -461,38 +556,28 @@ class GaussianPortalRenderer {
     }
 
     const farPlaneZ = this.direction * PORTAL_WALL_DEPTH;
+    if (
+      !this.projectPortalCorners(
+        camera,
+        0,
+        sourceBounds,
+        this.nearProjectedCorners,
+      ) ||
+      !this.projectPortalCorners(
+        camera,
+        farPlaneZ,
+        sourceBounds,
+        this.projectedCorners,
+      )
+    ) {
+      this.setProjected(false);
+      return;
+    }
+    this.updateNearClipPath();
+
     let projectionChanged = !this.lastTransform;
     for (let index = 0; index < this.clipCorners.length; index += 1) {
-      const corner = this.clipCorners[index];
-      this.worldPoint
-        .set(corner.x, corner.y, farPlaneZ)
-        .applyMatrix4(this.anchorObject.matrixWorld);
-      this.cameraPoint
-        .copy(this.worldPoint)
-        .applyMatrix4(camera.matrixWorldInverse);
-      if (
-        !Number.isFinite(this.cameraPoint.z) ||
-        this.cameraPoint.z >= -camera.near
-      ) {
-        this.setProjected(false);
-        return;
-      }
-
-      this.worldPoint.project(camera);
-      if (
-        !Number.isFinite(this.worldPoint.x) ||
-        !Number.isFinite(this.worldPoint.y)
-      ) {
-        this.setProjected(false);
-        return;
-      }
       const projected = this.projectedCorners[index];
-      projected.x =
-        sourceBounds.left +
-        ((this.worldPoint.x + 1) * sourceBounds.width) / 2;
-      projected.y =
-        sourceBounds.top +
-        ((1 - this.worldPoint.y) * sourceBounds.height) / 2;
       const previous = this.lastProjectedCorners[index];
       if (
         Math.abs(projected.x - previous.x) >=
@@ -641,7 +726,7 @@ class GaussianPortalRenderer {
     );
     this.cropMaterials.clear();
     this.app.destroy();
-    this.canvas.remove();
+    this.clipLayer.remove();
   }
 }
 
