@@ -13,11 +13,30 @@ const cameraGate = document.querySelector("#camera-gate");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
 
+const PORTAL_VIEW_PRESET = Object.freeze({
+  x: -1.05,
+  y: -2.787,
+  z: 0.891,
+  yaw: 11.293,
+  pitch: 17.08,
+  roll: -7.6,
+  fov: 75,
+});
+
 let depthDirection = -1;
 let occlusionEnabled = true;
 let foundAt = 0;
 let arSystem = null;
 let starting = false;
+
+const query = new URLSearchParams(window.location.search);
+
+function finiteQueryNumber(name, fallback = 0) {
+  const rawValue = query.get(name);
+  if (rawValue === null || rawValue.trim() === "") return fallback;
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
@@ -32,6 +51,51 @@ function setTrackingState(tracking) {
 target?.setAttribute("portal-occlusion-test", {
   direction: depthDirection,
   occlusion: occlusionEnabled,
+  farFrame: true,
+  useViewPose: true,
+  viewX: finiteQueryNumber("x", PORTAL_VIEW_PRESET.x),
+  viewY: finiteQueryNumber("y", PORTAL_VIEW_PRESET.y),
+  viewZ: finiteQueryNumber("z", PORTAL_VIEW_PRESET.z),
+  viewYaw: finiteQueryNumber("yaw", PORTAL_VIEW_PRESET.yaw),
+  viewPitch: finiteQueryNumber("pitch", PORTAL_VIEW_PRESET.pitch),
+  viewRoll: finiteQueryNumber("roll", PORTAL_VIEW_PRESET.roll),
+  viewFov: finiteQueryNumber("fov", PORTAL_VIEW_PRESET.fov),
+  modelScale: finiteQueryNumber("modelScale"),
+  modelYaw: finiteQueryNumber("modelYaw"),
+  modelPitch: finiteQueryNumber("modelPitch"),
+  modelRoll: finiteQueryNumber("modelRoll"),
+  modelOffsetX: finiteQueryNumber("modelX"),
+  modelOffsetY: finiteQueryNumber("modelY"),
+  modelOffsetZ: finiteQueryNumber("modelZ"),
+});
+
+target?.addEventListener("portal-model-transform", (event) => {
+  const detail = event.detail ?? {};
+  target.dataset.portalView = JSON.stringify(detail.viewPose ?? null);
+  target.dataset.portalPosition = JSON.stringify(
+    detail.resolvedPosition ?? null,
+  );
+  target.dataset.portalRotation = JSON.stringify(
+    detail.resolvedQuaternion ?? null,
+  );
+});
+
+target?.addEventListener("portal-model-loading", () => {
+  if (statusText) statusText.textContent = "正在加载实景模型…";
+  if (statusDetail) statusDetail.textContent = "首次打开需要下载约 8 MB 模型";
+});
+
+target?.addEventListener("portal-model-loaded", (event) => {
+  if (statusText) statusText.textContent = "实景模型已就绪";
+  if (statusDetail) {
+    const vertices = Number(event.detail?.vertices ?? 0).toLocaleString("zh-CN");
+    statusDetail.textContent = `已加载 ${vertices} 个顶点，请将图案边框完整放入画面`;
+  }
+});
+
+target?.addEventListener("portal-model-error", () => {
+  if (statusText) statusText.textContent = "实景模型加载失败";
+  if (statusDetail) statusDetail.textContent = "请检查网络后刷新页面重试";
 });
 
 target?.addEventListener("targetFound", () => {

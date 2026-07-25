@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#11100e" />
+    <title>阊门 SPZ 全景取景器</title>
+    <link rel="stylesheet" href="/css/portal-model-editor.css" />
+  </head>
+  <body>
+    <main id="preview-stage" class="panorama-stage" aria-label="阊门高斯全景取景器">
+      <div id="splat-viewport" class="splat-viewport" aria-hidden="true"></div>
+
+      <header class="top-hud">
+        <div>
+          <span class="eyebrow">GAUSSIAN SCENE · AR VIEW FINDER</span>
+          <h1>完整高斯场景取景</h1>
+        </div>
+        <div class="top-actions">
+          <span id="load-state" class="load-state">正在加载 SPZ 场景…</span>
+          <button id="reset-view" class="hud-button is-primary" type="button">
+            回到主景（H）
+          </button>
+          <button id="level-camera" class="hud-button" type="button">一键调平</button>
+          <button id="copy-parameters" class="hud-button" type="button">
+            复制视角参数
+          </button>
+        </div>
+      </header>
+
+      <div class="ar-view-frame" aria-label="AR 实际取景范围">
+        <i class="corner corner-tl"></i>
+        <i class="corner corner-tr"></i>
+        <i class="corner corner-bl"></i>
+        <i class="corner corner-br"></i>
+        <span>AR 实际视角 · 20 × 26 cm</span>
+      </div>
+      <div class="screen-reticle" aria-hidden="true"></div>
+      <button id="scene-compass" class="scene-compass" type="button" hidden>
+        主场景不在当前方向 · 点击返回
+      </button>
+
+      <aside class="control-hud" aria-label="移动操作说明">
+        <div class="control-row direction-row">
+          <strong>方向控制</strong>
+          <div class="key-cluster">
+            <kbd data-key="KeyQ">Q</kbd>
+            <kbd data-key="KeyW">W</kbd>
+            <kbd data-key="KeyE">E</kbd>
+            <kbd data-key="KeyA">A</kbd>
+            <kbd data-key="KeyS">S</kbd>
+            <kbd data-key="KeyD">D</kbd>
+          </div>
+        </div>
+        <div class="control-row">
+          <strong>冲刺 / 加速</strong>
+          <kbd class="wide-key" data-key="ShiftLeft">Shift</kbd>
+        </div>
+        <div class="control-row">
+          <strong>抬升 / 跳跃</strong>
+          <kbd class="wide-key" data-key="Space">Space</kbd>
+        </div>
+        <div class="control-note">
+          W/S 前后 · A/D 横移 · Q/E 转向 · Space/C 升降 · 鼠标拖动观察
+        </div>
+      </aside>
+
+      <aside class="camera-hud" aria-label="摄像头角度校正">
+        <span>摄像头校正</span>
+        <label>
+          <b>俯仰</b>
+          <input id="camera-pitch" type="range" min="-89" max="89" step="0.1" value="35" />
+          <output id="camera-pitch-output">35.0°</output>
+        </label>
+        <label>
+          <b>倾斜</b>
+          <input id="camera-roll" type="range" min="-45" max="45" step="0.1" value="0" />
+          <output id="camera-roll-output">0.0°</output>
+        </label>
+        <label>
+          <b>视野</b>
+          <input id="camera-fov" type="range" min="30" max="100" step="1" value="75" />
+          <output id="camera-fov-output">75°</output>
+        </label>
+      </aside>
+
+      <aside class="pose-hud" aria-live="polite">
+        <span>当前自由相机</span>
+        <dl>
+          <div><dt>水平</dt><dd id="yaw-value">0°</dd></div>
+          <div><dt>俯仰 / 倾斜</dt><dd id="angle-value">35° / 0°</dd></div>
+          <div><dt>位置</dt><dd id="position-value">0.00 / 0.00 / 0.00</dd></div>
+          <div><dt>视野</dt><dd id="fov-value">75°</dd></div>
+        </dl>
+        <code id="parameter-output">SPZ 场景加载后生成视角参数</code>
+      </aside>
+
+      <div class="bottom-hint">
+        无碰撞、无位置边界；中心框内是纹样识别后 AR 洞口的目标构图
+      </div>
+    </main>
+
+    <script type="module" src="/js/ar/portalModelEditor.js"></script>
+  </body>
+</html>

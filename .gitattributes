@@ -1,2 +1,4 @@
 *.pdf binary
 *.mind binary
+*.ply binary
+*.sog binary

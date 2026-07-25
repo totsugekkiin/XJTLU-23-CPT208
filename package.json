@@ -17,12 +17,14 @@
     "lucide-react": "^1.14.0",
     "motion": "^12.38.0",
     "pixi.js": "^8.13.2",
+    "playcanvas": "^2.21.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^4.2.4",
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@playcanvas/splat-transform": "^3.1.6",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.20"
   }
