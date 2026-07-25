@@ -138,6 +138,18 @@ a {
   font-weight: 800;
 }
 
+.hud-button.is-apply {
+  color: #071b20;
+  border-color: #64dcff;
+  background: #64dcff;
+  font-weight: 800;
+}
+
+.hud-button:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
 .ar-view-frame {
   position: absolute;
   z-index: 5;

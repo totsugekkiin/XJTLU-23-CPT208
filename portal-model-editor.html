@@ -20,7 +20,16 @@
           <h1>MindAR 当前视角与裁剪</h1>
         </div>
         <div class="top-actions">
-          <span id="load-state" class="load-state">正在加载 SPZ 场景…</span>
+          <span id="load-state" class="load-state">正在加载 MindAR 裁后场景…</span>
+          <button id="apply-to-ar" class="hud-button is-apply" type="button">
+            应用当前数据到 AR
+          </button>
+          <button id="copy-ar-link" class="hud-button" type="button">
+            复制手机 AR 链接
+          </button>
+          <a id="toggle-scene-source" class="hud-button" href="#">
+            加载完整源场景
+          </a>
           <button id="reset-view" class="hud-button is-primary" type="button">
             回到 MindAR 视角（H）
           </button>
@@ -39,7 +48,7 @@
         <i class="corner corner-tr"></i>
         <i class="corner corner-bl"></i>
         <i class="corner corner-br"></i>
-        <span>AR 实际视角 · 20 × 26 cm</span>
+        <span>蓝框内容 · 远端窗眼 20 × 26 cm</span>
       </div>
       <div class="screen-reticle" aria-hidden="true"></div>
       <button id="scene-compass" class="scene-compass" type="button" hidden>
@@ -146,7 +155,7 @@
       </aside>
 
       <div class="bottom-hint">
-        无碰撞、无位置边界；中心框内是纹样识别后 AR 洞口的目标构图
+        中央框内容会映射到 AR 蓝色远端窗眼；红框到蓝框之间保持真实相机画面
       </div>
     </main>
 

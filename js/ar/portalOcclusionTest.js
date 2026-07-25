@@ -1,9 +1,11 @@
+import {
+  PORTAL_OPENING_HEIGHT as OPENING_HEIGHT,
+  PORTAL_OPENING_WIDTH as OPENING_WIDTH,
+  PORTAL_WALL_DEPTH as WALL_DEPTH,
+} from "./portalSceneConfig.js";
+
 const COMPONENT_NAME = "portal-occlusion-test";
 
-const TARGET_WIDTH_MM = 260;
-const OPENING_WIDTH = 200 / TARGET_WIDTH_MM;
-const OPENING_HEIGHT = 260 / TARGET_WIDTH_MM;
-const WALL_DEPTH = 400 / TARGET_WIDTH_MM;
 const WALL_COVERAGE = 1.5;
 const DEFAULT_MODEL_URL = "/models/changgate-courtyard-portal.ply";
 const MODEL_WIDTH_FACTOR = 3.1;
