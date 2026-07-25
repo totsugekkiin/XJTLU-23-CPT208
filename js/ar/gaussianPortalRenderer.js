@@ -7,8 +7,10 @@ import {
   PORTAL_CROP_BOX,
   PORTAL_OPENING_HEIGHT,
   PORTAL_OPENING_WIDTH,
+  PORTAL_REFERENCE_VIEW_DISTANCE,
   PORTAL_RUNTIME_SCENE,
   PORTAL_WALL_DEPTH,
+  PORTAL_WORLD_SCALE,
   portalCropBounds,
   portalFrameFov,
 } from "./portalSceneConfig.js";
@@ -20,6 +22,12 @@ const TEXTURE_HEIGHT = 960;
 const TEXTURE_WIDTH = Math.round(
   TEXTURE_HEIGHT * (PORTAL_OPENING_WIDTH / PORTAL_OPENING_HEIGHT),
 );
+const CAMERA_NEAR = 0.02;
+const CAMERA_FAR = 1000;
+const MOBILE_RENDER_INTERVAL = 1000 / 30;
+const DESKTOP_RENDER_INTERVAL = 1000 / 45;
+const EYE_MOVEMENT_EPSILON = 0.003;
+const PROJECTED_POINT_EPSILON = 0.15;
 
 function applyEditorCameraPose(entity, view) {
   const cameraBaseRotation = new pc.Quat()
@@ -105,12 +113,22 @@ class GaussianPortalRenderer {
     anchorObject = null,
     crop = PORTAL_CROP_BOX,
     portalFov = portalFrameFov(view.fov),
+    modelScale = PORTAL_WORLD_SCALE,
+    viewDistance = PORTAL_REFERENCE_VIEW_DISTANCE,
   }) {
     this.scene = scene;
     this.target = target;
     this.anchorObject = anchorObject || target.object3D;
     this.THREE = window.AFRAME.THREE;
     this.cropBounds = portalCropBounds(crop);
+    this.modelScale =
+      Number.isFinite(modelScale) && modelScale > 0
+        ? modelScale
+        : PORTAL_WORLD_SCALE;
+    this.viewDistance =
+      Number.isFinite(viewDistance) && viewDistance > 0
+        ? viewDistance
+        : PORTAL_REFERENCE_VIEW_DISTANCE;
     this.tracking = false;
     this.loaded = false;
     this.occlusion = true;
@@ -119,9 +137,35 @@ class GaussianPortalRenderer {
     this.lastTransform = "";
     this.renderRequested = true;
     this.forceNextRender = true;
+    this.poseRenderRequested = true;
+    this.lastRenderAt = 0;
+    this.renderInterval =
+      navigator.maxTouchPoints > 0
+        ? MOBILE_RENDER_INTERVAL
+        : DESKTOP_RENDER_INTERVAL;
+    this.viewportBounds = null;
+    this.frustumValid = true;
+    this.hasRenderedEye = false;
+    this.hasReferenceEye = false;
 
     this.worldPoint = new this.THREE.Vector3();
     this.cameraPoint = new this.THREE.Vector3();
+    this.relativeCameraMatrix = new this.THREE.Matrix4();
+    this.runtimeEye = new this.THREE.Vector3();
+    this.lastRenderedEye = new this.THREE.Vector3();
+    this.referenceEye = new this.THREE.Vector3(
+      0,
+      0,
+      this.viewDistance,
+    );
+    this.projectedCorners = Array.from({ length: 4 }, () => ({
+      x: 0,
+      y: 0,
+    }));
+    this.lastProjectedCorners = Array.from({ length: 4 }, () => ({
+      x: Number.NaN,
+      y: Number.NaN,
+    }));
     this.clipCorners = [
       new this.THREE.Vector3(
         -PORTAL_OPENING_WIDTH / 2,
@@ -175,10 +219,38 @@ class GaussianPortalRenderer {
     this.cameraEntity.addComponent("camera", {
       clearColor: new pc.Color(0, 0, 0, 0),
       fov: portalFov,
-      nearClip: 0.02,
-      farClip: 1000,
+      nearClip: CAMERA_NEAR,
+      farClip: CAMERA_FAR,
     });
     applyEditorCameraPose(this.cameraEntity, view);
+    this.baseCameraPosition = this.cameraEntity.getPosition().clone();
+    this.baseCameraRotation = this.cameraEntity.getRotation().clone();
+    this.virtualEyeLocal = new pc.Vec3();
+    this.virtualEyeWorld = new pc.Vec3();
+    this.virtualOpeningHeight =
+      PORTAL_OPENING_HEIGHT / this.modelScale;
+    this.virtualOpeningWidth =
+      PORTAL_OPENING_WIDTH / this.modelScale;
+    this.virtualPortalDistance =
+      this.virtualOpeningHeight /
+      (2 * Math.tan((portalFov * Math.PI) / 360));
+    this.frustum = {
+      left: -CAMERA_NEAR,
+      right: CAMERA_NEAR,
+      bottom: -CAMERA_NEAR,
+      top: CAMERA_NEAR,
+    };
+    this.cameraEntity.camera.calculateProjection = (matrix) => {
+      matrix.setFrustum(
+        this.frustum.left,
+        this.frustum.right,
+        this.frustum.bottom,
+        this.frustum.top,
+        CAMERA_NEAR,
+        CAMERA_FAR,
+      );
+    };
+    this.applyRuntimeEye(this.referenceEye);
     this.app.root.addChild(this.cameraEntity);
 
     this.scanRoot = new pc.Entity("scan-axis-correction");
@@ -216,11 +288,15 @@ class GaussianPortalRenderer {
       "orientationchange",
       this.handleViewportResize,
     );
+    window.visualViewport?.addEventListener(
+      "resize",
+      this.handleViewportResize,
+    );
     document.addEventListener(
       "visibilitychange",
       this.handleVisibilityChange,
     );
-    this.app.on("update", this.sync);
+    this.app.on("frameupdate", this.sync);
     this.app.start();
     this.loadScene();
   }
@@ -240,6 +316,88 @@ class GaussianPortalRenderer {
 
   handleViewportResize() {
     this.lastTransform = "";
+    this.viewportBounds = null;
+    for (const point of this.lastProjectedCorners) {
+      point.x = Number.NaN;
+      point.y = Number.NaN;
+    }
+    this.requestRender(true);
+  }
+
+  resolveViewportBounds() {
+    if (this.viewportBounds) return this.viewportBounds;
+    const bounds = this.scene.canvas?.getBoundingClientRect();
+    if (!bounds?.width || !bounds.height) return null;
+    this.viewportBounds = {
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    };
+    return this.viewportBounds;
+  }
+
+  sampleRuntimeEye(camera) {
+    this.relativeCameraMatrix
+      .copy(this.anchorObject.matrixWorld)
+      .invert()
+      .multiply(camera.matrixWorld);
+    this.runtimeEye.setFromMatrixPosition(this.relativeCameraMatrix);
+    if (
+      !Number.isFinite(this.runtimeEye.x) ||
+      !Number.isFinite(this.runtimeEye.y) ||
+      !Number.isFinite(this.runtimeEye.z)
+    ) {
+      return false;
+    }
+
+    if (!this.hasReferenceEye) {
+      this.referenceEye.copy(this.runtimeEye);
+      this.hasReferenceEye = true;
+      this.hasRenderedEye = false;
+      this.poseRenderRequested = true;
+    }
+
+    if (
+      !this.hasRenderedEye ||
+      this.runtimeEye.distanceToSquared(this.lastRenderedEye) >=
+        EYE_MOVEMENT_EPSILON * EYE_MOVEMENT_EPSILON
+    ) {
+      this.poseRenderRequested = true;
+    }
+    return true;
+  }
+
+  applyRuntimeEye(eye) {
+    const deltaX = (eye.x - this.referenceEye.x) / this.modelScale;
+    const deltaY = (eye.y - this.referenceEye.y) / this.modelScale;
+    const deltaZ = (eye.z - this.referenceEye.z) / this.modelScale;
+    const distance = this.virtualPortalDistance + deltaZ;
+    if (!Number.isFinite(distance) || distance <= CAMERA_NEAR * 1.05) {
+      this.frustumValid = false;
+      return false;
+    }
+
+    this.virtualEyeLocal.set(deltaX, deltaY, deltaZ);
+    this.baseCameraRotation.transformVector(
+      this.virtualEyeLocal,
+      this.virtualEyeWorld,
+    );
+    this.virtualEyeWorld.add(this.baseCameraPosition);
+    this.cameraEntity.setPosition(this.virtualEyeWorld);
+    this.cameraEntity.setRotation(this.baseCameraRotation);
+
+    const nearOverDistance = CAMERA_NEAR / distance;
+    this.frustum.left =
+      (-this.virtualOpeningWidth / 2 - deltaX) * nearOverDistance;
+    this.frustum.right =
+      (this.virtualOpeningWidth / 2 - deltaX) * nearOverDistance;
+    this.frustum.bottom =
+      (-this.virtualOpeningHeight / 2 - deltaY) * nearOverDistance;
+    this.frustum.top =
+      (this.virtualOpeningHeight / 2 - deltaY) * nearOverDistance;
+    this.frustumValid = true;
+    return true;
   }
 
   setTracking(tracking) {
@@ -250,17 +408,25 @@ class GaussianPortalRenderer {
       "is-visible",
       this.loaded && this.tracking,
     );
-    if (this.tracking) this.requestRender(true);
+    if (this.tracking) {
+      this.poseRenderRequested = true;
+      this.requestRender(true);
+    } else {
+      this.app.renderNextFrame = true;
+    }
   }
 
   setOcclusion(enabled) {
     this.occlusion = enabled;
     this.lastTransform = "";
+    this.requestRender(true);
   }
 
   setDirection(direction) {
     this.direction = direction < 0 ? -1 : 1;
     this.lastTransform = "";
+    this.poseRenderRequested = true;
+    this.requestRender(true);
   }
 
   setProjected(projected) {
@@ -288,15 +454,16 @@ class GaussianPortalRenderer {
       return;
     }
 
-    const sourceBounds = this.scene.canvas?.getBoundingClientRect();
+    const sourceBounds = this.resolveViewportBounds();
     if (!sourceBounds?.width || !sourceBounds.height) {
       this.setProjected(false);
       return;
     }
 
     const farPlaneZ = this.direction * PORTAL_WALL_DEPTH;
-    const projected = [];
-    for (const corner of this.clipCorners) {
+    let projectionChanged = !this.lastTransform;
+    for (let index = 0; index < this.clipCorners.length; index += 1) {
+      const corner = this.clipCorners[index];
       this.worldPoint
         .set(corner.x, corner.y, farPlaneZ)
         .applyMatrix4(this.anchorObject.matrixWorld);
@@ -319,24 +486,43 @@ class GaussianPortalRenderer {
         this.setProjected(false);
         return;
       }
-      projected.push({
-        x:
-          sourceBounds.left +
-          ((this.worldPoint.x + 1) * sourceBounds.width) / 2,
-        y:
-          sourceBounds.top +
-          ((1 - this.worldPoint.y) * sourceBounds.height) / 2,
-      });
+      const projected = this.projectedCorners[index];
+      projected.x =
+        sourceBounds.left +
+        ((this.worldPoint.x + 1) * sourceBounds.width) / 2;
+      projected.y =
+        sourceBounds.top +
+        ((1 - this.worldPoint.y) * sourceBounds.height) / 2;
+      const previous = this.lastProjectedCorners[index];
+      if (
+        Math.abs(projected.x - previous.x) >=
+          PROJECTED_POINT_EPSILON ||
+        Math.abs(projected.y - previous.y) >= PROJECTED_POINT_EPSILON
+      ) {
+        projectionChanged = true;
+      }
     }
 
+    if (!this.frustumValid) {
+      this.setProjected(false);
+      return;
+    }
+    if (!projectionChanged) {
+      this.setProjected(true);
+      return;
+    }
     const transform = quadTransform(
-      projected,
+      this.projectedCorners,
       TEXTURE_WIDTH,
       TEXTURE_HEIGHT,
     );
     if (!transform) {
       this.setProjected(false);
       return;
+    }
+    for (let index = 0; index < this.projectedCorners.length; index += 1) {
+      this.lastProjectedCorners[index].x = this.projectedCorners[index].x;
+      this.lastProjectedCorners[index].y = this.projectedCorners[index].y;
     }
     this.setTransform(transform);
     this.setProjected(true);
@@ -345,23 +531,40 @@ class GaussianPortalRenderer {
   sync() {
     if (this.destroyed) return;
 
+    let hasRuntimeEye = false;
     if (this.tracking && this.anchorObject) {
       const camera = this.resolveThreeCamera();
       if (camera) {
         camera.updateMatrixWorld(true);
         this.anchorObject.updateWorldMatrix(true, false);
+        hasRuntimeEye = this.sampleRuntimeEye(camera);
         this.updatePortalTransform(camera);
       }
     }
 
+    const renderPending =
+      this.forceNextRender ||
+      this.renderRequested ||
+      this.poseRenderRequested;
+    const now = performance.now();
+    const withinFrameBudget =
+      !this.forceNextRender &&
+      now - this.lastRenderAt < this.renderInterval;
     if (
       this.loaded &&
       this.splatEntity.enabled &&
-      (this.forceNextRender || this.renderRequested)
+      hasRuntimeEye &&
+      renderPending &&
+      !withinFrameBudget &&
+      this.applyRuntimeEye(this.runtimeEye)
     ) {
       this.app.renderNextFrame = true;
+      this.lastRenderAt = now;
+      this.lastRenderedEye.copy(this.runtimeEye);
+      this.hasRenderedEye = true;
       this.renderRequested = false;
       this.forceNextRender = false;
+      this.poseRenderRequested = false;
     }
   }
 
@@ -404,7 +607,11 @@ class GaussianPortalRenderer {
   handleVisibilityChange() {
     this.splatEntity.enabled =
       this.loaded && this.tracking && !document.hidden;
-    if (!document.hidden) this.requestRender(true);
+    if (!document.hidden) {
+      this.requestRender(true);
+    } else {
+      this.app.renderNextFrame = true;
+    }
   }
 
   destroy() {
@@ -415,11 +622,15 @@ class GaussianPortalRenderer {
       "orientationchange",
       this.handleViewportResize,
     );
+    window.visualViewport?.removeEventListener(
+      "resize",
+      this.handleViewportResize,
+    );
     document.removeEventListener(
       "visibilitychange",
       this.handleVisibilityChange,
     );
-    this.app.off("update", this.sync);
+    this.app.off("frameupdate", this.sync);
     this.app.systems.gsplat.off(
       "material:created",
       this.handleCropMaterialCreated,

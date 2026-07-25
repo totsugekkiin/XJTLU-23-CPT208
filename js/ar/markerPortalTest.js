@@ -33,6 +33,7 @@ let arSystem = null;
 let starting = false;
 let gaussianPortal = null;
 let gaussianPortalPromise = null;
+let debugAnchorObject = null;
 let targetTracking = false;
 let pageDestroyed = false;
 
@@ -167,7 +168,7 @@ target?.addEventListener("gaussian-portal-loaded", (event) => {
       event.detail?.gaussians ?? 0,
     ).toLocaleString("zh-CN");
     statusDetail.textContent =
-      `已加载 ${gaussians} 个高斯点，调试器选定构图已贴合蓝框`;
+      `已加载 ${gaussians} 个高斯点；移动手机可看到蓝框内实时透视`;
   }
   if (debugPortal && target?.object3D) {
     cameraGate?.classList.add("is-hidden");
@@ -185,6 +186,23 @@ target?.addEventListener("gaussian-portal-loaded", (event) => {
       debugCamera.updateProjectionMatrix();
     }
     gaussianPortal?.setTracking(true);
+    if (
+      debugAnchorObject &&
+      ["debugMoveX", "debugMoveY", "debugMoveZ"].some((name) =>
+        query.has(name),
+      )
+    ) {
+      window.setTimeout(() => {
+        debugAnchorObject?.position.add(
+          new window.AFRAME.THREE.Vector3(
+            finiteQueryNumber("debugMoveX"),
+            finiteQueryNumber("debugMoveY"),
+            finiteQueryNumber("debugMoveZ"),
+          ),
+        );
+        debugAnchorObject?.updateMatrixWorld(true);
+      }, 250);
+    }
   }
 });
 
@@ -313,13 +331,17 @@ async function initializeGaussianPortal() {
         "viewDistance",
         REFERENCE_VIEW_DISTANCE,
       );
+      const debugDistance = finiteQueryNumber(
+        "debugDistance",
+        viewDistance,
+      );
       const debugAnchor = debugPortal
         ? new window.AFRAME.THREE.Object3D()
         : null;
       debugAnchor?.position.set(
         finiteQueryNumber("debugX"),
         finiteQueryNumber("debugY"),
-        -viewDistance,
+        -debugDistance,
       );
       debugAnchor?.rotation.set(
         window.AFRAME.THREE.MathUtils.degToRad(
@@ -333,6 +355,7 @@ async function initializeGaussianPortal() {
         ),
       );
       debugAnchor?.updateMatrixWorld(true);
+      debugAnchorObject = debugAnchor;
       gaussianPortal = createGaussianPortalRenderer({
         scene,
         target,
@@ -392,6 +415,7 @@ window.addEventListener("load", () => {
 
 window.addEventListener("beforeunload", () => {
   pageDestroyed = true;
+  debugAnchorObject = null;
   gaussianPortal?.destroy();
   gaussianPortal = null;
 });
