@@ -1,4 +1,5 @@
 import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
+import { createGaussianPortalRenderer } from "./gaussianPortalRenderer.js";
 
 registerPortalOcclusionTest();
 
@@ -22,14 +23,18 @@ const PORTAL_VIEW_PRESET = Object.freeze({
   roll: -7.6,
   fov: 75,
 });
+const PORTAL_WORLD_SCALE = 1000 / 260;
+const REFERENCE_VIEW_DISTANCE = 600 / 260;
 
 let depthDirection = -1;
 let occlusionEnabled = true;
 let foundAt = 0;
 let arSystem = null;
 let starting = false;
+let gaussianPortal = null;
 
 const query = new URLSearchParams(window.location.search);
+const debugPortal = query.get("debugPortal") === "1";
 
 function finiteQueryNumber(name, fallback = 0) {
   const rawValue = query.get(name);
@@ -37,6 +42,16 @@ function finiteQueryNumber(name, fallback = 0) {
   const parsed = Number(rawValue);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+const portalView = {
+  x: finiteQueryNumber("x", PORTAL_VIEW_PRESET.x),
+  y: finiteQueryNumber("y", PORTAL_VIEW_PRESET.y),
+  z: finiteQueryNumber("z", PORTAL_VIEW_PRESET.z),
+  yaw: finiteQueryNumber("yaw", PORTAL_VIEW_PRESET.yaw),
+  pitch: finiteQueryNumber("pitch", PORTAL_VIEW_PRESET.pitch),
+  roll: finiteQueryNumber("roll", PORTAL_VIEW_PRESET.roll),
+  fov: finiteQueryNumber("fov", PORTAL_VIEW_PRESET.fov),
+};
 
 function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
@@ -52,15 +67,16 @@ target?.setAttribute("portal-occlusion-test", {
   direction: depthDirection,
   occlusion: occlusionEnabled,
   farFrame: true,
+  loadModel: false,
   useViewPose: true,
-  viewX: finiteQueryNumber("x", PORTAL_VIEW_PRESET.x),
-  viewY: finiteQueryNumber("y", PORTAL_VIEW_PRESET.y),
-  viewZ: finiteQueryNumber("z", PORTAL_VIEW_PRESET.z),
-  viewYaw: finiteQueryNumber("yaw", PORTAL_VIEW_PRESET.yaw),
-  viewPitch: finiteQueryNumber("pitch", PORTAL_VIEW_PRESET.pitch),
-  viewRoll: finiteQueryNumber("roll", PORTAL_VIEW_PRESET.roll),
-  viewFov: finiteQueryNumber("fov", PORTAL_VIEW_PRESET.fov),
-  modelScale: finiteQueryNumber("modelScale"),
+  viewX: portalView.x,
+  viewY: portalView.y,
+  viewZ: portalView.z,
+  viewYaw: portalView.yaw,
+  viewPitch: portalView.pitch,
+  viewRoll: portalView.roll,
+  viewFov: portalView.fov,
+  modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
   modelYaw: finiteQueryNumber("modelYaw"),
   modelPitch: finiteQueryNumber("modelPitch"),
   modelRoll: finiteQueryNumber("modelRoll"),
@@ -78,6 +94,49 @@ target?.addEventListener("portal-model-transform", (event) => {
   target.dataset.portalRotation = JSON.stringify(
     detail.resolvedQuaternion ?? null,
   );
+});
+
+target?.addEventListener("gaussian-portal-loading", () => {
+  if (statusText) statusText.textContent = "正在加载完整高斯场景…";
+  if (statusDetail) {
+    statusDetail.textContent = "首次打开需要下载约 11 MB 场景";
+  }
+});
+
+target?.addEventListener("gaussian-portal-loaded", (event) => {
+  if (statusText) statusText.textContent = "完整高斯场景已就绪";
+  if (statusDetail) {
+    const gaussians = Number(
+      event.detail?.gaussians ?? 0,
+    ).toLocaleString("zh-CN");
+    statusDetail.textContent =
+      `已加载 ${gaussians} 个高斯点，移动手机即可观察空间视差`;
+  }
+  if (debugPortal && target?.object3D) {
+    cameraGate?.classList.add("is-hidden");
+    const debugCamera =
+      scene?.camera ||
+      scene?.querySelector("[camera]")?.getObject3D("camera");
+    if (debugCamera?.isPerspectiveCamera) {
+      debugCamera.aspect = window.innerWidth / window.innerHeight;
+      debugCamera.fov = finiteQueryNumber(
+        "debugCameraFov",
+        portalView.fov,
+      );
+      debugCamera.near = 0.01;
+      debugCamera.far = 1000;
+      debugCamera.updateProjectionMatrix();
+    }
+    gaussianPortal?.setTracking(true);
+  }
+});
+
+target?.addEventListener("gaussian-portal-error", () => {
+  target?.setAttribute("portal-occlusion-test", "loadModel", true);
+  if (statusText) statusText.textContent = "高斯场景不可用，启用网格回退";
+  if (statusDetail) {
+    statusDetail.textContent = "正在加载兼容性模型，请稍候…";
+  }
 });
 
 target?.addEventListener("portal-model-loading", () => {
@@ -100,15 +159,18 @@ target?.addEventListener("portal-model-error", () => {
 
 target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
+  gaussianPortal?.setTracking(true);
   setTrackingState(true);
 });
 
 target?.addEventListener("targetLost", () => {
+  gaussianPortal?.setTracking(false);
   setTrackingState(false);
 });
 
 flipDepthButton?.addEventListener("click", () => {
   depthDirection *= -1;
+  gaussianPortal?.setDirection(depthDirection);
   target?.setAttribute("portal-occlusion-test", "direction", depthDirection);
   if (statusDetail) {
     statusDetail.textContent =
@@ -118,6 +180,7 @@ flipDepthButton?.addEventListener("click", () => {
 
 toggleOcclusionButton?.addEventListener("click", () => {
   occlusionEnabled = !occlusionEnabled;
+  gaussianPortal?.setOcclusion(occlusionEnabled);
   target?.setAttribute("portal-occlusion-test", "occlusion", occlusionEnabled);
   toggleOcclusionButton.textContent = `遮挡：${occlusionEnabled ? "开" : "关"}`;
   toggleOcclusionButton.setAttribute("aria-pressed", String(occlusionEnabled));
@@ -180,12 +243,42 @@ async function startCamera() {
 
 startCameraButton?.addEventListener("click", startCamera);
 
+function initializeGaussianPortal() {
+  if (gaussianPortal || !scene || !target) return;
+  const viewDistance = finiteQueryNumber(
+    "viewDistance",
+    REFERENCE_VIEW_DISTANCE,
+  );
+  const debugAnchor = debugPortal
+    ? new window.AFRAME.THREE.Object3D()
+    : null;
+  debugAnchor?.position.set(
+    finiteQueryNumber("debugX"),
+    finiteQueryNumber("debugY"),
+    -viewDistance,
+  );
+  debugAnchor?.updateMatrixWorld(true);
+  gaussianPortal = createGaussianPortalRenderer({
+    scene,
+    target,
+    view: portalView,
+    modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
+    viewDistance,
+    anchorObject: debugAnchor,
+  });
+  gaussianPortal.setOcclusion(occlusionEnabled);
+  gaussianPortal.setDirection(depthDirection);
+}
+
 scene?.addEventListener("loaded", () => {
   resolveArSystem();
   scene.renderer?.setClearColor(0x000000, 0);
+  initializeGaussianPortal();
   if (statusText) statusText.textContent = "等待你打开摄像头";
   if (statusDetail) statusDetail.textContent = "点击“允许并打开摄像头”开始测试";
 });
+
+if (scene?.hasLoaded) initializeGaussianPortal();
 
 scene?.addEventListener("arReady", () => {
   starting = false;
@@ -205,4 +298,9 @@ window.setInterval(() => {
 window.addEventListener("load", () => {
   if (statusText) statusText.textContent = "等待你打开摄像头";
   if (statusDetail) statusDetail.textContent = "点击屏幕中央按钮开始测试";
+});
+
+window.addEventListener("beforeunload", () => {
+  gaussianPortal?.destroy();
+  gaussianPortal = null;
 });

@@ -125,6 +125,7 @@ export function registerPortalOcclusionTest() {
       nearFrame: { type: "boolean", default: true },
       farFrame: { type: "boolean", default: false },
       modelUrl: { type: "asset", default: DEFAULT_MODEL_URL },
+      loadModel: { type: "boolean", default: true },
       useViewPose: { type: "boolean", default: false },
       viewX: { type: "number", default: 0 },
       viewY: { type: "number", default: 0 },
@@ -159,7 +160,13 @@ export function registerPortalOcclusionTest() {
 
     update(oldData) {
       if (!this.root) return;
-      const rebuildKeys = ["direction", "nearFrame", "farFrame", "modelUrl"];
+      const rebuildKeys = [
+        "direction",
+        "nearFrame",
+        "farFrame",
+        "modelUrl",
+        "loadModel",
+      ];
       const transformKeys = [
         "modelScale",
         "useViewPose",
@@ -217,7 +224,9 @@ export function registerPortalOcclusionTest() {
       this.addApertureMask(direction);
       this.addWallOccluders(direction);
       this.addCalibrationFrames(direction);
-      this.addModelWorld(direction, this.loadGeneration);
+      if (this.data.loadModel) {
+        this.addModelWorld(direction, this.loadGeneration);
+      }
       this.applyOcclusion();
     },
 
@@ -477,7 +486,14 @@ export function registerPortalOcclusionTest() {
           .applyQuaternion(inverseCameraRotation)
           .multiplyScalar(modelScale);
         this.modelPose.position.z -= VIEW_DEPTH_OFFSET;
-        this.modelPose.quaternion.copy(inverseCameraRotation);
+        this.modelPose.quaternion
+          .copy(inverseCameraRotation)
+          .multiply(
+            new THREE.Quaternion().setFromAxisAngle(
+              axisX,
+              radians(-90),
+            ),
+          );
 
         const manualRotation = new THREE.Quaternion().setFromEuler(
           new THREE.Euler(
