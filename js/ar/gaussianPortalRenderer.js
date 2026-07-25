@@ -1,10 +1,11 @@
 import * as pc from "playcanvas";
 
-const GAUSSIAN_URL = "/models/changgate-courtyard.sog";
-const GAUSSIAN_COUNT = 916617;
+const GAUSSIAN_URL = "/models/changgate-courtyard-cropped.sog";
+const GAUSSIAN_COUNT = 266512;
 const TARGET_WIDTH_MM = 260;
 const OPENING_WIDTH = 200 / TARGET_WIDTH_MM;
 const OPENING_HEIGHT = 260 / TARGET_WIDTH_MM;
+const FAR_FRAME_DEPTH = 400 / TARGET_WIDTH_MM;
 const REFERENCE_VIEW_DISTANCE = 600 / TARGET_WIDTH_MM;
 const EDITOR_HOME_PITCH = 35;
 const DEFAULT_MODEL_SCALE = 1000 / TARGET_WIDTH_MM;
@@ -102,6 +103,9 @@ class GaussianPortalRenderer {
     this.viewPositionEntity = new pc.Entity("selected-view-position");
     this.scanCorrectionEntity = new pc.Entity("scan-axis-correction");
     this.splatEntity = new pc.Entity("changgate-gaussian-scene");
+    // Loading may happen before MindAR has found the target. Keep the expensive
+    // splat draw disabled until the portal is actually visible.
+    this.splatEntity.enabled = false;
 
     this.app.root.addChild(this.anchorEntity);
     this.anchorEntity.addChild(this.directionEntity);
@@ -132,8 +136,14 @@ class GaussianPortalRenderer {
 
     this.resize = this.resize.bind(this);
     this.sync = this.sync.bind(this);
+    this.handleVisibilityChange =
+      this.handleVisibilityChange.bind(this);
     window.addEventListener("resize", this.resize);
     window.addEventListener("orientationchange", this.resize);
+    document.addEventListener(
+      "visibilitychange",
+      this.handleVisibilityChange,
+    );
     this.resize();
 
     this.app.on("update", this.sync);
@@ -174,6 +184,7 @@ class GaussianPortalRenderer {
 
   setTracking(tracking) {
     this.tracking = tracking;
+    this.updateRenderState();
     this.updateVisibility();
   }
 
@@ -192,6 +203,11 @@ class GaussianPortalRenderer {
       "is-visible",
       this.loaded && this.tracking,
     );
+  }
+
+  updateRenderState() {
+    this.splatEntity.enabled =
+      this.loaded && this.tracking && !document.hidden;
   }
 
   copyThreeTransform(source, destination) {
@@ -225,14 +241,14 @@ class GaussianPortalRenderer {
     }
 
     const corners = [
-      [-OPENING_WIDTH / 2, OPENING_HEIGHT / 2],
-      [OPENING_WIDTH / 2, OPENING_HEIGHT / 2],
-      [OPENING_WIDTH / 2, -OPENING_HEIGHT / 2],
-      [-OPENING_WIDTH / 2, -OPENING_HEIGHT / 2],
+      [-OPENING_WIDTH / 2, OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
+      [OPENING_WIDTH / 2, OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
+      [OPENING_WIDTH / 2, -OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
+      [-OPENING_WIDTH / 2, -OPENING_HEIGHT / 2, this.direction * FAR_FRAME_DEPTH],
     ];
-    const projected = corners.map(([x, y]) => {
+    const projected = corners.map(([x, y, z]) => {
       this.clipPoint
-        .set(x, y, 0)
+        .set(x, y, z)
         .applyMatrix4(this.anchorObject.matrixWorld)
         .project(camera);
       return `${((this.clipPoint.x + 1) * 50).toFixed(3)}% ${(
@@ -298,6 +314,7 @@ class GaussianPortalRenderer {
         unified: true,
       });
       this.loaded = true;
+      this.updateRenderState();
       this.updateVisibility();
       this.target.emit("gaussian-portal-loaded", {
         url: GAUSSIAN_URL,
@@ -315,11 +332,19 @@ class GaussianPortalRenderer {
     this.app.assets.load(asset);
   }
 
+  handleVisibilityChange() {
+    this.updateRenderState();
+  }
+
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
     window.removeEventListener("resize", this.resize);
     window.removeEventListener("orientationchange", this.resize);
+    document.removeEventListener(
+      "visibilitychange",
+      this.handleVisibilityChange,
+    );
     this.app.off("update", this.sync);
     this.app.destroy();
     this.canvas.remove();

@@ -99,7 +99,7 @@ target?.addEventListener("portal-model-transform", (event) => {
 target?.addEventListener("gaussian-portal-loading", () => {
   if (statusText) statusText.textContent = "正在加载完整高斯场景…";
   if (statusDetail) {
-    statusDetail.textContent = "首次打开需要下载约 11 MB 场景";
+    statusDetail.textContent = "首次打开需要下载约 3.2 MB 场景";
   }
 });
 
