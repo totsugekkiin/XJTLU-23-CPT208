@@ -1,7 +1,12 @@
 import * as pc from "playcanvas";
+import {
+  PORTAL_CROP_BOX,
+  PORTAL_SOURCE_SCENE,
+  PORTAL_VIEW_PRESET,
+} from "./portalSceneConfig.js";
 
-const GAUSSIAN_URL = "/models/changgate-courtyard.sog";
-const GAUSSIAN_COUNT = 916617;
+const GAUSSIAN_URL = PORTAL_SOURCE_SCENE.url;
+const GAUSSIAN_COUNT = PORTAL_SOURCE_SCENE.gaussians;
 const stage = document.querySelector("#preview-stage");
 const viewport = document.querySelector("#splat-viewport");
 const loadState = document.querySelector("#load-state");
@@ -43,12 +48,7 @@ const FULL_CROP = Object.freeze({
   sz: 43.02,
 });
 const RECOMMENDED_CROP = Object.freeze({
-  cx: 0,
-  cy: 0.5,
-  cz: 2,
-  sx: 24,
-  sy: 19,
-  sz: 16,
+  ...PORTAL_CROP_BOX,
 });
 const cropState = {
   ...RECOMMENDED_CROP,
@@ -56,19 +56,14 @@ const cropState = {
 };
 
 const defaults = {
-  x: 0,
-  y: 0,
-  z: 0,
-  yaw: 0,
-  pitch: 35,
-  roll: 0,
-  fov: 75,
+  ...PORTAL_VIEW_PRESET,
 };
+const EDITOR_HOME_PITCH = 35;
 const state = { ...defaults };
 const pressedKeys = new Set();
 const movement = new pc.Vec3();
 const cameraBaseRotation = new pc.Quat()
-  .setFromEulerAngles(defaults.pitch, 0, 0)
+  .setFromEulerAngles(EDITOR_HOME_PITCH, 0, 0)
   .mul(new pc.Quat().setFromEulerAngles(0, 0, 180));
 const sceneUp = cameraBaseRotation
   .transformVector(new pc.Vec3(0, 1, 0), new pc.Vec3())
@@ -354,7 +349,7 @@ function applyCamera() {
   yawRotation.setFromAxisAngle(sceneUp, state.yaw);
   cameraRotation.mul2(yawRotation, cameraBaseRotation);
   cameraEntity.setRotation(cameraRotation);
-  cameraEntity.rotateLocal(state.pitch - defaults.pitch, 0, 0);
+  cameraEntity.rotateLocal(state.pitch - EDITOR_HOME_PITCH, 0, 0);
   cameraEntity.rotateLocal(0, 0, state.roll);
   cameraEntity.camera.fov = state.fov;
   renderHud();
