@@ -805,18 +805,28 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function requestOrientationPermission() {
-    if (
-      typeof DeviceOrientationEvent !== "undefined" &&
-      typeof DeviceOrientationEvent.requestPermission === "function"
-    ) {
-      const result = await DeviceOrientationEvent.requestPermission();
+    const orientationEvent = window.DeviceOrientationEvent;
+    const motionEvent = window.DeviceMotionEvent;
+    const permissionOwner =
+      typeof orientationEvent?.requestPermission === "function"
+        ? orientationEvent
+        : typeof motionEvent?.requestPermission === "function"
+          ? motionEvent
+          : null;
+
+    if (permissionOwner) {
+      // iOS requires this call to happen synchronously inside the click handler.
+      // startExperience deliberately starts this promise before its first await.
+      const result = await permissionOwner.requestPermission();
       if (result !== "granted") {
         throw new Error("需要允许动作与方向感应权限才能提交姿态数据。");
       }
     }
 
-    orientationHandler = onDeviceOrientation;
-    window.addEventListener("deviceorientation", orientationHandler, true);
+    if (!orientationHandler) {
+      orientationHandler = onDeviceOrientation;
+      window.addEventListener("deviceorientation", orientationHandler, true);
+    }
     setDebug({ status: "orientation ready" }, "设备方向监听已启用");
   }
 
@@ -1266,8 +1276,7 @@ export function bootstrapArScene(rootEl) {
       // resolve, but turn it into a runtime URL so Vite does not try to
       // transform a public asset during development.
       const sdkUrl = new URL("/vendor/immersal/immersal.js", window.location.origin).href;
-      const { Immersal, createOrientationSensor } = await import(/* @vite-ignore */ sdkUrl);
-      await createOrientationSensor?.();
+      const { Immersal } = await import(/* @vite-ignore */ sdkUrl);
       await waitForDeviceGyro();
       const cameraWrap = rootEl.querySelector("#ar-camera-wrap") ?? rootEl;
       session = await Immersal.Initialize(cameraWrap, {
@@ -1374,9 +1383,13 @@ export function bootstrapArScene(rootEl) {
       if (activeMapIds.length === 0) {
         throw new Error("未找到可用的地图配置，请检查 js/ar/arAnchors.js 或 URL 参数。");
       }
+
+      // This must be invoked before any await so Safari still sees the
+      // start-button click as the active gesture when it shows the prompt.
+      const orientationPermissionPromise = requestOrientationPermission();
+      await orientationPermissionPromise;
       await checkImmersalConfig();
       await checkWebXrSupport();
-      await requestOrientationPermission();
       updateZoomUi();
 
       overlay.classList.add("is-hidden");
