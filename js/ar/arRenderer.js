@@ -196,7 +196,15 @@ export function createArRenderer(cameraWrap, options = {}) {
   function setActiveMapId(mapId) {
     const nextMapId = Number(mapId);
     if (!Number.isFinite(nextMapId)) return;
+    const changed = activeMapId != null && activeMapId !== nextMapId;
     activeMapId = nextMapId;
+    if (changed) {
+      // A different Immersal map means a different coordinate system. The SDK
+      // tracker is reset at the same boundary, so do not interpolate from the
+      // previous map camera pose.
+      firstPoseApplied = false;
+      lastPoseUpdateTime = 0;
+    }
     if (hasPose && contentVisible) setModelsVisible(true);
   }
 

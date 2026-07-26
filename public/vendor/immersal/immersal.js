@@ -112,6 +112,12 @@ class Immersal extends EventTarget {
 
   #continuousLocalization = true;
   #focalLenConfidence = 0;
+  #activeMapHandle = -1;
+  #candidateMapHandle = -1;
+  #candidateMapConfirmations = 0;
+  #mapSwitchConfirmations = 3;
+  #lastHandledLocalizeTime = -1;
+  #lastLocalizeAccepted = false;
   #hasGyro = false;
   #angle = 0;
   #pos = new Float32Array(3);
@@ -240,7 +246,18 @@ class Immersal extends EventTarget {
 
   constructor(params) {
     super();
-    const {container, camera, deviceData, developerToken, mapIds, continuousLocalization, continuousInterval, solverType, imageDownScale} = params
+    const {
+      container,
+      camera,
+      deviceData,
+      developerToken,
+      mapIds,
+      continuousLocalization,
+      continuousInterval,
+      solverType,
+      imageDownScale,
+      mapSwitchConfirmations,
+    } = params
     
     this.#addEventListeners();
 
@@ -253,6 +270,7 @@ class Immersal extends EventTarget {
     this.continuousLocalization = continuousLocalization;
     this.continuousInterval = continuousInterval;
     this.imageDownScale = imageDownScale;
+    this.#mapSwitchConfirmations = Math.max(1, Math.floor(mapSwitchConfirmations ?? 3));
 
     this.#axisRot.rotateX(Math.PI);
   
@@ -316,6 +334,11 @@ class Immersal extends EventTarget {
     if (typeof window.icvReset !== "undefined") {
       window.icvReset();
     }
+    this.#activeMapHandle = -1;
+    this.#candidateMapHandle = -1;
+    this.#candidateMapConfirmations = 0;
+    this.#lastHandledLocalizeTime = -1;
+    this.#lastLocalizeAccepted = false;
     console.log(`[IMMERSAL] Localization parameters reset`);
   }
 
@@ -566,12 +589,64 @@ class Immersal extends EventTarget {
     return this.mapDict[handle];
   }
 
+  isFocalLengthStable() {
+    return this.#focalLenConfidence === 1;
+  }
+
+  getMapTrackingState() {
+    return {
+      activeMapHandle: this.#activeMapHandle,
+      candidateMapHandle: this.#candidateMapHandle,
+      candidateMapConfirmations: this.#candidateMapConfirmations,
+      requiredMapConfirmations: this.#mapSwitchConfirmations,
+    };
+  }
+
+  #acceptMapHandle(handle) {
+    if (this.mapIds.length <= 1 || this.#activeMapHandle < 0) {
+      this.#activeMapHandle = handle;
+      this.#candidateMapHandle = -1;
+      this.#candidateMapConfirmations = 0;
+      return {accepted: true, switched: false};
+    }
+
+    if (handle === this.#activeMapHandle) {
+      this.#candidateMapHandle = -1;
+      this.#candidateMapConfirmations = 0;
+      return {accepted: true, switched: false};
+    }
+
+    if (handle !== this.#candidateMapHandle) {
+      this.#candidateMapHandle = handle;
+      this.#candidateMapConfirmations = 1;
+      return {accepted: false, switched: false};
+    }
+
+    this.#candidateMapConfirmations += 1;
+    if (this.#candidateMapConfirmations < this.#mapSwitchConfirmations) {
+      return {accepted: false, switched: false};
+    }
+
+    this.#activeMapHandle = handle;
+    this.#candidateMapHandle = -1;
+    this.#candidateMapConfirmations = 0;
+    return {accepted: true, switched: true};
+  }
+
   #handleLocalize(data) {
     const {r, pos, rot, time, focalLength, wgs84} = data;
 
+    // Async helpers and continuous localization can observe the same worker
+    // response. Process each result once so it cannot count twice toward a map
+    // switch.
+    if (time === this.#lastHandledLocalizeTime) {
+      this.localization.localizing = false;
+      return this.#lastLocalizeAccepted;
+    }
+    this.#lastHandledLocalizeTime = time;
+
     const now = performance.now();
   
-    this.localizeInfo.handle = r;
     this.localizeInfo.elapsedTime = now - time;
 
     const success = (r >= 0) ? true : false;
@@ -591,6 +666,21 @@ class Immersal extends EventTarget {
           this.#focalLenConfidence = 1;
         }
       }
+
+      const mapDecision = this.#acceptMapHandle(r);
+      if (!mapDecision.accepted) {
+        this.#lastLocalizeAccepted = false;
+        this.localization.localizing = false;
+        return false;
+      }
+
+      if (mapDecision.switched && typeof window.icvReset !== "undefined") {
+        // TrackerPlugin owns one pose filter with no map-id input. Reset it
+        // before accepting another map coordinate system.
+        window.icvReset();
+      }
+
+      this.localizeInfo.handle = r;
 
       this.#Q.set(rot[0], rot[1], rot[2], rot[3]);
       this.#Q.multiply(this.#axisRot);
@@ -616,9 +706,15 @@ class Immersal extends EventTarget {
       }
 
       this.localization.counter++;
+      this.#lastLocalizeAccepted = true;
+    } else {
+      this.#candidateMapHandle = -1;
+      this.#candidateMapConfirmations = 0;
+      this.#lastLocalizeAccepted = false;
     }
 
     this.localization.localizing = false;
+    return this.#lastLocalizeAccepted;
   }
 
   #handleLocWorkerEvent(e) {
@@ -721,12 +817,12 @@ class Immersal extends EventTarget {
           const {type, data} = e.data;
           
           if (type === "Localize") {
-            this.#handleLocalize(data);
+            const accepted = this.#handleLocalize(data);
 
-            if (this.localizeInfo.handle >= 0) {
+            if (accepted) {
               resolve(this.localizeInfo);
             } else {
-              reject("[IMMERSAL] Localization failed");
+              reject("[IMMERSAL] Localization failed or map switch is awaiting confirmation");
             }
           }
         }, {once: true});
@@ -820,9 +916,12 @@ class Immersal extends EventTarget {
                     focalLength: this.cameraData.intrinsics.fx
                   };
 
-                  this.#handleLocalize(locData);
-
-                  resolve(this.localizeInfo);
+                  const accepted = this.#handleLocalize(locData);
+                  if (accepted) {
+                    resolve(this.localizeInfo);
+                  } else {
+                    reject("[IMMERSAL] Map switch is awaiting confirmation");
+                  }
                 } else {
                   this.localization.localizing = false;
                   reject("[IMMERSAL] Localization failed");

@@ -12,6 +12,7 @@ const SDK_SERVER_ASSIST_INTERVAL_MS = 800;
 const SDK_DEVICE_WATCHDOG_MS = 8000;
 const SDK_DEBUG_INTERVAL_MS = 250;
 const STABLE_LOCALIZATION_COUNT = 2;
+const MAP_SWITCH_CONFIRMATIONS = 3;
 const LOCALIZATION_GRACE_MS = 2200;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
@@ -168,6 +169,26 @@ export function bootstrapArScene(rootEl) {
   };
 
   const mapSelect = rootEl.querySelector("#ar-map-select");
+  let mapSelectChangeHandler = null;
+  if (mapSelect) {
+    if (params.has("map")) {
+      mapSelect.value = params.get("map");
+    } else {
+      mapSelect.value = "all";
+    }
+
+    mapSelectChangeHandler = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("maps");
+      if (mapSelect.value === "all") {
+        url.searchParams.delete("map");
+      } else {
+        url.searchParams.set("map", mapSelect.value);
+      }
+      window.location.assign(url.toString());
+    };
+    mapSelect.addEventListener("change", mapSelectChangeHandler);
+  }
   const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
   const requestedProfiles = getMapProfilesForIds(requestedMapIds);
   const mapProfiles = debugMode
@@ -206,13 +227,16 @@ export function bootstrapArScene(rootEl) {
   let arRenderer = null;
   let arRendererInitPromise = null;
   let lastMapPose = null;
+  let lockedRendererVFov = null;
+  let restActiveMapId = activeMapIds.length === 1 ? activeMapIds[0] : null;
+  let restCandidateMapId = null;
+  let restCandidateMapConfirmations = 0;
   let lastSuccessfulLocalizeAt = 0;
   let stableLocalizationCount = 0;
   let stableLocalizationMapId = null;
   let contentRevealed = false;
   let restRenderFrameId = null;
   let agentLastRendererPoseLogAt = 0;
-  let agentLastRestSubstituteLogAt = 0;
   let lastLocalizationGyro = { x: 0, y: 0, z: 0, w: 1 };
 
   const debugState = {
@@ -242,6 +266,34 @@ export function bootstrapArScene(rootEl) {
     debugState.localizedMapId = id;
     debugState.mapId = activeMapIds.length > 1 ? `${activeMapLabel} → ${id}` : String(id);
     updateDebugPanel();
+  }
+
+  function acceptRestMapId(mapId) {
+    const id = Number(mapId);
+    if (!Number.isFinite(id) || !activeMapIds.includes(id)) return false;
+    if (activeMapIds.length <= 1 || restActiveMapId === id) {
+      restActiveMapId = id;
+      restCandidateMapId = null;
+      restCandidateMapConfirmations = 0;
+      return true;
+    }
+
+    if (restCandidateMapId !== id) {
+      restCandidateMapId = id;
+      restCandidateMapConfirmations = 1;
+      return false;
+    }
+
+    restCandidateMapConfirmations += 1;
+    const required = restActiveMapId == null
+      ? STABLE_LOCALIZATION_COUNT
+      : MAP_SWITCH_CONFIRMATIONS;
+    if (restCandidateMapConfirmations < required) return false;
+
+    restActiveMapId = id;
+    restCandidateMapId = null;
+    restCandidateMapConfirmations = 0;
+    return true;
   }
 
   function captureLocalizationGyro() {
@@ -305,14 +357,24 @@ export function bootstrapArScene(rootEl) {
       return { x: g.x, y: g.y, z: g.z, w: g.w };
     }
     if (!hasGyro) return null;
-    const camRot = multiplyQuat(deviceQuaternion, AXIS_ROT);
-    return { x: camRot.x, y: camRot.y, z: camRot.z, w: camRot.w };
+    return { ...deviceQuaternion };
   }
 
   function getRendererVFov() {
     if (sdkSession && typeof sdkSession.getVFov === "function") {
       try {
-        return sdkSession.getVFov();
+        if (lockedRendererVFov != null) return lockedRendererVFov;
+        if (
+          typeof sdkSession.isFocalLengthStable === "function" &&
+          !sdkSession.isFocalLengthStable()
+        ) {
+          return null;
+        }
+        const vFov = sdkSession.getVFov();
+        if (Number.isFinite(vFov) && vFov > 10 && vFov < 120) {
+          lockedRendererVFov = vFov;
+        }
+        return lockedRendererVFov;
       } catch {
         return null;
       }
@@ -327,6 +389,8 @@ export function bootstrapArScene(rootEl) {
       height: sdkSession.cameraData?.height ?? null,
       intrinsics: sdkSession.cameraData?.intrinsics ? { ...sdkSession.cameraData.intrinsics } : null,
       vFov: getRendererVFov(),
+      focalLengthStable: sdkSession.isFocalLengthStable?.() ?? null,
+      mapTracking: sdkSession.getMapTrackingState?.() ?? null,
     };
   }
 
@@ -401,6 +465,8 @@ export function bootstrapArScene(rootEl) {
 
   function markLocalizationMiss() {
     stableLocalizationCount = 0;
+    restCandidateMapId = null;
+    restCandidateMapConfirmations = 0;
     if (!lastSuccessfulLocalizeAt || performance.now() - lastSuccessfulLocalizeAt <= LOCALIZATION_GRACE_MS) {
       return;
     }
@@ -414,23 +480,9 @@ export function bootstrapArScene(rootEl) {
 
   function getRestModeRenderPose() {
     if (!lastMapPose) return null;
-    const cam = getCameraRotation();
-    const now = performance.now();
-    if (now - agentLastRestSubstituteLogAt > 1000) {
-      agentLastRestSubstituteLogAt = now;
-      // #region agent log
-      agentDebugLog("initial", "H1", "js/ar/arScene.js:getRestModeRenderPose", "REST render loop replaces localized rotation with device camera rotation", {
-        localizationMode,
-        hasGyro,
-        lastMapPose,
-        cameraRotation: cam,
-        deviceQuaternion,
-      });
-      // #endregion
-    }
     return {
       position: { ...lastMapPose.position },
-      rotation: { x: cam.qx, y: cam.qy, z: cam.qz, w: cam.qw },
+      rotation: { ...lastMapPose.rotation },
     };
   }
 
@@ -946,6 +998,25 @@ export function bootstrapArScene(rootEl) {
       if (result?.success) {
         debugState.success += 1;
         const rawPose = restResultToPose(result);
+        if (!acceptRestMapId(rawPose.map)) {
+          setGuide("confirming", "已找到相邻地图，正在确认", "请保持手机稳定片刻");
+          setDebug(
+            {
+              status: "confirming map switch",
+              immersal: "map candidate",
+              latency: `${data.elapsedMs ?? elapsed}ms`,
+              lastError: "none",
+              lastPose: rawPose,
+            },
+            "等待地图切换确认",
+            {
+              candidateMapId: restCandidateMapId,
+              confirmations: restCandidateMapConfirmations,
+              required: restActiveMapId == null ? STABLE_LOCALIZATION_COUNT : MAP_SWITCH_CONFIRMATIONS,
+            },
+          );
+          return;
+        }
         markLocalizationSuccess(rawPose.map);
         const pose = {
           ...rawPose,
@@ -953,7 +1024,7 @@ export function bootstrapArScene(rootEl) {
         };
         applyLocalizedMapId(rawPose.map);
         lastMapPose = poseForRenderer(pose);
-        updateArRendererPose(pose, { skipGyro: true });
+        updateArRendererPose(pose);
         logArRendererStatus();
         setDebug(
           {
@@ -1028,8 +1099,6 @@ export function bootstrapArScene(rootEl) {
   function updateSdkDebug(now) {
     if (!sdkSession || now - sdkLastDebugAt < SDK_DEBUG_INTERVAL_MS) return;
     sdkLastDebugAt = now;
-
-    trackSdkLocalizeAttempts();
 
     const counter = sdkSession.localization.counter;
     const trackedPose = getTrackedPoseSnapshot(now);
@@ -1126,6 +1195,7 @@ export function bootstrapArScene(rootEl) {
         const trackedPose = getTrackedPoseSnapshot(now);
         if (trackedPose) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
+          trackSdkLocalizeAttempts();
           updateArRendererPose(trackedPose);
         }
       } else if (lastMapPose) {
@@ -1143,7 +1213,7 @@ export function bootstrapArScene(rootEl) {
     const tick = () => {
       const pose = getRestModeRenderPose();
       if (pose) {
-        updateArRendererPose(pose, { keepLastMapPose: true, skipGyro: true });
+        updateArRendererPose(pose, { keepLastMapPose: true });
       }
       restRenderFrameId = requestAnimationFrame(tick);
     };
@@ -1174,6 +1244,7 @@ export function bootstrapArScene(rootEl) {
         continuousInterval: SDK_DEVICE_LOCALIZE_INTERVAL_MS,
         solverType: hasGyro ? 1 : 0,
         imageDownScale: 0.25,
+        mapSwitchConfirmations: MAP_SWITCH_CONFIRMATIONS,
       });
 
       sdkSession = session;
@@ -1181,7 +1252,10 @@ export function bootstrapArScene(rootEl) {
       localizationMode = "sdk";
       rootEl.classList.add("is-sdk-camera");
       arRenderer?.bringCanvasToFront();
-      sdkResizeHandler = () => arRenderer?.resize();
+      sdkResizeHandler = () => {
+        lockedRendererVFov = null;
+        arRenderer?.resize();
+      };
       session.addEventListener?.("resize", sdkResizeHandler);
       arRenderer?.resize();
 
@@ -1410,6 +1484,9 @@ export function bootstrapArScene(rootEl) {
     if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
     if (sdkResizeHandler) {
       sdkSession?.removeEventListener?.("resize", sdkResizeHandler);
+    }
+    if (mapSelect && mapSelectChangeHandler) {
+      mapSelect.removeEventListener("change", mapSelectChangeHandler);
     }
     arRenderer?.dispose();
     for (const handle of Object.values(sdkMapHandles)) {
