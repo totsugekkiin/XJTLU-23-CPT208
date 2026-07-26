@@ -24,6 +24,7 @@ const togglePerspectiveButton = document.querySelector("#toggle-perspective");
 const calibrateDistanceButton = document.querySelector("#calibrate-distance");
 const scene = document.querySelector("a-scene");
 const cameraGate = document.querySelector("#camera-gate");
+const markerScanGuide = document.querySelector("#marker-scan-guide");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
 
@@ -292,12 +293,14 @@ target?.addEventListener("portal-model-error", () => {
 target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
   targetTracking = true;
+  markerScanGuide?.classList.remove("is-active");
   gaussianPortal?.setTracking(true);
   setTrackingState(true);
 });
 
 target?.addEventListener("targetLost", () => {
   targetTracking = false;
+  markerScanGuide?.classList.add("is-active");
   gaussianPortal?.setTracking(false);
   setTrackingState(false);
   if (calibrateDistanceButton) calibrateDistanceButton.disabled = true;
@@ -483,8 +486,9 @@ if (scene?.hasLoaded && debugPortal) initializeGaussianPortal();
 scene?.addEventListener("arReady", () => {
   starting = false;
   cameraGate?.classList.add("is-hidden");
+  markerScanGuide?.classList.add("is-active");
   if (statusText) statusText.textContent = "摄像头已启动，等待纹样框";
-  if (statusDetail) statusDetail.textContent = "请将20×26 cm窗口周围的纹样完整放入画面";
+  if (statusDetail) statusDetail.textContent = "先后退，让完整外框接近黄色取景框大小";
   initializeGaussianPortal();
 });
 

@@ -10,7 +10,7 @@
     <title>阊门窗口标记追踪测试</title>
     <link rel="stylesheet" href="/css/marker-ar.css" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="/vendor/mindar/mindar-image-aframe-field.prod.js"></script>
+    <script src="/vendor/mindar/mindar-image-aframe-field.prod.js?v=20260726-2"></script>
   </head>
   <body>
     <div id="camera-gate" class="camera-gate">
@@ -19,6 +19,10 @@
         <p id="camera-gate-detail">点击后浏览器会申请使用后置摄像头。</p>
         <button id="start-camera" type="button">允许并打开摄像头</button>
       </div>
+    </div>
+
+    <div id="marker-scan-guide" class="marker-scan-guide" aria-hidden="true">
+      <span>后退一点，让纹样外框接近此大小</span>
     </div>
 
     <div class="marker-test-ui" aria-live="polite">

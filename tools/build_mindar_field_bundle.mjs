@@ -10,6 +10,8 @@ const OUTPUT_DIR = path.join(ROOT, "public", "vendor", "mindar");
 const OUTPUT_FILE = "mindar-image-aframe-field.prod.js";
 
 const patchCounts = {
+  camera: 0,
+  cropDetector: 0,
   detector: 0,
   matcher: 0,
   tracker: 0,
@@ -29,6 +31,24 @@ function fieldTuningPlugin() {
     enforce: "pre",
     transform(code, id) {
       const normalizedId = id.replaceAll("\\", "/").split("?")[0];
+      if (normalizedId.endsWith("/image-target/aframe.js")) {
+        patchCounts.camera += 1;
+        return replaceExactlyOnce(
+          code,
+          "      facingMode: 'environment',",
+          "      facingMode: {ideal: 'environment'},\n      width: {ideal: 1920},\n      height: {ideal: 1080},",
+          "rear-camera resolution constraints",
+        );
+      }
+      if (normalizedId.endsWith("/image-target/detector/crop-detector.js")) {
+        patchCounts.cropDetector += 1;
+        return replaceExactlyOnce(
+          code,
+          "    let minDimension = Math.min(width, height) / 2;\n    let cropSize = Math.pow( 2, Math.round( Math.log( minDimension ) / Math.log( 2 ) ) ); ",
+          "    const minDimension = Math.min(width, height);\n    // The upstream half-short-edge crop can collapse to only 256px on a 720p\n    // mobile stream. A larger, bounded crop makes close physical frames much\n    // easier to acquire without allowing detector cost to grow without limit.\n    const proportionalCrop = Math.floor(minDimension * 0.68 / 32) * 32;\n    const cropSize = Math.min(704, minDimension - 2, Math.max(320, proportionalCrop));",
+          "detector acquisition crop",
+        );
+      }
       if (normalizedId.endsWith("/image-target/detector/detector.js")) {
         patchCounts.detector += 1;
         return replaceExactlyOnce(
@@ -91,13 +111,19 @@ await build({
     rollupOptions: {
       output: {
         inlineDynamicImports: true,
-        banner: "/*! MindAR 1.2.5 (MIT) - field-tuned: 15 features/bucket, 4 inliers, 14px search, 0.72 tracking similarity */",
+        banner: "/*! MindAR 1.2.5 (MIT) - field-tuned: 1080p camera, 68%/704px acquisition crop, 15 features/bucket, 4 inliers, 14px search, 0.72 tracking similarity */",
       },
     },
   },
 });
 
-if (patchCounts.detector !== 1 || patchCounts.matcher !== 1 || patchCounts.tracker !== 1) {
+if (
+  patchCounts.camera !== 1 ||
+  patchCounts.cropDetector !== 1 ||
+  patchCounts.detector !== 1 ||
+  patchCounts.matcher !== 1 ||
+  patchCounts.tracker !== 1
+) {
   throw new Error(`MindAR tuning was not applied exactly once: ${JSON.stringify(patchCounts)}`);
 }
 
