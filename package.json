@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "compile:marker-roi": "node tools/compile_marker_roi.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +27,8 @@
   "devDependencies": {
     "@playcanvas/splat-transform": "^3.1.6",
     "@vitejs/plugin-react": "^4.3.4",
+    "mind-ar": "^1.2.5",
+    "pngjs": "^7.0.0",
     "vite": "^5.4.20"
   }
 }

@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "physicalDimensionsCm": {
+    "opening": [
+      20,
+      26
+    ],
+    "frameMax": 3,
+    "target": [
+      26,
+      32
+    ]
+  },
+  "compileSize": [
+    1300,
+    1600
+  ],
+  "opening": {
+    "left": 150,
+    "top": 150,
+    "right": 1150,
+    "bottom": 1450
+  },
+  "policy": "Only features whose complete sampling windows are inside the patterned frame are exported.",
+  "before": {
+    "matching": 1761,
+    "tracking": 51
+  },
+  "after": {
+    "matching": 747,
+    "tracking": 31
+  },
+  "runtimeTrackingPoints": 22,
+  "runtimeTrackingScale": 0.19692307692307692,
+  "trackingLayerOrder": "128px fallback, 256px runtime layer",
+  "violations": 0,
+  "matchingByScale": [
+    {
+      "scale": 1,
+      "maxima": 87,
+      "minima": 69
+    },
+    {
+      "scale": 0.7753360307045374,
+      "maxima": 62,
+      "minima": 66
+    },
+    {
+      "scale": 0.6153846153846154,
+      "maxima": 73,
+      "minima": 68
+    },
+    {
+      "scale": 0.4884310929132922,
+      "maxima": 67,
+      "minima": 49
+    },
+    {
+      "scale": 0.3876680153522687,
+      "maxima": 48,
+      "minima": 33
+    },
+    {
+      "scale": 0.3076923076923077,
+      "maxima": 37,
+      "minima": 30
+    },
+    {
+      "scale": 0.2442155464566461,
+      "maxima": 18,
+      "minima": 22
+    },
+    {
+      "scale": 0.19383400767613435,
+      "maxima": 7,
+      "minima": 11
+    },
+    {
+      "scale": 0.15384615384615385,
+      "maxima": 0,
+      "minima": 0
+    },
+    {
+      "scale": 0.12210777322832304,
+      "maxima": 0,
+      "minima": 0
+    },
+    {
+      "scale": 0.09691700383806717,
+      "maxima": 0,
+      "minima": 0
+    },
+    {
+      "scale": 0.07692307692307693,
+      "maxima": 0,
+      "minima": 0
+    }
+  ],
+  "trackingByScale": [
+    {
+      "scale": 0.09846153846153846,
+      "points": 9
+    },
+    {
+      "scale": 0.19692307692307692,
+      "points": 22
+    }
+  ]
+}
