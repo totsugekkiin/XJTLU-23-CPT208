@@ -12,6 +12,7 @@ const OUTPUT_FILE = "mindar-image-aframe-field.prod.js";
 const patchCounts = {
   detector: 0,
   matcher: 0,
+  tracker: 0,
 };
 
 function replaceExactlyOnce(code, search, replacement, label) {
@@ -46,6 +47,21 @@ function fieldTuningPlugin() {
           "matching inlier threshold",
         );
       }
+      if (normalizedId.endsWith("/image-target/tracker/tracker.js")) {
+        patchCounts.tracker += 1;
+        const widerSearch = replaceExactlyOnce(
+          code,
+          "const AR2_SEARCH_SIZE = 10;",
+          "const AR2_SEARCH_SIZE = 14;",
+          "tracking search radius",
+        );
+        return replaceExactlyOnce(
+          widerSearch,
+          "const AR2_SIM_THRESH = 0.8;",
+          "const AR2_SIM_THRESH = 0.72;",
+          "tracking similarity threshold",
+        );
+      }
       return null;
     },
   };
@@ -75,13 +91,13 @@ await build({
     rollupOptions: {
       output: {
         inlineDynamicImports: true,
-        banner: "/*! MindAR 1.2.5 (MIT) - field-tuned image detector: 15 features/bucket, 4 inliers */",
+        banner: "/*! MindAR 1.2.5 (MIT) - field-tuned: 15 features/bucket, 4 inliers, 14px search, 0.72 tracking similarity */",
       },
     },
   },
 });
 
-if (patchCounts.detector !== 1 || patchCounts.matcher !== 1) {
+if (patchCounts.detector !== 1 || patchCounts.matcher !== 1 || patchCounts.tracker !== 1) {
   throw new Error(`MindAR tuning was not applied exactly once: ${JSON.stringify(patchCounts)}`);
 }
 
