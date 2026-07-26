@@ -1,10 +1,13 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { agentDebugLog } from "./agentDebugLog.js";
+import { attachBambooNoticeText } from "./bambooNotice.js";
 import { createPortalTestScene } from "./portalTestScene.js";
 
 const POSE_LERP = 0.28;
 const POSE_LERP_DT_SCALE = 0.025;
+const REVEAL_DURATION_MS = 720;
+const REVEAL_START_SCALE = 0.72;
 
 function prepareModelMaterials(object) {
   object.traverse((node) => {
@@ -46,7 +49,7 @@ function createPortalAnchor(anchor, mapId) {
  * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
  */
 export function createArRenderer(cameraWrap, options = {}) {
-  const { getCameraViewport = null, mapProfiles = [] } = options;
+  const { getCameraViewport = null, mapProfiles = [], onAnchorTap = null } = options;
   const canvas = document.createElement("canvas");
   canvas.id = "ar-three-canvas";
   cameraWrap.appendChild(canvas);
@@ -73,6 +76,8 @@ export function createArRenderer(cameraWrap, options = {}) {
   const targetPos = new THREE.Vector3();
   const targetQuat = new THREE.Quaternion();
   const gyroQuat = new THREE.Quaternion();
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
 
   let modelsReady = false;
   let hasPose = false;
@@ -85,10 +90,18 @@ export function createArRenderer(cameraWrap, options = {}) {
   let lastPoseUpdateTime = 0;
   let activeMapId = mapProfiles.length === 1 ? mapProfiles[0].mapId : null;
   let anchorCount = 0;
+  let contentVisible = false;
+  let revealStartedAt = 0;
 
   const loadPromise = (async () => {
     const loader = new GLTFLoader();
+    const gltfCache = new Map();
     const loadTasks = [];
+
+    function loadGltf(url) {
+      if (!gltfCache.has(url)) gltfCache.set(url, loader.loadAsync(url));
+      return gltfCache.get(url);
+    }
 
     for (const profile of mapProfiles) {
       for (const anchor of profile.anchors) {
@@ -100,16 +113,24 @@ export function createArRenderer(cameraWrap, options = {}) {
           continue;
         }
         loadTasks.push(
-          loader.loadAsync(anchor.url).then((gltf) => {
+          loadGltf(anchor.url).then((gltf) => {
             const model = gltf.scene.clone(true);
             model.name = `anchor-${profile.mapId}-${anchor.id}`;
             model.userData.arMapId = profile.mapId;
+            if (anchor.type === "bamboo-notice") {
+              attachBambooNoticeText(model, {
+                ...(Array.isArray(anchor.columns) ? { columns: anchor.columns } : {}),
+                anisotropy: renderer.capabilities.getMaxAnisotropy(),
+              });
+            }
             const pos = anchor.position ?? [0, 0, 0];
             const rot = anchor.rotation ?? [0, 0, 0];
             const scl = anchor.scale ?? [1, 1, 1];
             model.position.set(pos[0], pos[1], pos[2]);
             model.rotation.set(rot[0], rot[1], rot[2]);
             model.scale.set(scl[0], scl[1], scl[2]);
+            model.userData.arAnchorId = anchor.id;
+            model.userData.arBaseScale = model.scale.clone();
             prepareModelMaterials(model);
             model.visible = false;
             scene.add(model);
@@ -176,7 +197,28 @@ export function createArRenderer(cameraWrap, options = {}) {
     const nextMapId = Number(mapId);
     if (!Number.isFinite(nextMapId)) return;
     activeMapId = nextMapId;
-    if (hasPose) setModelsVisible(true);
+    if (hasPose && contentVisible) setModelsVisible(true);
+  }
+
+  function setContentVisible(visible, options = {}) {
+    const nextVisible = Boolean(visible);
+    if (contentVisible === nextVisible && !options.restart) return;
+    contentVisible = nextVisible;
+    canvas.classList.toggle("is-interactive", contentVisible);
+
+    if (!contentVisible) {
+      setModelsVisible(false);
+      return;
+    }
+
+    const shouldAnimate = options.animate !== false;
+    revealStartedAt = shouldAnimate ? performance.now() : 0;
+    setModelsVisible(hasPose);
+    scene.children.forEach((child) => {
+      if (!child.userData?.arBaseScale) return;
+      child.scale.copy(child.userData.arBaseScale);
+      if (shouldAnimate) child.scale.multiplyScalar(REVEAL_START_SCALE);
+    });
   }
 
   function getViewportSize() {
@@ -217,7 +259,7 @@ export function createArRenderer(cameraWrap, options = {}) {
 
     resize();
     hasPose = true;
-    setModelsVisible(true);
+    if (contentVisible) setModelsVisible(true);
 
     const now = performance.now();
     const dt = lastPoseUpdateTime ? now - lastPoseUpdateTime : 16;
@@ -285,8 +327,40 @@ export function createArRenderer(cameraWrap, options = {}) {
 
   function renderFrame() {
     if (!hasPose || !modelsReady) return;
+    if (contentVisible && revealStartedAt) {
+      const progress = Math.min(1, (performance.now() - revealStartedAt) / REVEAL_DURATION_MS);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const scaleFactor = THREE.MathUtils.lerp(REVEAL_START_SCALE, 1, eased);
+      scene.children.forEach((child) => {
+        if (!child.visible || !child.userData?.arBaseScale) return;
+        child.scale.copy(child.userData.arBaseScale).multiplyScalar(scaleFactor);
+      });
+      if (progress >= 1) revealStartedAt = 0;
+    }
     renderer.render(scene, camera);
     renderCount += 1;
+  }
+
+  function handleCanvasTap(event) {
+    if (!contentVisible || !hasPose || typeof onAnchorTap !== "function") return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(scene.children, true);
+    for (const hit of hits) {
+      let anchorRoot = hit.object;
+      while (anchorRoot && anchorRoot.userData?.arMapId == null) anchorRoot = anchorRoot.parent;
+      if (!anchorRoot) continue;
+      onAnchorTap({
+        mapId: anchorRoot.userData.arMapId,
+        anchorId: anchorRoot.userData.arAnchorId ?? null,
+      });
+      return;
+    }
   }
 
   function getStatus() {
@@ -297,6 +371,7 @@ export function createArRenderer(cameraWrap, options = {}) {
       renderCount,
       anchorCount,
       activeMapId,
+      contentVisible,
     };
   }
 
@@ -305,6 +380,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(cameraWrap);
     resize();
+    canvas.addEventListener("pointerup", handleCanvasTap);
 
     const tick = () => {
       renderFrame();
@@ -316,6 +392,7 @@ export function createArRenderer(cameraWrap, options = {}) {
   function dispose() {
     cancelAnimationFrame(frameId);
     resizeObserver?.disconnect();
+    canvas.removeEventListener("pointerup", handleCanvasTap);
     scene.traverse((obj) => {
       if (obj.isMesh) {
         obj.geometry?.dispose();
@@ -334,6 +411,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     resize,
     updateCameraFromPose,
     setActiveMapId,
+    setContentVisible,
     renderFrame,
     getStatus,
     dispose,

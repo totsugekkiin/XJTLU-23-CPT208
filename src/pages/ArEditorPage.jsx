@@ -31,8 +31,8 @@ export function ArEditorPage() {
       <aside id="ar-editor-panel">
         <header className="ar-editor-panel__header">
           <span className="ar-editor-kicker">IMMERSAL MAP {initialMapId}</span>
-          <h1>悬眼遮罩校准台</h1>
-          <p>让青色遮罩与点云中的悬眼孔洞重合；调好后复制当前参数即可。</p>
+          <h1>AR 锚点摆放台</h1>
+          <p>在点云中确认竹简的位置、正面朝向和实际尺寸；黄色箭头表示竹简正面。</p>
         </header>
 
         <section className="ar-editor-section">
@@ -89,7 +89,7 @@ export function ArEditorPage() {
         </section>
 
         <section className="ar-editor-section">
-          <h2>遮罩锚点</h2>
+          <h2>当前 AR 内容</h2>
           <label className="ar-editor-field">
             当前锚点
             <select id="ar-editor-anchor-select" />
@@ -109,13 +109,17 @@ export function ArEditorPage() {
               缩放
             </button>
           </div>
+          <div id="ar-editor-model-tools" className="ar-editor-row">
+            <button id="ar-editor-focus-model" type="button">聚焦当前模型</button>
+            <button id="ar-editor-readable-size" type="button">竹简设为 70 cm 宽</button>
+          </div>
           <p className="ar-editor-hint">拖曳彩色 Gizmo 粗调，使用下方按钮精调。</p>
         </section>
 
         <section id="ar-editor-portal-section" className="ar-editor-section ar-editor-portal-section">
-          <h2>遮罩精调</h2>
+          <h2 id="ar-editor-fine-title">模型精调</h2>
           <div className="ar-editor-view-presets" aria-label="观察视角">
-            <button type="button" data-ar-view="entrance">入口正视</button>
+            <button type="button" data-ar-view="entrance">正面</button>
             <button type="button" data-ar-view="perspective">透视</button>
             <button type="button" data-ar-view="side">侧视</button>
             <button type="button" data-ar-view="top">俯视</button>
@@ -132,10 +136,10 @@ export function ArEditorPage() {
           <div className="ar-editor-nudge-list">
             {[
               ["px", "位置 X"], ["py", "位置 Y"], ["pz", "位置 Z"],
-              ["sx", "墙深 X"], ["sy", "洞高 Y"], ["sz", "洞宽 Z"],
+              ["sx", "缩放 X"], ["sy", "缩放 Y"], ["sz", "缩放 Z"],
             ].map(([field, label]) => (
               <div className="ar-editor-nudge" key={field}>
-                <span>{label}</span>
+                <span id={`ar-editor-nudge-${field}-label`}>{label}</span>
                 <button type="button" data-ar-nudge={field} data-ar-sign="-1" aria-label={`${label} 减少`}>−</button>
                 <output id={`ar-editor-${field}-readout`}>0.000</output>
                 <button type="button" data-ar-nudge={field} data-ar-sign="1" aria-label={`${label} 增加`}>＋</button>
@@ -152,20 +156,20 @@ export function ArEditorPage() {
               </div>
             ))}
           </div>
-          <div className="ar-editor-sliders">
+          <div className="ar-editor-sliders ar-portal-only">
             <label>
               遮罩透明度 <output id="ar-editor-portal-opacity-output">28%</output>
               <input id="ar-editor-portal-opacity" type="range" min="0.05" max="0.8" step="0.01" defaultValue="0.28" />
             </label>
           </div>
           <div className="ar-editor-row">
-            <button id="ar-editor-toggle-portal-test" type="button" className="ar-editor-primary">
+            <button id="ar-editor-toggle-portal-test" type="button" className="ar-editor-primary ar-portal-only">
               隐藏透视测试场景
             </button>
-            <button id="ar-editor-reset-anchor" type="button">恢复初始遮罩</button>
+            <button id="ar-editor-reset-anchor" type="button">恢复初始参数</button>
             <button id="ar-editor-copy-current" type="button" className="ar-editor-primary">复制当前参数</button>
           </div>
-          <p className="ar-editor-hint">
+          <p className="ar-editor-hint ar-portal-only">
             彩色物体位于墙后不同距离。保持“入口正视”后用 WASD 左右移动，观察近处物体比远处物体移动得更快。
           </p>
           <pre id="ar-editor-portal-summary" className="ar-editor-summary" />
