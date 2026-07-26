@@ -10,7 +10,7 @@
     <title>阊门窗口标记追踪测试</title>
     <link rel="stylesheet" href="/css/marker-ar.css" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="/vendor/mindar/mindar-image-aframe-field.prod.js"></script>
   </head>
   <body>
     <div id="camera-gate" class="camera-gate">
@@ -48,7 +48,7 @@
       embedded
       vr-mode-ui="enabled: false"
       renderer="alpha: true; antialias: true; colorManagement: true"
-      mindar-image="imageTargetSrc: /markers/changgate-window-frame-border-only.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 3; missTolerance: 8;"
+      mindar-image="imageTargetSrc: /markers/changgate-window-frame-border-only.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 1; missTolerance: 8;"
       color-space="sRGB"
       device-orientation-permission-ui="enabled: false"
     >
