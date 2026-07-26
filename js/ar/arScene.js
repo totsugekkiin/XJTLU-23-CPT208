@@ -11,6 +11,8 @@ const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
 const SDK_SERVER_ASSIST_INTERVAL_MS = 800;
 const SDK_DEVICE_WATCHDOG_MS = 8000;
 const SDK_DEBUG_INTERVAL_MS = 250;
+const STABLE_LOCALIZATION_COUNT = 2;
+const LOCALIZATION_GRACE_MS = 2200;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -127,6 +129,9 @@ function restResultToPose(result) {
 const AXIS_ROT = quatFromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI);
 
 export function bootstrapArScene(rootEl) {
+  const params = new URLSearchParams(window.location.search);
+  const debugMode = params.has("debug") || params.has("dev");
+  rootEl.classList.toggle("is-debug-mode", debugMode);
   const video = rootEl.querySelector("#ar-camera");
   const overlay = rootEl.querySelector("#ar-start-overlay");
   const startBtn = rootEl.querySelector("#ar-start-btn");
@@ -144,6 +149,12 @@ export function bootstrapArScene(rootEl) {
   const localizeNowBtn = rootEl.querySelector("#ar-localize-now");
   const copyDebugBtn = rootEl.querySelector("#ar-copy-debug");
   const debugLog = rootEl.querySelector("#ar-debug-log");
+  const guide = rootEl.querySelector("#ar-guide");
+  const guideTitle = rootEl.querySelector("#ar-guide-title");
+  const guideDetail = rootEl.querySelector("#ar-guide-detail");
+  const preloadStatus = rootEl.querySelector("#ar-preload-status");
+  const story = rootEl.querySelector("#ar-story");
+  const storyClose = rootEl.querySelector("#ar-story-close");
   const debugEls = {
     status: rootEl.querySelector("#ar-debug-status"),
     map: rootEl.querySelector("#ar-debug-map"),
@@ -158,7 +169,12 @@ export function bootstrapArScene(rootEl) {
 
   const mapSelect = rootEl.querySelector("#ar-map-select");
   const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
-  const mapProfiles = getMapProfilesForIds(requestedMapIds);
+  const requestedProfiles = getMapProfilesForIds(requestedMapIds);
+  const mapProfiles = debugMode
+    ? requestedProfiles
+    : requestedProfiles.filter((profile) =>
+        profile.anchors.some((anchor) => anchor.type === "bamboo-notice"),
+      );
   const activeMapIds = mapProfiles.map((profile) => profile.mapId);
   const activeMapLabel = formatMapIdList(activeMapIds);
   const totalAnchorCount = mapProfiles.reduce((sum, profile) => sum + profile.anchors.length, 0);
@@ -188,8 +204,12 @@ export function bootstrapArScene(rootEl) {
   let sdkWasLocalizing = false;
   let sdkLastDebugAt = 0;
   let arRenderer = null;
+  let arRendererInitPromise = null;
   let lastMapPose = null;
   let lastSuccessfulLocalizeAt = 0;
+  let stableLocalizationCount = 0;
+  let stableLocalizationMapId = null;
+  let contentRevealed = false;
   let restRenderFrameId = null;
   let agentLastRendererPoseLogAt = 0;
   let agentLastRestSubstituteLogAt = 0;
@@ -321,8 +341,75 @@ export function bootstrapArScene(rootEl) {
     return null;
   }
 
-  function markLocalizationSuccess() {
+  function setGuide(state, title, detail) {
+    if (!guide) return;
+    guide.dataset.state = state;
+    if (title) guideTitle.textContent = title;
+    if (detail) guideDetail.textContent = detail;
+  }
+
+  function openStory() {
+    if (!story || !contentRevealed) return;
+    story.classList.remove("is-hidden");
+    story.setAttribute("aria-hidden", "false");
+    setGuide("explore", "竹简已找到", "移动手机观察，或关闭介绍继续探索");
+  }
+
+  function closeStory() {
+    story?.classList.add("is-hidden");
+    story?.setAttribute("aria-hidden", "true");
+  }
+
+  function revealContent(mapId) {
+    if (mapId != null) applyLocalizedMapId(mapId);
+    if (!contentRevealed) {
+      contentRevealed = true;
+      arRenderer?.setContentVisible(true, { restart: true });
+      setGuide("recognized", "发现阊门竹简", "轻触竹简，阅读这座城门的故事");
+      try {
+        navigator.vibrate?.(35);
+      } catch {
+        // Vibration is optional and unsupported on some browsers.
+      }
+    }
+  }
+
+  function markLocalizationSuccess(mapId = localizedMapId) {
     lastSuccessfulLocalizeAt = performance.now();
+    const normalizedMapId = Number(mapId);
+    const hasMapId = Number.isFinite(normalizedMapId);
+    const nextMapId = hasMapId ? normalizedMapId : localizedMapId;
+
+    if (nextMapId != null && stableLocalizationMapId === nextMapId) {
+      stableLocalizationCount += 1;
+    } else {
+      stableLocalizationMapId = nextMapId;
+      stableLocalizationCount = 1;
+      if (contentRevealed) {
+        contentRevealed = false;
+        closeStory();
+        arRenderer?.setContentVisible(false);
+      }
+    }
+
+    if (stableLocalizationCount >= STABLE_LOCALIZATION_COUNT) {
+      revealContent(nextMapId);
+    } else {
+      setGuide("confirming", "已找到场景，正在确认", "请保持手机稳定片刻");
+    }
+  }
+
+  function markLocalizationMiss() {
+    stableLocalizationCount = 0;
+    if (!lastSuccessfulLocalizeAt || performance.now() - lastSuccessfulLocalizeAt <= LOCALIZATION_GRACE_MS) {
+      return;
+    }
+    if (contentRevealed) {
+      contentRevealed = false;
+      closeStory();
+      arRenderer?.setContentVisible(false);
+    }
+    setGuide("lost", "暂时失去场景", "重新对准建筑，并缓慢左右移动");
   }
 
   function getRestModeRenderPose() {
@@ -377,25 +464,33 @@ export function bootstrapArScene(rootEl) {
     arRenderer.updateCameraFromPose(pose, gyro, vFov);
   }
 
-  async function initArRenderer() {
-    const cameraWrap = rootEl.querySelector("#ar-camera-wrap");
-    if (!cameraWrap) return;
+  function initArRenderer() {
+    if (arRendererInitPromise) return arRendererInitPromise;
+    arRendererInitPromise = (async () => {
+      const cameraWrap = rootEl.querySelector("#ar-camera-wrap");
+      if (!cameraWrap) return;
 
-    const { createArRenderer } = await import("./arRenderer.js");
-    arRenderer = createArRenderer(cameraWrap, {
-      getCameraViewport: () => sdkSession?.camera?.el ?? null,
-      mapProfiles,
-    });
-    if (localizedMapId != null) {
-      arRenderer.setActiveMapId(localizedMapId);
-    }
-    arRenderer.start();
-    try {
-      await arRenderer.ready;
-      logDebug(`AR 模型已加载（${mapProfiles.length} 张地图，${totalAnchorCount} 个锚点）`);
-    } catch (err) {
-      logDebug("AR 模型加载失败", err?.message || String(err));
-    }
+      const { createArRenderer } = await import("./arRenderer.js");
+      arRenderer = createArRenderer(cameraWrap, {
+        getCameraViewport: () => sdkSession?.camera?.el ?? null,
+        mapProfiles,
+        onAnchorTap: openStory,
+      });
+      if (localizedMapId != null) arRenderer.setActiveMapId(localizedMapId);
+      arRenderer.start();
+      try {
+        await arRenderer.ready;
+        if (preloadStatus) {
+          preloadStatus.textContent = "竹简已准备好";
+          preloadStatus.dataset.state = "ready";
+        }
+        logDebug(`AR 模型已加载（${mapProfiles.length} 张地图，${totalAnchorCount} 个锚点）`);
+      } catch (err) {
+        if (preloadStatus) preloadStatus.textContent = "竹简将在识别后继续加载";
+        logDebug("AR 模型加载失败", err?.message || String(err));
+      }
+    })();
+    return arRendererInitPromise;
   }
 
   function logArRendererStatus() {
@@ -581,6 +676,8 @@ export function bootstrapArScene(rootEl) {
     errorMsg.textContent = message;
     startBtn.disabled = false;
     startBtn.textContent = "重试";
+    overlay.classList.remove("is-hidden");
+    guide?.classList.add("is-hidden");
     setDebug({ status: "error", lastError: message }, "启动失败", message);
   }
 
@@ -848,8 +945,8 @@ export function bootstrapArScene(rootEl) {
 
       if (result?.success) {
         debugState.success += 1;
-        markLocalizationSuccess();
         const rawPose = restResultToPose(result);
+        markLocalizationSuccess(rawPose.map);
         const pose = {
           ...rawPose,
           rotation: applyImmersalPoseCorrection(rawPose.rotation),
@@ -872,6 +969,7 @@ export function bootstrapArScene(rootEl) {
         );
       } else {
         debugState.failure += 1;
+        markLocalizationMiss();
         const failReason = result?.error && result.error !== "none"
           ? result.error
           : "场景未匹配（success=false）";
@@ -889,6 +987,7 @@ export function bootstrapArScene(rootEl) {
       }
     } catch (err) {
       debugState.failure += 1;
+      markLocalizationMiss();
       setDebug(
         {
           status: "localize exception",
@@ -913,13 +1012,14 @@ export function bootstrapArScene(rootEl) {
     if (sdkWasLocalizing && !isLocalizing) {
       if (counter > sdkLastLocalizeCounter) {
         sdkLastLocalizeCounter = counter;
-        markLocalizationSuccess();
+        markLocalizationSuccess(localizedMapId);
       } else {
         sdkFailureCount += 1;
+        markLocalizationMiss();
       }
     } else if (counter > sdkLastLocalizeCounter) {
       sdkLastLocalizeCounter = counter;
-      markLocalizationSuccess();
+      markLocalizationSuccess(localizedMapId);
     }
 
     sdkWasLocalizing = isLocalizing;
@@ -970,8 +1070,8 @@ export function bootstrapArScene(rootEl) {
 
     try {
       await sdkSession.localizeServerAsync();
-      markLocalizationSuccess();
       const tracked = getTrackedPoseSnapshot(performance.now());
+      markLocalizationSuccess(tracked?.mapId ?? localizedMapId);
       if (tracked) {
         if (tracked.mapId != null) applyLocalizedMapId(tracked.mapId);
         lastMapPose = tracked;
@@ -983,6 +1083,7 @@ export function bootstrapArScene(rootEl) {
       });
     } catch (err) {
       sdkFailureCount += 1;
+      markLocalizationMiss();
       logDebug("SDK server 辅助识别失败", err?.message || String(err));
     } finally {
       sdkServerAssistPending = false;
@@ -1154,7 +1255,11 @@ export function bootstrapArScene(rootEl) {
   async function startExperience() {
     errorMsg.textContent = "";
     startBtn.disabled = true;
-    startBtn.textContent = "初始化中…";
+    startBtn.textContent = "正在开启…";
+    closeStory();
+    contentRevealed = false;
+    stableLocalizationCount = 0;
+    arRenderer?.setContentVisible(false);
     setDebug({ status: "initializing", lastError: "none" }, "开始 Immersal 测试");
 
     try {
@@ -1167,9 +1272,13 @@ export function bootstrapArScene(rootEl) {
       updateZoomUi();
 
       overlay.classList.add("is-hidden");
-      controls?.classList.remove("is-hidden");
-      hint?.classList.remove("is-hidden");
-      debugPanel?.classList.remove("is-hidden");
+      guide?.classList.remove("is-hidden");
+      setGuide("scanning", "正在寻找阊门场景", "请对准建筑，缓慢左右移动手机");
+      if (debugMode) {
+        controls?.classList.remove("is-hidden");
+        hint?.classList.remove("is-hidden");
+        debugPanel?.classList.remove("is-hidden");
+      }
       rootEl.classList.add("is-ar-active");
 
       await initArRenderer();
@@ -1233,8 +1342,8 @@ export function bootstrapArScene(rootEl) {
       syncSdkSolverType();
       try {
         await sdkSession.localizeDeviceAsync();
-        markLocalizationSuccess();
         const trackedPose = getTrackedPoseSnapshot(performance.now());
+        markLocalizationSuccess(trackedPose?.mapId ?? localizedMapId);
         if (trackedPose) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
           updateArRendererPose(trackedPose);
@@ -1252,6 +1361,7 @@ export function bootstrapArScene(rootEl) {
         );
       } catch (err) {
         sdkFailureCount += 1;
+        markLocalizationMiss();
         if (!sdkServerAssistEnabled) {
           sdkServerAssistEnabled = true;
           logDebug("手动设备端识别失败，尝试 SDK server 辅助");
@@ -1288,8 +1398,10 @@ export function bootstrapArScene(rootEl) {
     }
   });
 
+  storyClose?.addEventListener("click", closeStory);
   startBtn.addEventListener("click", startExperience);
   setDebug({ mapId: activeMapLabel, activeMapIds });
+  initArRenderer();
 
   return () => {
     if (localizeTimer) window.clearInterval(localizeTimer);

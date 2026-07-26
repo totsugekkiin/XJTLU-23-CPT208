@@ -4,6 +4,7 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_MAP_PROFILES, DEFAULT_MAP_ID, resolveActiveMapIds } from "./arAnchors.js";
+import { attachBambooNoticeText } from "./bambooNotice.js";
 import { createPortalTestScene, disposePortalTestScene } from "./portalTestScene.js";
 
 const IMMERSAL_BASE = "https://api.immersal.com";
@@ -190,6 +191,9 @@ export function bootstrapArPlacementEditor(rootEl) {
   const portalOpacityInput = rootEl.querySelector("#ar-editor-portal-opacity");
   const portalOpacityOutput = rootEl.querySelector("#ar-editor-portal-opacity-output");
   const togglePortalTestBtn = rootEl.querySelector("#ar-editor-toggle-portal-test");
+  const fineTitle = rootEl.querySelector("#ar-editor-fine-title");
+  const focusModelBtn = rootEl.querySelector("#ar-editor-focus-model");
+  const readableSizeBtn = rootEl.querySelector("#ar-editor-readable-size");
   const numInputs = {
     px: rootEl.querySelector("#ar-editor-px"),
     py: rootEl.querySelector("#ar-editor-py"),
@@ -388,6 +392,34 @@ export function bootstrapArPlacementEditor(rootEl) {
     updatePortalTestWorld(state);
   }
 
+  function decorateModelForEditing(model, state) {
+    if (state.type === "bamboo-notice") {
+      attachBambooNoticeText(model, {
+        anisotropy: renderer.capabilities.getMaxAnisotropy(),
+      });
+    }
+
+    model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    model.userData.arNaturalSize = size.toArray();
+
+    if (state.type === "bamboo-notice") {
+      const arrowLength = Math.max(size.x, size.y) * 0.32;
+      const frontArrow = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(center.x, center.y, bounds.max.z + 0.025),
+        arrowLength,
+        0xffc857,
+        arrowLength * 0.28,
+        arrowLength * 0.16,
+      );
+      frontArrow.name = "bamboo-front-indicator";
+      model.add(frontArrow);
+    }
+  }
+
   function readStateFromObject() {
     const state = getActiveState();
     if (!modelObject || !state) return;
@@ -428,20 +460,41 @@ export function bootstrapArPlacementEditor(rootEl) {
       if (output) output.value = Number.parseFloat(input.value || "0").toFixed(3);
     });
     const isPortal = state.type === "portal";
-    portalSection?.toggleAttribute("hidden", !isPortal);
+    portalSection?.removeAttribute("hidden");
     modelFileField?.toggleAttribute("hidden", isPortal);
+    rootEl.querySelector("#ar-editor-model-tools")?.toggleAttribute("hidden", isPortal);
+    rootEl.querySelectorAll(".ar-portal-only").forEach((element) => {
+      element.toggleAttribute("hidden", !isPortal);
+    });
+    if (fineTitle) fineTitle.textContent = isPortal ? "遮罩精调" : "模型精调";
     const sxLabel = rootEl.querySelector("#ar-editor-sx-label");
     const syLabel = rootEl.querySelector("#ar-editor-sy-label");
     const szLabel = rootEl.querySelector("#ar-editor-sz-label");
+    const nudgeSxLabel = rootEl.querySelector("#ar-editor-nudge-sx-label");
+    const nudgeSyLabel = rootEl.querySelector("#ar-editor-nudge-sy-label");
+    const nudgeSzLabel = rootEl.querySelector("#ar-editor-nudge-sz-label");
     if (sxLabel) sxLabel.textContent = isPortal ? "墙深 X" : "缩放 X";
     if (syLabel) syLabel.textContent = isPortal ? "洞高 Y" : "缩放 Y";
     if (szLabel) szLabel.textContent = isPortal ? "洞宽 Z" : "缩放 Z";
-    if (portalSummary && isPortal) {
-      portalSummary.textContent = [
+    if (nudgeSxLabel) nudgeSxLabel.textContent = isPortal ? "墙深 X" : "缩放 X";
+    if (nudgeSyLabel) nudgeSyLabel.textContent = isPortal ? "洞高 Y" : "缩放 Y";
+    if (nudgeSzLabel) nudgeSzLabel.textContent = isPortal ? "洞宽 Z" : "缩放 Z";
+    if (portalSummary) {
+      const lines = [
         `position: [${state.position.map((value) => formatNum(value)).join(", ")}]`,
         `rotation: [${state.rotation.map((value) => formatNum(value)).join(", ")}]`,
-        `scale:    [${state.scale.map((value) => formatNum(value)).join(", ")}]  // 墙深, 洞高, 洞宽`,
-      ].join("\n");
+        `rotation°:[${state.rotation.map((value) => formatNum(radToDeg(value))).join(", ")}]`,
+        `scale:    [${state.scale.map((value) => formatNum(value)).join(", ")}]${isPortal ? "  // 墙深, 洞高, 洞宽" : ""}`,
+      ];
+      const naturalSize = modelObject?.userData?.arNaturalSize;
+      if (!isPortal && Array.isArray(naturalSize)) {
+        const physicalSize = naturalSize.map((value, index) =>
+          Math.abs(value * state.scale[index]),
+        );
+        lines.push(`实际尺寸: ${(physicalSize[0] * 100).toFixed(1)} × ${(physicalSize[1] * 100).toFixed(1)} × ${(physicalSize[2] * 100).toFixed(1)} cm`);
+        lines.push("正面方向: 模型本地 +Z（黄色箭头）");
+      }
+      portalSummary.textContent = lines.join("\n");
     }
     isSyncingUi = false;
   }
@@ -489,16 +542,25 @@ export function bootstrapArPlacementEditor(rootEl) {
     orbitControls.update();
   }
 
-  function setPortalView(view) {
+  function setAnchorView(view) {
     const state = getActiveState();
-    if (!modelObject || state?.type !== "portal") return;
+    if (!modelObject || !state) return;
 
     const target = modelObject.position.clone();
-    const radius = Math.max(state.scale[0], state.scale[1], state.scale[2], 0.25);
+    const box = new THREE.Box3().setFromObject(modelObject);
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length(), 0.25);
+    const isPortal = state.type === "portal";
     const offsets = {
-      entrance: new THREE.Vector3(radius * 4, 0, 0),
-      perspective: new THREE.Vector3(radius * 3, radius * 1.8, radius * 2.6),
-      side: new THREE.Vector3(0, radius * 0.2, radius * 4),
+      entrance: isPortal
+        ? new THREE.Vector3(radius * 4, 0, 0)
+        : new THREE.Vector3(0, 0, radius * 4),
+      perspective: isPortal
+        ? new THREE.Vector3(radius * 3, radius * 1.8, radius * 2.6)
+        : new THREE.Vector3(radius * 2.2, radius * 1.5, radius * 3.2),
+      side: isPortal
+        ? new THREE.Vector3(0, radius * 0.2, radius * 4)
+        : new THREE.Vector3(radius * 4, 0, 0),
       top: new THREE.Vector3(0, radius * 4, 0.001),
     };
     const localOffset = offsets[view] ?? offsets.perspective;
@@ -508,6 +570,18 @@ export function bootstrapArPlacementEditor(rootEl) {
     camera.lookAt(target);
     orbitControls.target.copy(target);
     orbitControls.update();
+  }
+
+  function setReadableBambooSize() {
+    const state = getActiveState();
+    const naturalSize = modelObject?.userData?.arNaturalSize;
+    if (state?.type !== "bamboo-notice" || !Array.isArray(naturalSize) || !naturalSize[0]) return;
+    const uniformScale = 0.7 / naturalSize[0];
+    state.scale = [uniformScale, uniformScale, uniformScale].map(formatNum);
+    applyStateToObject(state);
+    syncUiFromState();
+    focusOnObject(modelObject);
+    setStatus("竹简已预设为约 70 cm 宽；这是预览参数，复制或导出后才会写回配置");
   }
 
   function updatePointAppearance() {
@@ -787,6 +861,7 @@ export function bootstrapArPlacementEditor(rootEl) {
       const gltf = await gltfLoader.loadAsync(state.url);
       modelObject = gltf.scene;
       modelObject.name = `anchor-${state.id}`;
+      decorateModelForEditing(modelObject, state);
       applyStateToObject(state);
       modelRoot.add(modelObject);
       transformControls.attach(modelObject);
@@ -807,6 +882,7 @@ export function bootstrapArPlacementEditor(rootEl) {
       state.url = url;
       modelRoot.clear();
       modelObject = gltf.scene;
+      decorateModelForEditing(modelObject, state);
       applyStateToObject(state);
       modelRoot.add(modelObject);
       transformControls.attach(modelObject);
@@ -891,7 +967,7 @@ export function bootstrapArPlacementEditor(rootEl) {
     state.scale = [...initial.scale];
     applyStateToObject(state);
     syncUiFromState();
-    setStatus("已恢复代码中的初始遮罩参数");
+    setStatus("已恢复代码中的初始锚点参数");
   }
 
   function importConfigFromJson(data) {
@@ -976,8 +1052,13 @@ export function bootstrapArPlacementEditor(rootEl) {
   });
 
   rootEl.querySelectorAll("[data-ar-view]").forEach((button) => {
-    button.addEventListener("click", () => setPortalView(button.dataset.arView));
+    button.addEventListener("click", () => setAnchorView(button.dataset.arView));
   });
+
+  focusModelBtn?.addEventListener("click", () => {
+    if (modelObject) focusOnObject(modelObject);
+  });
+  readableSizeBtn?.addEventListener("click", setReadableBambooSize);
 
   pointSizeInput?.addEventListener("input", updatePointAppearance);
   pointOpacityInput?.addEventListener("input", updatePointAppearance);
