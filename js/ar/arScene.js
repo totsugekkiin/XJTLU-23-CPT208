@@ -5,6 +5,7 @@ import {
   resolveActiveMapIds,
 } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
+import { createVpsPoseStabilizer } from "./vpsPoseStabilizer.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
 const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
@@ -238,6 +239,7 @@ export function bootstrapArScene(rootEl) {
   let restRenderFrameId = null;
   let agentLastRendererPoseLogAt = 0;
   let lastLocalizationGyro = { x: 0, y: 0, z: 0, w: 1 };
+  const poseStabilizer = createVpsPoseStabilizer();
 
   const debugState = {
     status: "idle",
@@ -944,32 +946,55 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
-  function getTrackedPoseSnapshot() {
+  function getTrackedPoseSnapshot(now = performance.now()) {
     if (!sdkSession || sdkSession.localization.counter <= 0) return null;
 
     const info = sdkSession.localizeInfo;
     const mapData = sdkSession.getMapDataByHandle?.(info.handle);
     const mapId = mapData?.id ?? null;
+    const source = sdkServerAssistPending ? "server" : "device";
+    const observation = poseStabilizer.observe({
+      mapId,
+      counter: sdkSession.localization.counter,
+      position: info.position,
+      rotation: info.rotation,
+      timestamp: now,
+      source,
+      latencyMs: info.elapsedTime,
+    });
+
+    let estimatedPosition = null;
+    if (source === "device" && typeof window.icvPoseGet === "function") {
+      try {
+        const estimatedPose = sdkSession.getEstimatedPose(now);
+        if (estimatedPose?.position) {
+          estimatedPosition = {
+            x: estimatedPose.position[0],
+            y: estimatedPose.position[1],
+            z: estimatedPose.position[2],
+          };
+        }
+      } catch (err) {
+        console.warn("[Immersal] Tracker pose read failed", err);
+      }
+    }
+
+    const stabilized = poseStabilizer.getPose({ timestamp: now, estimatedPosition });
+    if (!stabilized) return null;
     return {
       mode: sdkServerAssistEnabled ? "sdk-device+server" : "sdk-device",
       map: mapId,
       mapId,
       mapHandle: info.handle,
-      // TrackerPlugin extrapolates translation from recent VPS measurements.
-      // When visual localization pauses, a small residual velocity can keep
-      // moving the virtual camera indefinitely, making a fixed anchor shrink
-      // and slide away. Hold the latest measured VPS position instead; current
-      // device orientation is still applied every frame by arRenderer.
-      position: { ...info.position },
-      rotation: {
-        x: info.rotation.x,
-        y: info.rotation.y,
-        z: info.rotation.z,
-        w: info.rotation.w,
-      },
-      estimated: false,
-      translationTracking: "latest-localization-hold",
+      position: stabilized.position,
+      rotation: stabilized.rotation,
+      estimated: stabilized.tracking.mode === "bounded-prediction",
+      translationTracking: stabilized.tracking.mode,
       localizationCounter: sdkSession.localization.counter,
+      poseFilter: {
+        observation,
+        ...stabilized.tracking,
+      },
     };
   }
 
@@ -1011,9 +1036,27 @@ export function bootstrapArScene(rootEl) {
           ...rawPose,
           rotation: applyImmersalPoseCorrection(rawPose.rotation),
         };
+        const poseObservation = poseStabilizer.observe({
+          mapId: rawPose.map,
+          counter: `rest-${debugState.success}`,
+          position: pose.position,
+          rotation: pose.rotation,
+          timestamp: performance.now(),
+          source: "server",
+          latencyMs: data.elapsedMs ?? elapsed,
+        });
+        const stabilized = poseStabilizer.getPose();
+        const renderPose = stabilized
+          ? {
+              ...pose,
+              position: stabilized.position,
+              rotation: stabilized.rotation,
+              poseFilter: { observation: poseObservation, ...stabilized.tracking },
+            }
+          : pose;
         applyLocalizedMapId(rawPose.map);
-        lastMapPose = poseForRenderer(pose);
-        updateArRendererPose(pose);
+        lastMapPose = poseForRenderer(renderPose);
+        updateArRendererPose(renderPose);
         logArRendererStatus();
         setDebug(
           {
@@ -1022,7 +1065,7 @@ export function bootstrapArScene(rootEl) {
             latency: `${data.elapsedMs ?? elapsed}ms`,
             lastError: "none",
             lastImageBytes: data.imageBytes ?? payload.imageBase64.length,
-            lastPose: pose,
+            lastPose: renderPose,
           },
           "场景识别成功",
           result,
@@ -1210,6 +1253,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function startImmersalSdkLocalization() {
+    poseStabilizer.reset(activeMapIds.length === 1 ? activeMapIds[0] : null);
     if (!CLIENT_IMMERSAL_TOKEN) {
       throw new Error("前端未配置 VITE_IMMERSAL_TOKEN，跳过 SDK 连续定位。");
     }
@@ -1283,6 +1327,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   function startLocalizationLoop() {
+    poseStabilizer.reset(restActiveMapId);
     localizationMode = "rest";
     localizeOnce("start");
     localizeTimer = window.setInterval(() => localizeOnce("interval"), LOCALIZE_INTERVAL_MS);

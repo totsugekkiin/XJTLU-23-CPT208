@@ -4,8 +4,10 @@ import { agentDebugLog } from "./agentDebugLog.js";
 import { attachBambooNoticeText } from "./bambooNotice.js";
 import { createPortalTestScene } from "./portalTestScene.js";
 
-const POSE_LERP = 0.28;
-const POSE_LERP_DT_SCALE = 0.025;
+const POSITION_LERP = 0.1;
+const POSITION_LERP_DT_SCALE = 0.006;
+const ROTATION_LERP = 0.28;
+const ROTATION_LERP_DT_SCALE = 0.025;
 const REVEAL_DURATION_MS = 720;
 const REVEAL_START_SCALE = 0.72;
 
@@ -287,13 +289,13 @@ export function createArRenderer(cameraWrap, options = {}) {
       camera.quaternion.copy(targetQuat);
       firstPoseApplied = true;
     } else if (usesGyroBlend) {
-      let step = POSE_LERP_DT_SCALE * dt;
-      if (step > 1) step = 1;
-      camera.position.lerp(targetPos, step);
-      camera.quaternion.slerp(targetQuat, step);
+      const positionStep = Math.min(1, POSITION_LERP_DT_SCALE * dt);
+      const rotationStep = Math.min(1, ROTATION_LERP_DT_SCALE * dt);
+      camera.position.lerp(targetPos, positionStep);
+      camera.quaternion.slerp(targetQuat, rotationStep);
     } else {
-      camera.position.lerp(targetPos, POSE_LERP);
-      camera.quaternion.slerp(targetQuat, POSE_LERP);
+      camera.position.lerp(targetPos, POSITION_LERP);
+      camera.quaternion.slerp(targetQuat, ROTATION_LERP);
     }
 
     if (typeof vFov === "number" && Number.isFinite(vFov) && vFov > 10 && vFov < 120) {
