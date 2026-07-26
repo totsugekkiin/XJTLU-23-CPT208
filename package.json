@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run build:mindar-field",
     "build": "vite build",
+    "build:mindar-field": "node tools/build_mindar_field_bundle.mjs",
     "compile:marker-roi": "node tools/compile_marker_roi.mjs",
     "preview": "vite preview"
   },
