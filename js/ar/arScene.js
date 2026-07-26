@@ -944,17 +944,8 @@ export function bootstrapArScene(rootEl) {
     };
   }
 
-  function getTrackedPoseSnapshot(now) {
+  function getTrackedPoseSnapshot() {
     if (!sdkSession || sdkSession.localization.counter <= 0) return null;
-
-    let estimatedPose = null;
-    if (typeof window.icvPoseGet === "function") {
-      try {
-        estimatedPose = sdkSession.getEstimatedPose(now);
-      } catch (err) {
-        console.warn("[Immersal] Tracker pose read failed", err);
-      }
-    }
 
     const info = sdkSession.localizeInfo;
     const mapData = sdkSession.getMapDataByHandle?.(info.handle);
@@ -964,23 +955,21 @@ export function bootstrapArScene(rootEl) {
       map: mapId,
       mapId,
       mapHandle: info.handle,
-      position: estimatedPose
-        ? { x: estimatedPose.position[0], y: estimatedPose.position[1], z: estimatedPose.position[2] }
-        : { ...info.position },
-      rotation: estimatedPose
-        ? {
-            x: estimatedPose.rotation[0],
-            y: estimatedPose.rotation[1],
-            z: estimatedPose.rotation[2],
-            w: estimatedPose.rotation[3],
-          }
-        : {
-            x: info.rotation.x,
-            y: info.rotation.y,
-            z: info.rotation.z,
-            w: info.rotation.w,
-          },
-      estimated: Boolean(estimatedPose),
+      // TrackerPlugin extrapolates translation from recent VPS measurements.
+      // When visual localization pauses, a small residual velocity can keep
+      // moving the virtual camera indefinitely, making a fixed anchor shrink
+      // and slide away. Hold the latest measured VPS position instead; current
+      // device orientation is still applied every frame by arRenderer.
+      position: { ...info.position },
+      rotation: {
+        x: info.rotation.x,
+        y: info.rotation.y,
+        z: info.rotation.z,
+        w: info.rotation.w,
+      },
+      estimated: false,
+      translationTracking: "latest-localization-hold",
+      localizationCounter: sdkSession.localization.counter,
     };
   }
 
@@ -1146,7 +1135,7 @@ export function bootstrapArScene(rootEl) {
         lastMapPose = tracked;
         updateArRendererPose(tracked);
       }
-      logDebug("SDK server 辅助识别成功，Tracker 已由 SDK 更新", {
+      logDebug("SDK server 辅助识别成功，VPS 位姿已更新", {
         reason,
         elapsed: Math.round(performance.now() - startedAt),
       });
