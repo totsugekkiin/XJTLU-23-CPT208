@@ -1,6 +1,6 @@
 const DEFAULT_OPTIONS = Object.freeze({
-  historySize: 8,
-  stationaryRadius: 0.3,
+  historySize: 5,
+  stationaryRadius: 0.06,
   baseJumpAllowance: 0.35,
   jumpAllowancePerSecond: 1.2,
   maxJumpAllowanceSeconds: 1,
@@ -11,14 +11,18 @@ const DEFAULT_OPTIONS = Object.freeze({
   hardRotationJump: 60 * Math.PI / 180,
   jumpConfirmations: 2,
   hardJumpConfirmations: 3,
-  stationaryPositionAlpha: 0.18,
-  movingPositionAlpha: 0.42,
-  confirmedJumpPositionAlpha: 0.65,
-  serverPositionAlpha: 0.12,
-  rotationAlpha: 0.2,
-  maxPredictionDistance: 0.12,
-  predictionFullMs: 80,
-  predictionFadeMs: 450,
+  stationaryPositionAlpha: 0.2,
+  movingPositionAlpha: 0.7,
+  fastMovingPositionAlpha: 0.88,
+  fastMovementDistance: 0.45,
+  confirmedJumpPositionAlpha: 0.72,
+  serverStationaryPositionAlpha: 0.16,
+  serverMovingPositionAlpha: 0.62,
+  rotationAlpha: 0.24,
+  maxPredictionDistance: 0.2,
+  predictionFullMs: 120,
+  predictionFadeMs: 650,
+  predictionMinimumWeight: 0.45,
 });
 
 function isFiniteNumber(value) {
@@ -178,21 +182,41 @@ export function createVpsPoseStabilizer(options = {}) {
 
   function acceptMeasurement(position, rotation, timestamp, source, latencyMs, confirmedJump = false) {
     const movement = filteredPosition ? distance(filteredPosition, position) : 0;
-    history.push({ ...position });
-    if (history.length > config.historySize) history.shift();
 
     if (!filteredPosition) {
+      history = [{ ...position }];
       filteredPosition = { ...position };
       filteredRotation = { ...rotation };
     } else {
       const isStationary = movement <= config.stationaryRadius && !confirmedJump;
+      if (isStationary) {
+        history.push({ ...position });
+        if (history.length > config.historySize) history.shift();
+      } else {
+        // Do not let samples from the previous location pull a deliberate
+        // translation back toward its old history center.
+        history = [{ ...position }];
+      }
       const targetPosition = isStationary ? robustHistoryCenter(history) : position;
-      let positionAlpha = confirmedJump
-        ? config.confirmedJumpPositionAlpha
-        : isStationary
-          ? config.stationaryPositionAlpha
+      let positionAlpha;
+      if (confirmedJump) {
+        positionAlpha = config.confirmedJumpPositionAlpha;
+      } else if (isStationary) {
+        positionAlpha = source === "server"
+          ? config.serverStationaryPositionAlpha
+          : config.stationaryPositionAlpha;
+      } else {
+        const movementProgress = smoothstep(
+          config.stationaryRadius,
+          config.fastMovementDistance,
+          movement,
+        );
+        const movingAlpha = source === "server"
+          ? config.serverMovingPositionAlpha
           : config.movingPositionAlpha;
-      if (source === "server") positionAlpha = Math.min(positionAlpha, config.serverPositionAlpha);
+        positionAlpha = movingAlpha
+          + (config.fastMovingPositionAlpha - movingAlpha) * movementProgress;
+      }
       filteredPosition = lerpPosition(filteredPosition, targetPosition, positionAlpha);
       filteredRotation = slerpQuaternion(filteredRotation, rotation, config.rotationAlpha);
     }
@@ -319,7 +343,9 @@ export function createVpsPoseStabilizer(options = {}) {
     const prediction = clonePosition(estimatedPosition);
     if (prediction && lastAcceptedRawPosition && latestSource !== "server") {
       const age = Math.max(0, timestamp - lastAcceptedAt);
-      predictionWeight = 1 - smoothstep(config.predictionFullMs, config.predictionFadeMs, age);
+      const fade = smoothstep(config.predictionFullMs, config.predictionFadeMs, age);
+      predictionWeight = 1
+        - (1 - config.predictionMinimumWeight) * fade;
       const delta = {
         x: prediction.x - lastAcceptedRawPosition.x,
         y: prediction.y - lastAcceptedRawPosition.y,
