@@ -50,7 +50,7 @@ export const AR_MAP_PROFILES = [
         type: "bamboo-notice",
         label: "阊门竹简",
         url: "/models/bamboo-notice-ar.glb",
-        position: [1.8776, -0.7899, -1.0437],
+        position: [2.3519, -0.439, -1.2461],
         rotation: [0, -0.5203, 0],
         scale: [1.3485, 1.3339, 2.2],
       },
