@@ -270,6 +270,38 @@ a-scene canvas {
   opacity: 1;
 }
 
+.far-aperture-cv-overlay {
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+
+.far-aperture-cv-overlay.is-visible {
+  opacity: 1;
+}
+
+.far-aperture-cv-overlay polygon {
+  fill: none;
+  stroke: #30d5ff;
+  stroke-width: 3;
+  stroke-dasharray: 9 7;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 85%));
+  vector-effect: non-scaling-stroke;
+}
+
+.far-aperture-cv-overlay.is-locked polygon {
+  stroke: #42e8ff;
+  stroke-dasharray: none;
+}
+
 video {
   z-index: 0 !important;
   visibility: visible !important;

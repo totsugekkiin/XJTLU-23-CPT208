@@ -3,6 +3,7 @@ import {
   installGaussianCropShader,
   updateGaussianCropMaterial,
 } from "./gaussianCropShader.js";
+import { createFarApertureCvSnapper } from "./farApertureCvSnapper.js";
 import {
   PORTAL_CROP_BOX,
   PORTAL_OPENING_HEIGHT,
@@ -120,6 +121,7 @@ class GaussianPortalRenderer {
     modelScale = PORTAL_WORLD_SCALE,
     viewDistance = PORTAL_REFERENCE_VIEW_DISTANCE,
     perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL,
+    apertureCv = true,
   }) {
     this.scene = scene;
     this.target = target;
@@ -161,6 +163,11 @@ class GaussianPortalRenderer {
     this.hasSmoothedEye = false;
     this.lastEyeSampleAt = 0;
     this.lastPerspectiveEmitAt = 0;
+    this.apertureSnapper = createFarApertureCvSnapper({
+      scene: this.scene,
+      target: this.target,
+      enabled: apertureCv,
+    });
 
     this.worldPoint = new this.THREE.Vector3();
     this.cameraPoint = new this.THREE.Vector3();
@@ -358,6 +365,7 @@ class GaussianPortalRenderer {
       point.y = Number.NaN;
     }
     this.lastNearClipPath = "";
+    this.apertureSnapper.reset();
     this.requestRender(true);
   }
 
@@ -494,6 +502,7 @@ class GaussianPortalRenderer {
     }
     this.hasRenderedEye = false;
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
   }
@@ -506,6 +515,7 @@ class GaussianPortalRenderer {
     this.distanceCalibrated = true;
     this.hasRenderedEye = false;
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
     return this.runtimeEye.z;
@@ -513,6 +523,7 @@ class GaussianPortalRenderer {
 
   setTracking(tracking) {
     this.tracking = tracking;
+    this.apertureSnapper.setTracking(tracking);
     this.splatEntity.enabled =
       this.loaded && this.tracking && !document.hidden;
     this.canvas.classList.toggle(
@@ -529,6 +540,7 @@ class GaussianPortalRenderer {
 
   setOcclusion(enabled) {
     this.occlusion = enabled;
+    this.apertureSnapper.setOcclusion(enabled);
     this.lastTransform = "";
     if (!enabled) {
       this.setNearClipPath("none");
@@ -542,6 +554,7 @@ class GaussianPortalRenderer {
     this.direction = direction < 0 ? -1 : 1;
     this.lastTransform = "";
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
   }
@@ -664,10 +677,14 @@ class GaussianPortalRenderer {
       return;
     }
     this.updateNearClipPath();
+    const renderedCorners = this.apertureSnapper.update(
+      this.projectedCorners,
+      sourceBounds,
+    );
 
     let projectionChanged = !this.lastTransform;
     for (let index = 0; index < this.clipCorners.length; index += 1) {
-      const projected = this.projectedCorners[index];
+      const projected = renderedCorners[index];
       const previous = this.lastProjectedCorners[index];
       if (
         Math.abs(projected.x - previous.x) >=
@@ -687,7 +704,7 @@ class GaussianPortalRenderer {
       return;
     }
     const transform = quadTransform(
-      this.projectedCorners,
+      renderedCorners,
       TEXTURE_WIDTH,
       TEXTURE_HEIGHT,
     );
@@ -695,9 +712,9 @@ class GaussianPortalRenderer {
       this.setProjected(false);
       return;
     }
-    for (let index = 0; index < this.projectedCorners.length; index += 1) {
-      this.lastProjectedCorners[index].x = this.projectedCorners[index].x;
-      this.lastProjectedCorners[index].y = this.projectedCorners[index].y;
+    for (let index = 0; index < renderedCorners.length; index += 1) {
+      this.lastProjectedCorners[index].x = renderedCorners[index].x;
+      this.lastProjectedCorners[index].y = renderedCorners[index].y;
     }
     this.setTransform(transform);
     this.setProjected(true);
@@ -816,6 +833,7 @@ class GaussianPortalRenderer {
       this.handleGsplatFrameRequest,
     );
     this.cropMaterials.clear();
+    this.apertureSnapper.destroy();
     this.app.destroy();
     this.clipLayer.remove();
   }

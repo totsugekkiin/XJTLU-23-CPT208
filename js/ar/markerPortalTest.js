@@ -27,6 +27,7 @@ const cameraGate = document.querySelector("#camera-gate");
 const markerScanGuide = document.querySelector("#marker-scan-guide");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
+const farCvStatus = document.querySelector("#far-cv-status");
 
 const REFERENCE_VIEW_DISTANCE = PORTAL_REFERENCE_VIEW_DISTANCE;
 
@@ -41,9 +42,11 @@ let debugAnchorObject = null;
 let targetTracking = false;
 let pageDestroyed = false;
 let perspectiveState = null;
+let apertureCvState = null;
 
 const query = new URLSearchParams(window.location.search);
 const debugPortal = query.get("debugPortal") === "1";
+const apertureCvEnabled = query.get("apertureCv") !== "0" && !debugPortal;
 let perspectiveMode =
   query.get("perspective") === PORTAL_PERSPECTIVE_MODES.COMPOSITION
     ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
@@ -133,8 +136,15 @@ function setTrackingState(tracking) {
           ? "物理透视（已校准）"
           : "物理透视"
         : "构图优先";
+    const cvText = apertureCvEnabled
+      ? apertureCvState?.mode === "locked"
+        ? " · 洞口CV已吸附"
+        : apertureCvState?.mode === "holding"
+          ? " · 洞口CV保持中"
+          : " · 洞口CV校准中"
+      : "";
     statusDetail.textContent = tracking
-      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒 · ${perspectiveText}${distanceText}`
+      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒 · ${perspectiveText}${distanceText}${cvText}`
       : "让四边和四个角尽量完整进入画面";
   }
 }
@@ -172,7 +182,7 @@ updatePerspectiveControls();
 target?.setAttribute("portal-occlusion-test", {
   direction: depthDirection,
   occlusion: occlusionEnabled,
-  farFrame: true,
+  farFrame: !apertureCvEnabled,
   loadModel: false,
   useViewPose: true,
   viewX: portalView.x,
@@ -262,6 +272,25 @@ target?.addEventListener("gaussian-portal-perspective", (event) => {
       ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
       : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
   updatePerspectiveControls();
+});
+
+target?.addEventListener("far-aperture-cv-state", (event) => {
+  apertureCvState = event.detail ?? null;
+  if (target) {
+    target.dataset.apertureCvMode = String(apertureCvState?.mode ?? "fallback");
+    target.dataset.apertureCvConfidence = Number(
+      apertureCvState?.confidence ?? 0,
+    ).toFixed(2);
+  }
+  if (farCvStatus) {
+    farCvStatus.textContent = !apertureCvEnabled
+      ? "已关闭"
+      : apertureCvState?.mode === "locked"
+        ? "CV已吸附"
+        : apertureCvState?.mode === "holding"
+          ? "CV保持"
+          : "CV校准中";
+  }
 });
 
 target?.addEventListener("gaussian-portal-error", () => {
@@ -455,6 +484,7 @@ async function initializeGaussianPortal() {
         modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
         viewDistance,
         perspectiveMode,
+        apertureCv: apertureCvEnabled,
         anchorObject: debugAnchor,
       });
       gaussianPortal.setOcclusion(occlusionEnabled);
