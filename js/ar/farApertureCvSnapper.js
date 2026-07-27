@@ -1,13 +1,27 @@
-const PROCESS_INTERVAL_MS = 125;
+const PROCESS_INTERVAL_MS = 200;
 const MAX_PROCESSING_EDGE = 600;
 const MIN_PROJECTED_EDGE = 42;
-const SEARCH_FRACTION = 0.24;
-const MIN_SEARCH_PIXELS = 6;
-const MAX_SEARCH_PIXELS = 34;
-const HOLD_LAST_GOOD_MS = 650;
-const RELEASE_TIME_MS = 420;
-const MIN_SIDE_CONFIDENCE = 0.28;
-const MIN_ACCEPTED_SIDES = 3;
+const INITIAL_SEARCH_FRACTION = 0.18;
+const LOCKED_SEARCH_FRACTION = 0.085;
+const MIN_SEARCH_PIXELS = 5;
+const INITIAL_MAX_SEARCH_PIXELS = 25;
+const LOCKED_MAX_SEARCH_PIXELS = 14;
+const HOLD_LAST_GOOD_MS = 1200;
+const CORRECTION_SMOOTHING_MS = 720;
+const RELEASE_TIME_MS = 900;
+const MIN_SIDE_CONFIDENCE = 0.38;
+const MIN_SIDE_COVERAGE = 0.34;
+const MIN_SIDE_POLARITY = 0.26;
+const MIN_SIDE_STEP_CONTRAST = 6;
+const MIN_SIDE_STEP_POLARITY = 0.34;
+const MIN_ACCEPTED_SIDES = 4;
+const INITIAL_CONSENSUS_FRAMES = 4;
+const MEASUREMENT_HISTORY_SIZE = 5;
+const MAX_INITIAL_SPREAD = 0.05;
+const MAX_LOCKED_MEASUREMENT_JUMP = 0.065;
+const MAX_NORMALIZED_CORRECTION = 0.23;
+const LOCAL_SHAPE_CORRECTION_WEIGHT = 0.42;
+const OVERLAY_POINT_EPSILON = 0.8;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -36,15 +50,69 @@ function quadArea(points) {
   return area / 2;
 }
 
-function isUsableQuad(points, predicted) {
+function quadCenter(points) {
+  return points.reduce(
+    (center, point) => {
+      center.x += point.x / points.length;
+      center.y += point.y / points.length;
+      return center;
+    },
+    { x: 0, y: 0 },
+  );
+}
+
+function quadDimensions(points) {
+  return {
+    width:
+      (distance(points[0], points[1]) + distance(points[3], points[2])) / 2,
+    height:
+      (distance(points[0], points[3]) + distance(points[1], points[2])) / 2,
+  };
+}
+
+function isUsableQuad(
+  points,
+  predicted,
+  {
+    minimumAreaRatio = 0.65,
+    maximumAreaRatio = 1.5,
+    minimumEdgeRatio = 0.68,
+    maximumEdgeRatio = 1.42,
+    maximumCenterShift = 0.3,
+  } = {},
+) {
   if (points.some(({ x, y }) => !Number.isFinite(x) || !Number.isFinite(y))) {
     return false;
   }
   const predictedArea = Math.abs(quadArea(predicted));
   const candidateArea = Math.abs(quadArea(points));
-  if (predictedArea < 1 || candidateArea < predictedArea * 0.52) return false;
-  if (candidateArea > predictedArea * 1.9) return false;
+  if (predictedArea < 1 || candidateArea < predictedArea * minimumAreaRatio) {
+    return false;
+  }
+  if (candidateArea > predictedArea * maximumAreaRatio) return false;
   if (Math.sign(quadArea(points)) !== Math.sign(quadArea(predicted))) return false;
+
+  const predictedDimensions = quadDimensions(predicted);
+  const candidateDimensions = quadDimensions(points);
+  const widthRatio = candidateDimensions.width / predictedDimensions.width;
+  const heightRatio = candidateDimensions.height / predictedDimensions.height;
+  if (
+    widthRatio < minimumEdgeRatio ||
+    widthRatio > maximumEdgeRatio ||
+    heightRatio < minimumEdgeRatio ||
+    heightRatio > maximumEdgeRatio
+  ) {
+    return false;
+  }
+  const predictedCenter = quadCenter(predicted);
+  const candidateCenter = quadCenter(points);
+  if (
+    distance(predictedCenter, candidateCenter) >
+    Math.min(predictedDimensions.width, predictedDimensions.height) *
+      maximumCenterShift
+  ) {
+    return false;
+  }
 
   let crossSign = 0;
   for (let index = 0; index < points.length; index += 1) {
@@ -59,6 +127,130 @@ function isUsableQuad(points, predicted) {
     crossSign = sign;
   }
   return true;
+}
+
+function isQuadInsideOuter(candidate, outer) {
+  const outerSign = Math.sign(quadArea(outer));
+  if (!outerSign) return false;
+  const outerDimensions = quadDimensions(outer);
+  const minimumInset =
+    Math.min(outerDimensions.width, outerDimensions.height) * 0.012;
+  for (const point of candidate) {
+    for (let index = 0; index < outer.length; index += 1) {
+      const start = outer[index];
+      const end = outer[(index + 1) % outer.length];
+      const edgeX = end.x - start.x;
+      const edgeY = end.y - start.y;
+      const edgeLength = Math.hypot(edgeX, edgeY);
+      const cross =
+        edgeX * (point.y - start.y) - edgeY * (point.x - start.x);
+      if (cross * outerSign < minimumInset * edgeLength) return false;
+    }
+  }
+  return true;
+}
+
+function quadBasis(points) {
+  const x = {
+    x:
+      ((points[1].x - points[0].x) + (points[2].x - points[3].x)) / 2,
+    y:
+      ((points[1].y - points[0].y) + (points[2].y - points[3].y)) / 2,
+  };
+  const y = {
+    x:
+      ((points[3].x - points[0].x) + (points[2].x - points[1].x)) / 2,
+    y:
+      ((points[3].y - points[0].y) + (points[2].y - points[1].y)) / 2,
+  };
+  const determinant = x.x * y.y - x.y * y.x;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-5) {
+    return null;
+  }
+  return { x, y, determinant };
+}
+
+function normalizedCorrections(measured, predicted) {
+  const basis = quadBasis(predicted);
+  if (!basis) return null;
+  const corrections = measured.map((point, index) => {
+    const deltaX = point.x - predicted[index].x;
+    const deltaY = point.y - predicted[index].y;
+    return {
+      x: (deltaX * basis.y.y - deltaY * basis.y.x) / basis.determinant,
+      y: (basis.x.x * deltaY - basis.x.y * deltaX) / basis.determinant,
+    };
+  });
+  const average = corrections.reduce(
+    (result, correction) => {
+      result.x += correction.x / corrections.length;
+      result.y += correction.y / corrections.length;
+      return result;
+    },
+    { x: 0, y: 0 },
+  );
+  for (const correction of corrections) {
+    correction.x =
+      average.x +
+      (correction.x - average.x) * LOCAL_SHAPE_CORRECTION_WEIGHT;
+    correction.y =
+      average.y +
+      (correction.y - average.y) * LOCAL_SHAPE_CORRECTION_WEIGHT;
+    if (
+      Math.abs(correction.x) > MAX_NORMALIZED_CORRECTION ||
+      Math.abs(correction.y) > MAX_NORMALIZED_CORRECTION
+    ) {
+      return null;
+    }
+  }
+  return corrections;
+}
+
+function applyNormalizedCorrections(predicted, corrections, output) {
+  const basis = quadBasis(predicted);
+  if (!basis) {
+    predicted.forEach((point, index) => copyPoint(output[index], point));
+    return;
+  }
+  for (let index = 0; index < predicted.length; index += 1) {
+    const correction = corrections[index];
+    output[index].x =
+      predicted[index].x +
+      basis.x.x * correction.x +
+      basis.y.x * correction.y;
+    output[index].y =
+      predicted[index].y +
+      basis.x.y * correction.x +
+      basis.y.y * correction.y;
+  }
+}
+
+function correctionDistance(first, second) {
+  let squared = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    squared +=
+      (first[index].x - second[index].x) ** 2 +
+      (first[index].y - second[index].y) ** 2;
+  }
+  return Math.sqrt(squared / (first.length * 2));
+}
+
+function medianCorrections(history) {
+  return Array.from({ length: 4 }, (_, cornerIndex) => {
+    const xs = history
+      .map((measurement) => measurement.corrections[cornerIndex].x)
+      .sort((a, b) => a - b);
+    const ys = history
+      .map((measurement) => measurement.corrections[cornerIndex].y)
+      .sort((a, b) => a - b);
+    const middle = Math.floor(xs.length / 2);
+    return {
+      x:
+        xs.length % 2 === 0 ? (xs[middle - 1] + xs[middle]) / 2 : xs[middle],
+      y:
+        ys.length % 2 === 0 ? (ys[middle - 1] + ys[middle]) / 2 : ys[middle],
+    };
+  });
 }
 
 function intersectLines(first, second) {
@@ -143,6 +335,7 @@ function buildGradients(luma, width, height) {
   }
 
   return {
+    luma: blurred,
     gradientX,
     gradientY,
     noiseFloor: Math.max(18, totalMagnitude / Math.max(1, count) / 2),
@@ -164,6 +357,13 @@ function sampleGradient(array, width, height, x, y) {
   return upper + (lower - upper) * fractionY;
 }
 
+function medianOfThree(first, second, third) {
+  return Math.max(
+    Math.min(first, second),
+    Math.min(Math.max(first, second), third),
+  );
+}
+
 function evaluateLine(line, gradients, width, height) {
   const dx = line.end.x - line.start.x;
   const dy = line.end.y - line.start.y;
@@ -178,6 +378,9 @@ function evaluateLine(line, gradients, width, height) {
   let covered = 0;
   let longestRun = 0;
   let run = 0;
+  let stepAbsoluteSum = 0;
+  let stepSignedSum = 0;
+  const stepDistance = clamp(length * 0.018, 2.5, 4.5);
 
   for (let index = 0; index < sampleCount; index += 1) {
     const ratio = 0.12 + (0.76 * index) / Math.max(1, sampleCount - 1);
@@ -187,8 +390,57 @@ function evaluateLine(line, gradients, width, height) {
     const gy = sampleGradient(gradients.gradientY, width, height, x, y);
     const oriented = gx * normalX + gy * normalY;
     const strength = Math.abs(oriented);
+    const innerLuma = medianOfThree(
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x + normalX * stepDistance,
+        y + normalY * stepDistance,
+      ),
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x + normalX * stepDistance * 2,
+        y + normalY * stepDistance * 2,
+      ),
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x + normalX * stepDistance * 3,
+        y + normalY * stepDistance * 3,
+      ),
+    );
+    const outerLuma = medianOfThree(
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x - normalX * stepDistance,
+        y - normalY * stepDistance,
+      ),
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x - normalX * stepDistance * 2,
+        y - normalY * stepDistance * 2,
+      ),
+      sampleGradient(
+        gradients.luma,
+        width,
+        height,
+        x - normalX * stepDistance * 3,
+        y - normalY * stepDistance * 3,
+      ),
+    );
+    const step = innerLuma - outerLuma;
     absoluteSum += strength;
     signedSum += oriented;
+    stepAbsoluteSum += Math.abs(step);
+    stepSignedSum += step;
     if (strength >= edgeThreshold) {
       covered += 1;
       run += 1;
@@ -202,6 +454,9 @@ function evaluateLine(line, gradients, width, height) {
   const coverage = covered / sampleCount;
   const continuity = longestRun / sampleCount;
   const polarity = Math.abs(signedSum) / Math.max(1, absoluteSum);
+  const stepContrast = Math.abs(stepSignedSum) / sampleCount;
+  const stepPolarity =
+    Math.abs(stepSignedSum) / Math.max(1, stepAbsoluteSum);
   const normalizedStrength = meanStrength / gradients.noiseFloor;
   const confidence = clamp(
     ((normalizedStrength - 0.9) / 2.8) *
@@ -212,9 +467,19 @@ function evaluateLine(line, gradients, width, height) {
   );
   return {
     confidence,
+    coverage,
+    continuity,
+    polarity,
+    stepContrast,
+    stepPolarity,
+    normalizedStrength,
     objective:
-      meanStrength *
-      (0.62 + coverage * 0.2 + continuity * 0.1 + polarity * 0.08),
+      (meanStrength + stepContrast * 4) *
+      (0.54 +
+        coverage * 0.18 +
+        continuity * 0.08 +
+        polarity * 0.08 +
+        stepPolarity * 0.12),
   };
 }
 
@@ -244,11 +509,21 @@ function findSideLine(start, end, searchDistance, gradients, width, height) {
       };
       const score = evaluateLine(line, gradients, width, height);
       if (!score) continue;
-      const prior = 1 - 0.13 * Math.abs(shift) / Math.max(1, searchDistance);
+      if (
+        score.confidence < MIN_SIDE_CONFIDENCE ||
+        score.coverage < MIN_SIDE_COVERAGE ||
+        score.polarity < MIN_SIDE_POLARITY ||
+        score.stepContrast < MIN_SIDE_STEP_CONTRAST ||
+        score.stepPolarity < MIN_SIDE_STEP_POLARITY
+      ) {
+        continue;
+      }
+      const prior = 1 - 0.3 * Math.abs(shift) / Math.max(1, searchDistance);
       const objective = score.objective * prior;
       if (!best || objective > best.objective) {
         best = {
           ...line,
+          ...score,
           confidence: score.confidence,
           objective,
           shift,
@@ -263,7 +538,14 @@ function findSideLine(start, end, searchDistance, gradients, width, height) {
  * Detects a quadrilateral by snapping each predicted side to a nearby image edge.
  * Coordinates and image dimensions must use the same pixel space.
  */
-export function detectApertureQuad({ luma, width, height, predictedCorners }) {
+export function detectApertureQuad({
+  luma,
+  width,
+  height,
+  predictedCorners,
+  searchFraction = INITIAL_SEARCH_FRACTION,
+  maximumSearchPixels = INITIAL_MAX_SEARCH_PIXELS,
+}) {
   if (
     !(luma instanceof Uint8Array) ||
     luma.length !== width * height ||
@@ -285,9 +567,9 @@ export function detectApertureQuad({ luma, width, height, predictedCorners }) {
   for (let side = 0; side < 4; side += 1) {
     const sideSpan = side % 2 === 0 ? verticalSize : horizontalSize;
     const searchDistance = clamp(
-      sideSpan * SEARCH_FRACTION,
+      sideSpan * searchFraction,
       MIN_SEARCH_PIXELS,
-      MAX_SEARCH_PIXELS,
+      maximumSearchPixels,
     );
     const baseline = {
       start: predicted[side],
@@ -303,9 +585,13 @@ export function detectApertureQuad({ luma, width, height, predictedCorners }) {
       width,
       height,
     );
-    lines.push(
-      detected?.confidence >= MIN_SIDE_CONFIDENCE ? detected : baseline,
-    );
+    const reliable =
+      detected?.confidence >= MIN_SIDE_CONFIDENCE &&
+      detected.coverage >= MIN_SIDE_COVERAGE &&
+      detected.polarity >= MIN_SIDE_POLARITY &&
+      detected.stepContrast >= MIN_SIDE_STEP_CONTRAST &&
+      detected.stepPolarity >= MIN_SIDE_STEP_POLARITY;
+    lines.push(reliable ? detected : baseline);
   }
 
   const acceptedSides = lines.filter(
@@ -318,7 +604,16 @@ export function detectApertureQuad({ luma, width, height, predictedCorners }) {
     intersectLines(lines[1], lines[2]),
     intersectLines(lines[2], lines[3]),
   ];
-  if (corners.some((point) => !point) || !isUsableQuad(corners, predicted)) {
+  if (
+    corners.some((point) => !point) ||
+    !isUsableQuad(corners, predicted, {
+      minimumAreaRatio: 0.72,
+      maximumAreaRatio: 1.36,
+      minimumEdgeRatio: 0.76,
+      maximumEdgeRatio: 1.28,
+      maximumCenterShift: 0.22,
+    })
+  ) {
     return null;
   }
 
@@ -390,8 +685,18 @@ export class FarApertureCvSnapper {
     this.lastUpdateAt = 0;
     this.mode = "fallback";
     this.confidence = 0;
-    this.smoothedDeltas = Array.from({ length: 4 }, () => ({ x: 0, y: 0 }));
+    this.lockEstablished = false;
+    this.measurements = [];
+    this.targetCorrections = Array.from({ length: 4 }, () => ({ x: 0, y: 0 }));
+    this.smoothedCorrections = Array.from({ length: 4 }, () => ({
+      x: 0,
+      y: 0,
+    }));
     this.outputCorners = Array.from({ length: 4 }, () => ({ x: 0, y: 0 }));
+    this.lastOverlayCorners = Array.from({ length: 4 }, () => ({
+      x: Number.NaN,
+      y: Number.NaN,
+    }));
 
     this.processingCanvas = document.createElement("canvas");
     this.processingContext = this.processingCanvas.getContext("2d", {
@@ -428,10 +733,21 @@ export class FarApertureCvSnapper {
   reset() {
     this.lastProcessedAt = 0;
     this.lastGoodAt = 0;
+    this.lastUpdateAt = 0;
     this.confidence = 0;
-    this.smoothedDeltas.forEach((delta) => {
-      delta.x = 0;
-      delta.y = 0;
+    this.lockEstablished = false;
+    this.measurements.length = 0;
+    this.targetCorrections.forEach((correction) => {
+      correction.x = 0;
+      correction.y = 0;
+    });
+    this.smoothedCorrections.forEach((correction) => {
+      correction.x = 0;
+      correction.y = 0;
+    });
+    this.lastOverlayCorners.forEach((point) => {
+      point.x = Number.NaN;
+      point.y = Number.NaN;
     });
     this.setMode("fallback");
   }
@@ -454,7 +770,7 @@ export class FarApertureCvSnapper {
     });
   }
 
-  readFrame(predictedCorners, viewportBounds) {
+  readFrame(searchCorners, viewportBounds, locked) {
     const video = document.querySelector("video");
     if (
       !this.processingContext ||
@@ -487,7 +803,7 @@ export class FarApertureCvSnapper {
       height,
     );
     const imageData = this.processingContext.getImageData(0, 0, width, height);
-    const processingCorners = predictedCorners.map(({ x, y }) => ({
+    const processingCorners = searchCorners.map(({ x, y }) => ({
       x: (x - viewportBounds.left) * scale,
       y: (y - viewportBounds.top) * scale,
     }));
@@ -496,6 +812,12 @@ export class FarApertureCvSnapper {
       width,
       height,
       predictedCorners: processingCorners,
+      searchFraction: locked
+        ? LOCKED_SEARCH_FRACTION
+        : INITIAL_SEARCH_FRACTION,
+      maximumSearchPixels: locked
+        ? LOCKED_MAX_SEARCH_PIXELS
+        : INITIAL_MAX_SEARCH_PIXELS,
     });
     if (!result) return null;
     return {
@@ -507,41 +829,107 @@ export class FarApertureCvSnapper {
     };
   }
 
-  absorbMeasurement(result, predictedCorners, now) {
-    const confidenceAlpha = 0.16 + result.confidence * 0.22;
-    const firstLock = !this.lastGoodAt;
-    for (let index = 0; index < 4; index += 1) {
-      const measuredX = result.corners[index].x - predictedCorners[index].x;
-      const measuredY = result.corners[index].y - predictedCorners[index].y;
-      const delta = this.smoothedDeltas[index];
-      if (firstLock) {
-        delta.x = measuredX;
-        delta.y = measuredY;
-      } else {
-        delta.x += (measuredX - delta.x) * confidenceAlpha;
-        delta.y += (measuredY - delta.y) * confidenceAlpha;
-      }
+  absorbMeasurement(result, predictedCorners, nearCorners, now) {
+    if (
+      !nearCorners ||
+      !isQuadInsideOuter(result.corners, nearCorners) ||
+      !isUsableQuad(result.corners, predictedCorners, {
+        minimumAreaRatio: 0.74,
+        maximumAreaRatio: 1.34,
+        minimumEdgeRatio: 0.78,
+        maximumEdgeRatio: 1.26,
+        maximumCenterShift: 0.21,
+      })
+    ) {
+      return false;
     }
+    const corrections = normalizedCorrections(
+      result.corners,
+      predictedCorners,
+    );
+    if (!corrections) return false;
+
+    if (
+      this.lockEstablished &&
+      correctionDistance(
+        corrections,
+        this.mode === "holding"
+          ? this.smoothedCorrections
+          : this.targetCorrections,
+      ) >
+        MAX_LOCKED_MEASUREMENT_JUMP
+    ) {
+      return false;
+    }
+
+    this.measurements.push({
+      corrections,
+      confidence: result.confidence,
+    });
+    if (this.measurements.length > MEASUREMENT_HISTORY_SIZE) {
+      this.measurements.shift();
+    }
+    const median = medianCorrections(this.measurements);
+
+    if (!this.lockEstablished) {
+      if (this.measurements.length < INITIAL_CONSENSUS_FRAMES) return false;
+      const spread = Math.max(
+        ...this.measurements.map((measurement) =>
+          correctionDistance(measurement.corrections, median),
+        ),
+      );
+      if (spread > MAX_INITIAL_SPREAD) return false;
+      this.lockEstablished = true;
+    }
+
+    median.forEach((correction, index) => {
+      copyPoint(this.targetCorrections[index], correction);
+    });
     this.lastGoodAt = now;
     this.setMode("locked", result.confidence);
+    return true;
   }
 
   releaseCorrection(now) {
     if (!this.lastGoodAt || now - this.lastGoodAt <= HOLD_LAST_GOOD_MS) return;
-    const elapsed = Math.max(0, now - this.lastUpdateAt);
-    const alpha = 1 - Math.exp(-elapsed / RELEASE_TIME_MS);
-    let remaining = 0;
-    this.smoothedDeltas.forEach((delta) => {
-      delta.x += (0 - delta.x) * alpha;
-      delta.y += (0 - delta.y) * alpha;
-      remaining += Math.abs(delta.x) + Math.abs(delta.y);
+    this.targetCorrections.forEach((correction) => {
+      correction.x = 0;
+      correction.y = 0;
     });
-    this.setMode(remaining < 1 ? "fallback" : "holding", 0);
+    this.setMode("holding", 0);
   }
 
-  update(predictedCorners, viewportBounds) {
+  smoothCorrections(now) {
+    const elapsed = this.lastUpdateAt
+      ? clamp(now - this.lastUpdateAt, 0, 100)
+      : 0;
+    const timeConstant =
+      this.mode === "holding" ? RELEASE_TIME_MS : CORRECTION_SMOOTHING_MS;
+    const alpha = elapsed > 0 ? 1 - Math.exp(-elapsed / timeConstant) : 0;
+    let remaining = 0;
+    for (let index = 0; index < this.smoothedCorrections.length; index += 1) {
+      const smoothed = this.smoothedCorrections[index];
+      const target = this.targetCorrections[index];
+      smoothed.x += (target.x - smoothed.x) * alpha;
+      smoothed.y += (target.y - smoothed.y) * alpha;
+      remaining += Math.abs(smoothed.x) + Math.abs(smoothed.y);
+    }
+    if (this.mode === "holding" && remaining < 0.002) {
+      this.lockEstablished = false;
+      this.lastGoodAt = 0;
+      this.measurements.length = 0;
+      this.setMode("fallback", 0);
+    }
+  }
+
+  update(predictedCorners, viewportBounds, nearCorners) {
     if (!predictedCorners?.length || !viewportBounds) return predictedCorners;
     const now = performance.now();
+    applyNormalizedCorrections(
+      predictedCorners,
+      this.smoothedCorrections,
+      this.outputCorners,
+    );
     const minimumEdge = Math.min(
       ...predictedCorners.map((point, index) =>
         distance(point, predictedCorners[(index + 1) % 4]),
@@ -556,34 +944,59 @@ export class FarApertureCvSnapper {
     ) {
       this.lastProcessedAt = now;
       try {
-        const result = this.readFrame(predictedCorners, viewportBounds);
-        if (result) this.absorbMeasurement(result, predictedCorners, now);
+        const result = this.readFrame(
+          this.lockEstablished ? this.outputCorners : predictedCorners,
+          viewportBounds,
+          this.lockEstablished,
+        );
+        if (result) {
+          this.absorbMeasurement(
+            result,
+            predictedCorners,
+            nearCorners,
+            now,
+          );
+        }
       } catch (error) {
         console.warn("Far-aperture CV frame skipped", error);
       }
     }
     this.releaseCorrection(now);
+    this.smoothCorrections(now);
     this.lastUpdateAt = now;
 
-    for (let index = 0; index < 4; index += 1) {
-      this.outputCorners[index].x =
-        predictedCorners[index].x + this.smoothedDeltas[index].x;
-      this.outputCorners[index].y =
-        predictedCorners[index].y + this.smoothedDeltas[index].y;
-    }
-    if (!isUsableQuad(this.outputCorners, predictedCorners)) {
-      this.smoothedDeltas.forEach((delta) => {
-        delta.x = 0;
-        delta.y = 0;
-      });
+    applyNormalizedCorrections(
+      predictedCorners,
+      this.smoothedCorrections,
+      this.outputCorners,
+    );
+    if (
+      !isUsableQuad(this.outputCorners, predictedCorners) ||
+      (this.lockEstablished &&
+        nearCorners &&
+        !isQuadInsideOuter(this.outputCorners, nearCorners))
+    ) {
+      this.reset();
       predictedCorners.forEach((point, index) => copyPoint(this.outputCorners[index], point));
-      this.setMode("fallback", 0);
     }
-    this.drawOverlay(this.outputCorners, viewportBounds);
+    this.drawOverlay(this.outputCorners);
     return this.outputCorners;
   }
 
-  drawOverlay(points, viewportBounds) {
+  drawOverlay(points) {
+    const changed = points.some(
+      (point, index) => {
+        const previous = this.lastOverlayCorners[index];
+        return (
+          !Number.isFinite(previous.x) ||
+          !Number.isFinite(previous.y) ||
+          Math.abs(point.x - previous.x) >=
+          OVERLAY_POINT_EPSILON ||
+          Math.abs(point.y - previous.y) >= OVERLAY_POINT_EPSILON
+        );
+      },
+    );
+    if (!changed) return;
     this.overlay.setAttribute(
       "viewBox",
       `0 0 ${window.innerWidth} ${window.innerHeight}`,
@@ -592,6 +1005,9 @@ export class FarApertureCvSnapper {
       "points",
       points.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "),
     );
+    points.forEach((point, index) => {
+      copyPoint(this.lastOverlayCorners[index], point);
+    });
   }
 
   destroy() {

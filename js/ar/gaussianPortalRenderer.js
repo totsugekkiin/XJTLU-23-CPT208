@@ -32,7 +32,7 @@ const DESKTOP_RENDER_INTERVAL = 1000 / 45;
 const EYE_MOVEMENT_EPSILON = 0.003;
 const EYE_DEPTH_SMOOTHING_MS = 55;
 const EYE_DEPTH_SNAP_DISTANCE = 0.08;
-const PROJECTED_POINT_EPSILON = 0.15;
+const PROJECTED_POINT_EPSILON = 0.65;
 
 function applyEditorCameraPose(entity, view) {
   const cameraBaseRotation = new pc.Quat()
@@ -680,6 +680,7 @@ class GaussianPortalRenderer {
     const renderedCorners = this.apertureSnapper.update(
       this.projectedCorners,
       sourceBounds,
+      this.nearProjectedCorners,
     );
 
     let projectionChanged = !this.lastTransform;
