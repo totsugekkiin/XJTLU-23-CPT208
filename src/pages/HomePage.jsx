@@ -56,9 +56,12 @@ export function HomePage() {
               [TEAM]
             </a>
           </li>
-          <li>
-            <a href="loc-ar.html" className="nav-item">
-              [AR]
+          <li className="nav-ar-group" aria-label="AR 体验入口">
+            <a href="marker-ar.html" className="nav-item nav-item--ar" aria-label="打开 MindAR 纹样识别">
+              [MINDAR]
+            </a>
+            <a href="loc-ar.html" className="nav-item nav-item--ar" aria-label="打开 Immersal 地图 AR">
+              [IMMERSAL]
             </a>
           </li>
           <li>
