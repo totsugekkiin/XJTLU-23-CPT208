@@ -4,8 +4,6 @@ import { agentDebugLog } from "./agentDebugLog.js";
 import { attachBambooNoticeText } from "./bambooNotice.js";
 import { createPortalTestScene } from "./portalTestScene.js";
 
-const POSITION_LERP = 0.1;
-const POSITION_LERP_DT_SCALE = 0.006;
 const ROTATION_LERP = 0.28;
 const ROTATION_LERP_DT_SCALE = 0.025;
 const REVEAL_DURATION_MS = 720;
@@ -288,14 +286,17 @@ export function createArRenderer(cameraWrap, options = {}) {
       camera.position.copy(targetPos);
       camera.quaternion.copy(targetQuat);
       firstPoseApplied = true;
-    } else if (usesGyroBlend) {
-      const positionStep = Math.min(1, POSITION_LERP_DT_SCALE * dt);
-      const rotationStep = Math.min(1, ROTATION_LERP_DT_SCALE * dt);
-      camera.position.lerp(targetPos, positionStep);
-      camera.quaternion.slerp(targetQuat, rotationStep);
     } else {
-      camera.position.lerp(targetPos, POSITION_LERP);
-      camera.quaternion.slerp(targetQuat, ROTATION_LERP);
+      // Translation has already been filtered by vpsPoseStabilizer. Applying a
+      // second low-pass filter here made real forward/backward motion lag behind
+      // the camera and look as if the anchored model were following the user.
+      camera.position.copy(targetPos);
+      if (usesGyroBlend) {
+        const rotationStep = Math.min(1, ROTATION_LERP_DT_SCALE * dt);
+        camera.quaternion.slerp(targetQuat, rotationStep);
+      } else {
+        camera.quaternion.slerp(targetQuat, ROTATION_LERP);
+      }
     }
 
     if (typeof vFov === "number" && Number.isFinite(vFov) && vFov > 10 && vFov < 120) {

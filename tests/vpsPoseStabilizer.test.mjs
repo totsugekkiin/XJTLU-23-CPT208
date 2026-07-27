@@ -42,7 +42,7 @@ test("rejects an isolated large jump and requires repeated confirmation", () => 
   assert.equal(stabilizer.getPose({ timestamp: 300 }).position.x > 3, true);
 });
 
-test("clamps prediction distance and fades it back to the filtered pose", () => {
+test("clamps prediction distance without returning fully to the stale VPS pose", () => {
   const stabilizer = createVpsPoseStabilizer();
   stabilizer.observe(measurement(1, { x: 0, y: 0, z: 0 }, 0));
 
@@ -50,16 +50,17 @@ test("clamps prediction distance and fades it back to the filtered pose", () => 
     timestamp: 50,
     estimatedPosition: { x: 10, y: 0, z: 0 },
   });
-  const expired = stabilizer.getPose({
-    timestamp: 500,
+  const stale = stabilizer.getPose({
+    timestamp: 1000,
     estimatedPosition: { x: 10, y: 0, z: 0 },
   });
 
-  assert.equal(predicted.position.x <= 0.12, true);
+  assert.equal(predicted.position.x <= 0.2, true);
   assert.equal(predicted.position.x > 0, true);
   assert.equal(predicted.tracking.mode, "bounded-prediction");
-  assert.equal(expired.position.x, 0);
-  assert.equal(expired.tracking.mode, "filtered-hold");
+  assert.equal(stale.position.x > 0, true);
+  assert.equal(stale.position.x < predicted.position.x, true);
+  assert.equal(stale.tracking.mode, "bounded-prediction");
 });
 
 test("does not predict from delayed server localization", () => {
@@ -74,6 +75,26 @@ test("does not predict from delayed server localization", () => {
   assert.equal(pose.position.x, 0);
   assert.equal(pose.tracking.mode, "filtered-hold");
   assert.equal(pose.tracking.source, "server");
+});
+
+test("responds quickly to deliberate sub-meter device translation", () => {
+  const stabilizer = createVpsPoseStabilizer();
+  stabilizer.observe(measurement(1, { x: 0, y: 0, z: 0 }, 0));
+  stabilizer.observe(measurement(2, { x: 0.2, y: 0, z: 0 }, 100));
+
+  const pose = stabilizer.getPose({ timestamp: 100 });
+  assert.equal(pose.position.x > 0.1, true);
+  assert.equal(pose.position.x < 0.2, true);
+});
+
+test("continues damping centimeter-scale stationary noise", () => {
+  const stabilizer = createVpsPoseStabilizer();
+  stabilizer.observe(measurement(1, { x: 0, y: 0, z: 0 }, 0));
+  stabilizer.observe(measurement(2, { x: 0.02, y: 0, z: 0 }, 100));
+
+  const pose = stabilizer.getPose({ timestamp: 100 });
+  assert.equal(pose.position.x > 0, true);
+  assert.equal(pose.position.x < 0.01, true);
 });
 
 test("requires confirmation for a large rotation-only correction", () => {
