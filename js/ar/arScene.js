@@ -591,8 +591,15 @@ export function bootstrapArScene(rootEl) {
     return null;
   }
 
-  function setGuide(state, title, detail, progress = null) {
+  function setGuide(
+    state,
+    title,
+    detail,
+    progress = null,
+    { channel = "localization" } = {},
+  ) {
     if (!guide) return;
+    if (recognitionMode === "marker" && channel !== "marker") return;
     guide.dataset.state = state;
     if (title) guideTitle.textContent = title;
     if (detail) guideDetail.textContent = detail;
@@ -636,6 +643,8 @@ export function bootstrapArScene(rootEl) {
         "recognized",
         "已识别纹理入口",
         "保持纹理边框在画面中，移动手机查看门后的历史场景",
+        null,
+        { channel: "marker" },
       );
     } else {
       arRenderer?.setEnabled?.(true);
@@ -692,6 +701,8 @@ export function bootstrapArScene(rootEl) {
       "lost",
       "纹理暂时离开画面",
       "重新对准纹理边框；若已离开该处，将继续搜索地图区域",
+      null,
+      { channel: "marker" },
     );
   }
 
@@ -706,18 +717,25 @@ export function bootstrapArScene(rootEl) {
           onLost: handleMarkerLost,
           onStatus(status, error) {
             debugState.marker = status;
-            if (recognitionMode === "marker") {
+            if (
+              recognitionMode === "marker" &&
+              markerRecognition?.tracking !== false
+            ) {
               if (status === "portal-loading") {
                 setGuide(
                   "loading",
                   "正在打开历史场景",
                   "首次进入需要加载场景，请保持纹理边框在画面中",
+                  null,
+                  { channel: "marker" },
                 );
               } else if (status === "portal-fallback") {
                 setGuide(
                   "loading",
                   "正在载入备用场景",
                   "当前场景暂时不可用，请稍候",
+                  null,
+                  { channel: "marker" },
                 );
               } else if (
                 status === "portal-ready" ||
@@ -727,6 +745,8 @@ export function bootstrapArScene(rootEl) {
                   "recognized",
                   "已识别纹理入口",
                   "保持纹理边框在画面中，移动手机查看门后的历史场景",
+                  null,
+                  { channel: "marker" },
                 );
               }
             }
@@ -1908,7 +1928,6 @@ export function bootstrapArScene(rootEl) {
             );
           }
         });
-        setGuide("scanning", "正在寻找阊门场景", "请对准建筑，缓慢左右移动手机");
         setDebug({ status: "running (rest)" }, "Immersal REST 测试已启动");
       }
     } catch (err) {

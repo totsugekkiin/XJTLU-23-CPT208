@@ -1,5 +1,6 @@
 import { Camera, toRadians, toDegrees, Quaternion, deviceDetection } from './imUtils.js';
 import { default as trackerPluginModule } from './TrackerPlugin.js';
+import { applyVideoLayout } from './videoLayout.js';
 
 let Module;
 
@@ -286,15 +287,10 @@ class Immersal extends EventTarget {
   #initVideo() {
     console.log(`[IMMERSAL] Video resolution: [${this.camera.width}x${this.camera.height}]`);
     const size = this.#resizeVideo(this.camera.width, this.camera.height, this.container.clientWidth, this.container.clientHeight);
-    this.camera.el.style.width = size.width + "px";
-    this.camera.el.style.height = size.height + "px";
-    this.camera.el.width = size.width;
-    this.camera.el.height = size.height;
-
-    if (typeof BABYLON !== "undefined") {
-      this.camera.el.style.left = size.x + "px";
-      this.camera.el.style.top = size.y + "px";
-    }
+    applyVideoLayout(this.camera.el, size, {
+      ownsCamera: this.ownsCamera,
+      positionElement: typeof BABYLON !== "undefined",
+    });
 
     this.#resetLocalization();
     console.log(`[IMMERSAL] Video resized`);
