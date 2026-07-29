@@ -196,6 +196,14 @@ export function bootstrapArScene(rootEl) {
   const preloadProgressBar = rootEl.querySelector("#ar-preload-progress-bar");
   const story = rootEl.querySelector("#ar-story");
   const storyClose = rootEl.querySelector("#ar-story-close");
+  const dynastySwitcher = rootEl.querySelector("#ar-dynasty-switcher");
+  const dynastyButtons = Array.from(
+    rootEl.querySelectorAll("#ar-dynasty-switcher [data-scene]"),
+  );
+  const dynastyTransition = rootEl.querySelector("#ar-dynasty-transition");
+  const dynastyTransitionTitle = rootEl.querySelector(
+    "#ar-dynasty-transition-title",
+  );
   const debugEls = {
     status: rootEl.querySelector("#ar-debug-status"),
     map: rootEl.querySelector("#ar-debug-map"),
@@ -286,6 +294,7 @@ export function bootstrapArScene(rootEl) {
   let markerRecognition = null;
   let markerStartPromise = null;
   let markerLostTimer = null;
+  let dynastySwitching = false;
   let sharedImmersalCamera = null;
   let recognitionMode = "scanning";
   let disposed = false;
@@ -295,6 +304,7 @@ export function bootstrapArScene(rootEl) {
   const mapDownloadPromises = new Map();
   const mapDownloadControllers = new Map();
   const poseStabilizer = createVpsPoseStabilizer();
+  const dynastyClickHandlers = new Map();
 
   const debugState = {
     status: "idle",
@@ -612,6 +622,113 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
+  function wait(milliseconds) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+  }
+
+  function currentDynastyId() {
+    return (
+      markerRecognition?.currentScene?.id ||
+      params.get("scene") ||
+      params.get("dynasty") ||
+      "song"
+    );
+  }
+
+  function updateDynastyControls(sceneId = currentDynastyId()) {
+    const controlsDisabled = !markerRecognition || dynastySwitching || disposed;
+    dynastySwitcher?.setAttribute(
+      "aria-busy",
+      controlsDisabled ? "true" : "false",
+    );
+    dynastyButtons.forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        button.dataset.scene === sceneId ? "true" : "false",
+      );
+      button.disabled = controlsDisabled;
+    });
+  }
+
+  function showDynastyTransition(label) {
+    if (!dynastyTransition) return;
+    if (dynastyTransitionTitle) {
+      dynastyTransitionTitle.textContent = `正在前往${label}`;
+    }
+    dynastyTransition.classList.remove("is-revealing");
+    dynastyTransition.classList.add("is-active");
+    dynastyTransition.setAttribute("aria-hidden", "false");
+  }
+
+  async function hideDynastyTransition(reducedMotion = false) {
+    if (!dynastyTransition) return;
+    dynastyTransition.classList.add("is-revealing");
+    await wait(reducedMotion ? 20 : 430);
+    dynastyTransition.classList.remove("is-active", "is-revealing");
+    dynastyTransition.setAttribute("aria-hidden", "true");
+  }
+
+  async function switchDynasty(sceneId) {
+    if (
+      disposed ||
+      dynastySwitching ||
+      !markerRecognition ||
+      markerRecognition.currentScene?.id === sceneId
+    ) {
+      return;
+    }
+
+    const button = dynastyButtons.find(
+      (candidate) => candidate.dataset.scene === sceneId,
+    );
+    const label = button?.textContent?.trim() || "历史场景";
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    dynastySwitching = true;
+    updateDynastyControls();
+    showDynastyTransition(label);
+    setGuide(
+      "loading",
+      `正在前往${label}`,
+      "正在更换门后的历史场景，请保持纹理边框在画面中",
+      null,
+      { channel: "marker" },
+    );
+
+    try {
+      await wait(reducedMotion ? 20 : 440);
+      if (disposed) return;
+      const minimumDisplay = wait(reducedMotion ? 20 : 560);
+      const result = await markerRecognition.switchScene(sceneId);
+      await minimumDisplay;
+      updateDynastyControls(result.profile.id);
+      if (markerRecognition.tracking) {
+        setGuide(
+          "recognized",
+          `已切换至${result.profile.label}`,
+          "保持纹理边框在画面中，移动手机查看门后的历史场景",
+          null,
+          { channel: "marker" },
+        );
+      }
+    } catch (error) {
+      logDebug("历史场景切换失败", error?.message || String(error));
+      setGuide(
+        "lost",
+        "历史场景切换失败",
+        "请检查网络后重新选择朝代",
+        null,
+        { channel: "marker" },
+      );
+    } finally {
+      await hideDynastyTransition(reducedMotion);
+      dynastySwitching = false;
+      updateDynastyControls();
+    }
+  }
+
   function setSdkRecognitionPaused(paused) {
     if (!sdkSession) return;
     const shouldRun = !paused;
@@ -715,7 +832,7 @@ export function bootstrapArScene(rootEl) {
           video,
           onFound: handleMarkerFound,
           onLost: handleMarkerLost,
-          onStatus(status, error) {
+          onStatus(status, error, detail) {
             debugState.marker = status;
             if (
               recognitionMode === "marker" &&
@@ -753,6 +870,9 @@ export function bootstrapArScene(rootEl) {
             if (error) {
               logDebug("MindAR 纹理模式异常", error?.message || String(error));
             } else {
+              if (detail?.profile?.id) {
+                updateDynastyControls(detail.profile.id);
+              }
               updateDebugPanel();
             }
           },
@@ -761,6 +881,7 @@ export function bootstrapArScene(rootEl) {
       .then((session) => {
         markerRecognition = session;
         debugState.marker = "scanning";
+        updateDynastyControls(session.currentScene?.id);
         if (recognitionMode === "map") session.pause();
         updateDebugPanel();
         return session;
@@ -2033,6 +2154,14 @@ export function bootstrapArScene(rootEl) {
   });
 
   storyClose?.addEventListener("click", closeStory);
+  dynastyButtons.forEach((button) => {
+    const handler = () => {
+      void switchDynasty(button.dataset.scene);
+    };
+    dynastyClickHandlers.set(button, handler);
+    button.addEventListener("click", handler);
+  });
+  updateDynastyControls();
   startBtn.addEventListener("click", startExperience);
   setDebug({ mapId: activeMapLabel, activeMapIds });
   updatePreloadUi();
@@ -2056,6 +2185,10 @@ export function bootstrapArScene(rootEl) {
     if (mapSelect && mapSelectChangeHandler) {
       mapSelect.removeEventListener("change", mapSelectChangeHandler);
     }
+    dynastyClickHandlers.forEach((handler, button) => {
+      button.removeEventListener("click", handler);
+    });
+    dynastyClickHandlers.clear();
     markerRecognition?.dispose();
     markerRecognition = null;
     markerStartPromise = null;

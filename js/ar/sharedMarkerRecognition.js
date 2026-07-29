@@ -82,17 +82,12 @@ function waitForScene(scene) {
   });
 }
 
-function resolvePortalConfig() {
-  const params = new URLSearchParams(window.location.search);
-  const requestedScene =
-    params.get("scene") ||
-    params.get("dynasty") ||
-    DEFAULT_PORTAL_SCENE_ID;
+export function resolveSharedPortalConfig(
+  requestedScene = DEFAULT_PORTAL_SCENE_ID,
+  savedConfig = null,
+) {
   const profile = getPortalScene(requestedScene);
-  const saved =
-    profile.id === DEFAULT_PORTAL_SCENE_ID
-      ? readPortalRuntimeConfig()
-      : null;
+  const saved = profile.id === DEFAULT_PORTAL_SCENE_ID ? savedConfig : null;
   const view = profile.view ?? saved?.view ?? PORTAL_VIEW_PRESET;
   const crop = profile.crop ?? saved?.crop ?? PORTAL_CROP_BOX;
   return {
@@ -104,6 +99,18 @@ function resolvePortalConfig() {
       portalFrameFov(view.fov),
     ),
   };
+}
+
+function resolvePortalConfig() {
+  const params = new URLSearchParams(window.location.search);
+  const requestedScene =
+    params.get("scene") ||
+    params.get("dynasty") ||
+    DEFAULT_PORTAL_SCENE_ID;
+  return resolveSharedPortalConfig(
+    requestedScene,
+    readPortalRuntimeConfig(),
+  );
 }
 
 function updateMarkerProjection(scene, controller, video) {
@@ -176,7 +183,7 @@ export async function createSharedMarkerRecognition({
   registerPortalOcclusionTest();
 
   const THREE = window.AFRAME.THREE;
-  const portalConfig = resolvePortalConfig();
+  let portalConfig = resolvePortalConfig();
   const invisibleMatrix = new THREE.Matrix4().set(
     0, 0, 0, 0,
     0, 0, 0, 0,
@@ -194,6 +201,8 @@ export async function createSharedMarkerRecognition({
   let postMatrix = null;
   let portalRenderer = null;
   let portalPromise = null;
+  let portalRendererGeneration = 0;
+  let portalSwitching = false;
 
   const applyFallbackConfig = (loadModel = false) => {
     const { view } = portalConfig;
@@ -247,9 +256,17 @@ export async function createSharedMarkerRecognition({
     },
   });
 
-  const handlePortalLoading = () => onStatus?.("portal-loading");
-  const handlePortalLoaded = () => onStatus?.("portal-ready");
+  const isCurrentPortalEvent = (event) =>
+    !event.detail?.url ||
+    event.detail.url === portalConfig.profile.runtime.url;
+  const handlePortalLoading = (event) => {
+    if (isCurrentPortalEvent(event)) onStatus?.("portal-loading");
+  };
+  const handlePortalLoaded = (event) => {
+    if (isCurrentPortalEvent(event)) onStatus?.("portal-ready");
+  };
   const handlePortalError = (event) => {
+    if (!isCurrentPortalEvent(event)) return;
     applyFallbackConfig(true);
     onStatus?.(
       "portal-fallback",
@@ -271,11 +288,13 @@ export async function createSharedMarkerRecognition({
 
   const ensurePortal = () => {
     if (portalPromise) return portalPromise;
-    const { profile, view, crop, portalFov } = portalConfig;
+    const config = portalConfig;
+    const generation = portalRendererGeneration;
+    const { profile, view, crop, portalFov } = config;
     portalPromise = import("./gaussianPortalRenderer.js")
       .then(({ createGaussianPortalRenderer }) => {
-        if (destroyed) return null;
-        portalRenderer = createGaussianPortalRenderer({
+        if (destroyed || generation !== portalRendererGeneration) return null;
+        const renderer = createGaussianPortalRenderer({
           scene,
           target,
           video,
@@ -291,17 +310,96 @@ export async function createSharedMarkerRecognition({
             id: profile.id,
           },
         });
-        portalRenderer.setOcclusion(true);
-        portalRenderer.setDirection(-1);
-        portalRenderer.setTracking(tracking);
-        return portalRenderer;
+        if (destroyed || generation !== portalRendererGeneration) {
+          renderer.destroy();
+          return null;
+        }
+        portalRenderer = renderer;
+        renderer.setOcclusion(true);
+        renderer.setDirection(-1);
+        renderer.setTracking(tracking);
+        return renderer;
       })
       .catch((error) => {
+        if (destroyed || generation !== portalRendererGeneration) return null;
         applyFallbackConfig(true);
         onStatus?.("portal-fallback", error);
         return null;
       });
     return portalPromise;
+  };
+
+  const waitForPortalResult = (url, timeout = 2800) =>
+    new Promise((resolve) => {
+      let settled = false;
+      const finish = (outcome) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        target.removeEventListener("gaussian-portal-loaded", handleLoaded);
+        target.removeEventListener("gaussian-portal-error", handleError);
+        resolve(outcome);
+      };
+      const handleLoaded = (event) => {
+        if (event.detail?.url === url) finish("loaded");
+      };
+      const handleError = (event) => {
+        if (!event.detail?.url || event.detail.url === url) finish("error");
+      };
+      const timeoutId = window.setTimeout(() => finish("timeout"), timeout);
+      target.addEventListener("gaussian-portal-loaded", handleLoaded);
+      target.addEventListener("gaussian-portal-error", handleError);
+    });
+
+  const switchScene = async (sceneId) => {
+    const nextConfig = resolveSharedPortalConfig(
+      sceneId,
+      readPortalRuntimeConfig(),
+    );
+    if (
+      destroyed ||
+      portalSwitching ||
+      nextConfig.profile.id === portalConfig.profile.id
+    ) {
+      return {
+        profile: portalConfig.profile,
+        outcome: "unchanged",
+      };
+    }
+
+    portalSwitching = true;
+    onStatus?.("portal-switching", null, {
+      profile: nextConfig.profile,
+    });
+    try {
+      portalRendererGeneration += 1;
+      portalRenderer?.destroy();
+      portalRenderer = null;
+      portalPromise = null;
+      portalConfig = nextConfig;
+      applyFallbackConfig(false);
+
+      const url = new URL(window.location.href);
+      url.searchParams.set("scene", portalConfig.profile.id);
+      url.searchParams.delete("dynasty");
+      window.history.replaceState(null, "", url);
+
+      const portalResult = waitForPortalResult(
+        portalConfig.profile.runtime.url,
+      );
+      await ensurePortal();
+      const outcome = await portalResult;
+      onStatus?.("portal-scene-changed", null, {
+        profile: portalConfig.profile,
+        outcome,
+      });
+      return {
+        profile: portalConfig.profile,
+        outcome,
+      };
+    } finally {
+      portalSwitching = false;
+    }
   };
 
   const controller = new window.MINDAR.IMAGE.Controller({
@@ -381,6 +479,13 @@ export async function createSharedMarkerRecognition({
     get tracking() {
       return tracking;
     },
+    get currentScene() {
+      return portalConfig.profile;
+    },
+    get switchingScene() {
+      return portalSwitching;
+    },
+    switchScene,
     pause() {
       if (destroyed || paused) return;
       paused = true;
@@ -405,6 +510,7 @@ export async function createSharedMarkerRecognition({
     dispose() {
       if (destroyed) return;
       destroyed = true;
+      portalRendererGeneration += 1;
       trackingLossGuard.cancel();
       window.removeEventListener("resize", resize);
       window.removeEventListener("orientationchange", resize);

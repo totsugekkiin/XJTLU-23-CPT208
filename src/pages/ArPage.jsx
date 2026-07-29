@@ -97,6 +97,25 @@ export function ArPage() {
           <p id="ar-error-msg" />
         </div>
 
+        <div
+          id="ar-dynasty-switcher"
+          className="ar-dynasty-switcher"
+          role="group"
+          aria-label="切换历史朝代"
+          aria-busy="true"
+        >
+          <span className="ar-dynasty-switcher__label">时境</span>
+          <button type="button" data-scene="song" aria-pressed="true" disabled>
+            宋朝
+          </button>
+          <button type="button" data-scene="ming" aria-pressed="false" disabled>
+            明朝
+          </button>
+          <button type="button" data-scene="qing" aria-pressed="false" disabled>
+            清朝
+          </button>
+        </div>
+
         <section id="ar-guide" className="is-hidden" data-state="scanning" aria-live="polite">
           <div className="ar-reticle" aria-hidden="true">
             <i /><i /><i /><i />
@@ -224,6 +243,19 @@ export function ArPage() {
           </div>
           <ol id="ar-debug-log" className="ar-debug__log" />
           </div>
+        </div>
+      </div>
+
+      <div
+        id="ar-dynasty-transition"
+        className="ar-dynasty-transition"
+        aria-hidden="true"
+      >
+        <div className="ar-dynasty-transition__wash" />
+        <div className="ar-dynasty-transition__content">
+          <span>移步 · 换景</span>
+          <strong id="ar-dynasty-transition-title">正在前往宋朝</strong>
+          <i aria-hidden="true">阊</i>
         </div>
       </div>
 
