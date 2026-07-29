@@ -53,8 +53,8 @@ export const PORTAL_SCENES = Object.freeze({
     }),
     runtime: Object.freeze({
       url: "/models/changgate-ming-cropped.sog",
-      gaussians: 604979,
-      megabytes: 6.8,
+      gaussians: 196841,
+      megabytes: 2.3,
       bounds: Object.freeze({
         min: Object.freeze([-58.7, -22.153, -9.078]),
         max: Object.freeze([-0.9, 20.753, 33.943]),

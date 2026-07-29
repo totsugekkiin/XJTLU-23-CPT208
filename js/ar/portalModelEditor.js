@@ -377,7 +377,22 @@ function cropExceedsRuntimeAsset(bounds = cropBounds()) {
 }
 
 function buildCropCommand() {
-  const bounds = cropBounds();
+  const editorBounds = cropBounds();
+  // SOG files use the PLY convention inside splat-transform: a pending 180°
+  // rotation around Z. The PlayCanvas editor exposes the stored scan
+  // coordinates, so map its AABB before passing it to the CLI.
+  const bounds = {
+    min: [
+      -editorBounds.max[0],
+      -editorBounds.max[1],
+      editorBounds.min[2],
+    ],
+    max: [
+      -editorBounds.min[0],
+      -editorBounds.min[1],
+      editorBounds.max[2],
+    ],
+  };
   const precision = 1000;
   const values = [
     ...bounds.min.map(
