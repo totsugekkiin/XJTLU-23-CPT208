@@ -1,24 +1,3 @@
-# AppMain 相关用户提示词（尽量全量）
-
-- **条数**：177（主会话 transcript 去重后；**`subagents/`** 子代理会话未合并进本次扫描**）。
-- **机器可读全文**：`ailog/appmain-code-prompts-full.json`（含长 HTML / 计划附件节选等未删节副本）。
-- **本文件**：同批数据的阅读版；整页_demo HTML 或超长条文在下方用摘要表示，请到 JSON 核对原文。
-
-
----
-
-### 001 · `017fc16a…` · 017fc16a-a0f0-4e29-bb1c-2b1d4480605d
-
-胶片环节手机端有一个问题是容易卡住不动或者划一下就转的飞快，有什么方法可以防止
-
-### 002 · `0554bab5…` · 0554bab5-42d5-45b7-840f-df2fcd8e955d
-
-我希望能给胶片添加一点点弧度，产生像镜头外一个点为中心轻微微弯曲的效果
-
-### 003 · `0554bab5…` · 0554bab5-42d5-45b7-840f-df2fcd8e955d
-
-[长内容·整页 HTML] 约 12150 字符；尾部：…year.style.bottom = '15px'; } year.style.animationDelay = `${(Math.random() * 2).toFixed(2)}s`; }); }); </script> </body> </html>请你按照这个代码实现倾斜
-→ 全文见「appmain-code-prompts-full.json」条目 #3
 
 ### 004 · `075590fe…` · 075590fe-77fe-4f47-88b3-f9f4caf65184
 
@@ -181,7 +160,7 @@ appmain手机运行会卡顿
 
 ### 032 · `2d3e1a16…` · 2d3e1a16-58c0-4143-9d90-359b06d44bcb
 
-你直接在这个中间段之前把河流截止不行吗？做不做得到
+你直接在这个中间段之前把河流截止不行吗
 
 ### 033 · `2d3e1a16…` · 2d3e1a16-58c0-4143-9d90-359b06d44bcb
 
@@ -193,7 +172,7 @@ appmain手机运行会卡顿
 
 ### 035 · `2fb61f8a…` · 2fb61f8a-caf4-4867-b6dc-d48cd61475a0
 
-你他妈给我胶片展示环节删了，恢复回来
+你给我胶片展示环节删了，恢复回来
 
 ### 036 · `3bce79e0…` · 3bce79e0-ea6a-49c9-9cb1-3a6785733763
 
@@ -263,7 +242,7 @@ REFINE → first-visit tooltip + pulsing ring on the pet总结一下根据这三
 
 我希望在卡片展示完后实现一个基于页面滚动的“穿透式”缩放转场效果。
 图片已经放在images\gate\gate.png
-【图层准备】
+
 
 前景图层（Z-index较高）： 一张城门插画（PNG/SVG格式），门洞区域为透明背景。
 
@@ -285,64 +264,6 @@ REFINE → first-visit tooltip + pulsing ring on the pet总结一下根据这三
 
 输出地图界面的代码给我
 
-### 046 · `46984e51…` · 46984e51-a88d-4676-b233-99e48d6af1bf
-
-4 papers
-1. 王心言. 历史文化遗产的媒介记忆重构与数字传播创新研究——以河南殷商文化遗产为例[J]. 商丘师范学院学报, 2025, 41(8): 102–108.
-
-2. 徐海军. 历史文化遗产的当代叙事：保护、传承与创新——基于中国文化报宣传报道实践的思考[J]. 中国记者, 2025(7): 37–40.
-
-3. 苏州古城墙系列工程[J]. 风景园林, 2022(S1): 147–149.
-
-4. 张胜美. 城市触媒理论引导下阊门历史文化街区保护与更新[J]. 山西建筑, 2024(2): 79–81.
-
-4 commercial products
-1. 苏州博物馆网页https://www.szmuseum.com/
-2. 苏州园林下属管理的拙政园 https://web.lotsmall.cn/index?m_id=1939
-3. 苏州运河十景 枫桥夜泊简介 苏州职业技术大学大运河（江苏段）文旅融合基地制作https://yhsj.jssvc.edu.cn/fengqiaoyebo/fengqiaoyebojianjie/
-4. 山塘街相关介绍 个人简历网 https://www.gerenjianli.com/area/suzhou/014rcplc.htm
-孙大圣旅游网 https://www.sds-vr.com/show/358
-
-Based on our review of academic research and existing heritage-related websites, we found that current heritage communication already provides useful foundations, but still lacks a playful, user-centred, and immersive way to help visitors understand Chang Gate.
-
-Academic research shows that digital heritage should not only preserve information, but also connect virtual space with real historical sites, upgrade static explanation into immersive storytelling, and encourage users to become active participants instead of passive viewers. However, existing digital heritage projects often still focus on storing or displaying cultural materials, while weaker areas include narrative design, audience interaction, and recognizable cultural IP.
-
-Research on contemporary heritage communication also emphasizes t
-…（后 1313 字略）→ JSON #46
-
-### 047 · `46984e51…` · 46984e51-a88d-4676-b233-99e48d6af1bf
-
-3 Things They Did Well
-
-1. Strong heritage restoration and spatial planning
-Existing projects, especially the Suzhou Ancient City Wall restoration work, show that physical heritage can be repaired and planned together with surrounding landscapes, walking routes, riverside spaces, and viewing points. This helps visitors feel the historical atmosphere of the city more directly.
-
-2. Rich historical and cultural content
-Some existing websites provide comprehensive background information. For example, the Fengqiao Night Mooring website includes history, poetry, cultural stories, maps, and local canal-related content. Suzhou Museum also organizes its collections into categories and provides digital collection displays.
-
-3. Use of digital and visual presentation methods
-Existing products already experiment with digital formats such as VR tours, panoramic viewing, 3D collection displays, and online heritage introductions. These methods make cultural sites more accessible beyond the physical visit and offer useful references for our own web-based design.
-
-3 Things They Missed
-
-1. The experience is often text-heavy and not interactive enough
-Many heritage websites explain history through long blocks of text. This may be useful for professional or highly interested audiences, but for casual tourists it can feel difficult to read, especially during or after a short offline visit. The infor
-…（后 8230 字略）→ JSON #47
-
-### 048 · `46984e51…` · 46984e51-a88d-4676-b233-99e48d6af1bf
-
-3.2 Design Alternatives
-
-1. Section-Based Display
-Divide the website into clear sections, such as old photos, historical materials, and visitor information.
-
-2. Embedded 3D Architectural Model
-The website would include a 3D model of Chang Gate or its historical structures, allowing users to rotate and view the building from different angles.
-
-3. Mobile-Friendly Storytelling Experience
-The website would present Chang Gate’s history through a scroll-based storytelling format, combining timeline, images, short text, characters, and interactive elements.
-
-### 049 · `47cb1be0…` · 47cb1be0-7344-4244-a517-65134f4e5fdc
 
 角色设定】
 你现在是一位精通现代 UI/UX 设计和高级前端动画交互（特别是 GSAP）的资深前端工程师兼动效设计师。
@@ -379,12 +300,11 @@ The website would present Chang Gate’s history through a scroll-based storytel
 
 ### 050 · `48fe643f…` · 48fe643f-32d3-48d9-bbe9-00b4e0677d92
 
-核心问题：3D 渲染空间的“降维打击”
 在你的 HTML 结构中，层级是这样的：
 
 .cm-mask-bottom (设置了 perspective: 1200px;，这是 3D 镜头)
 
-↳ .cm-filmstrip (这是罪魁祸首，普通的 2D 容器)
+↳ .cm-filmstrip 
 
   ↳ .cm-filmstrip__track (设置了 transform-style: preserve-3d;)
 
@@ -403,13 +323,13 @@ CSS
   inset: 0;
   display: flex;
   align-items: center;
-  /* ❌ 删除这一行：overflow: hidden 会强制切断/拍扁 3D 空间 */
+  /* 删除这一行：overflow: hidden 会强制切断/拍扁 3D 空间 */
   /* overflow: hidden; */ 
   
   z-index: 2;
   pointer-events: none;
   
-  /* ✅ 新增这一行：允许 3D 属性穿透这个中间层 */
+  /*  新增这一行：允许 3D 属性穿透这个中间层 */
   transform-style: preserve-3d; 
 }
 另外一个小细节建议：
@@ -483,7 +403,7 @@ CSS
 
 ### 064 · `717c308f…` · 717c308f-5182-49cd-ad0c-6cb8ebdd7334
 
-他妈的，为什么会贴在胶片环节后
+为什么会贴在胶片环节后
 
 ### 065 · `717c308f…` · 717c308f-5182-49cd-ad0c-6cb8ebdd7334
 
@@ -555,7 +475,7 @@ UI 视觉描述：
 
 必须引入 GSAP 核心库及其 ScrollTrigger 插件（请使用 CDN 链接）。
 
-（可选但推荐）引入 Lenis 实现平滑滚动体验。
+引入 Lenis 实现平滑滚动体验。
 
 代码需包含必要的 CSS 基础样式，保证能够直接复制到本地在浏览器中预览完整效果。请详细注释 ScrollTrigger 的配置项（如 start, end, scrub, pin）。
 
@@ -1457,46 +1377,8 @@ jsonp_66196_1778170350275_({
                         "as
 …（后 1723 字略）→ JSON #147
 
-### 148 · `e3a0dfa4…` · e3a0dfa4-5520-4f78-83fc-5ce1b2ae0e7a
 
-VM78:1 Uncaught TypeError: Cannot read properties of undefined (reading 'name')
-value	@	VM78:1
-eval	@	VM78:1
-(匿名)	@	maps?v=2.0&key=a8729…11d7b0fd190f52632:1
-JSONP.window.<computed>	@	maps?v=2.0&key=a8729…11d7b0fd190f52632:1
-(匿名)	@	walking?platform=JS&…96_1778171473740_:1
-PendingScript		
-JSONP	@	maps?v=2.0&key=a8729…11d7b0fd190f52632:1
-tr.get	@	maps?v=2.0&key=a8729…11d7b0fd190f52632:1
-value	@	VM78:1
-value	@	VM78:1
-M	@	RouteSection-DX78c6Cx.js:1
-onClick	@	RouteSection-DX78c6Cx.js:308
-Df	@	client-BcnoSzQY.js:37
-Ff	@	client-BcnoSzQY.js:37
-jf	@	client-BcnoSzQY.js:37
-oi	@	client-BcnoSzQY.js:37
-Ys	@	client-BcnoSzQY.js:37
-(匿名)	@	client-BcnoSzQY.js:37
-_o	@	client-BcnoSzQY.js:40
-ys	@	client-BcnoSzQY.js:37
-Ol	@	client-BcnoSzQY.js:37
-Zu	@	client-BcnoSzQY.js:37
-bf	@	client-BcnoSzQY.js:37
-﻿
-这个报错是关于地图的
 
-### 149 · `e3a0dfa4…` · e3a0dfa4-5520-4f78-83fc-5ce1b2ae0e7a
-
-为什么现在胶片环节下面有地图页面，不应该有
-
-### 150 · `e7e91df5…` · e7e91df5-5835-48a0-9303-c85afc47c021
-
-https://changgate-27rv0fisf-totsugekkiins-projects.vercel.app/map.html 像中国？
-
-### 151 · `e7e91df5…` · e7e91df5-5835-48a0-9303-c85afc47c021
-
-https://changgate-27rv0fisf-totsugekkiins-projects.vercel.app/map.html 这个是实际打开的域名吗
 
 ### 152 · `e82c1fee…` · e82c1fee-c88e-42c3-bbac-de4c2fb8783d
 

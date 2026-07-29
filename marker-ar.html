@@ -25,6 +25,19 @@
       <span>后退一点，让纹样外框接近此大小</span>
     </div>
 
+    <div
+      id="dynasty-transition"
+      class="dynasty-transition"
+      aria-hidden="true"
+    >
+      <div class="dynasty-transition__wash"></div>
+      <div class="dynasty-transition__content">
+        <span>移步 · 换景</span>
+        <strong id="dynasty-transition-title">正在前往宋朝</strong>
+        <i aria-hidden="true">阊</i>
+      </div>
+    </div>
+
     <div class="marker-test-ui" aria-live="polite">
       <div class="marker-test-card">
         <span id="marker-status-dot" class="marker-status-dot"></span>
@@ -32,6 +45,17 @@
           <strong id="marker-status">正在启动相机…</strong>
           <small id="marker-detail">请将四边纹样完整放入画面</small>
         </div>
+      </div>
+      <div
+        id="dynasty-switcher"
+        class="dynasty-switcher"
+        role="group"
+        aria-label="切换时空场景"
+      >
+        <span class="dynasty-switcher__label">时境</span>
+        <button type="button" data-scene="song" aria-pressed="true">宋朝</button>
+        <button type="button" data-scene="ming" aria-pressed="false">明朝</button>
+        <button type="button" data-scene="qing" aria-pressed="false">清朝</button>
       </div>
       <div class="marker-test-actions">
         <a href="/print/changgate-portal-marker-border-only-a3.pdf" download>下载A3标记</a>

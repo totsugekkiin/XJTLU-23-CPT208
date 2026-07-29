@@ -34,11 +34,11 @@ a {
   touch-action: none;
   background:
     radial-gradient(circle at 50% 45%, #53605a, #222521 58%, #111 100%);
-  cursor: grab;
+  cursor: default;
 }
 
 .panorama-stage.is-dragging {
-  cursor: grabbing;
+  cursor: move;
 }
 
 .splat-viewport {
@@ -252,8 +252,8 @@ a {
   z-index: 8;
   left: 20px;
   bottom: 20px;
-  width: 365px;
-  padding: 14px;
+  width: 560px;
+  padding: 10px 12px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 14px;
   background:
@@ -261,6 +261,33 @@ a {
   box-shadow: 0 14px 38px rgb(0 0 0 / 34%);
   backdrop-filter: blur(14px);
   user-select: none;
+}
+
+.viewport-controls-title {
+  display: block;
+  margin-bottom: 5px;
+  color: #dfc495;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.viewport-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 10px;
+}
+
+.viewport-control-grid span {
+  color: rgb(255 255 255 / 68%);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.viewport-control-grid i {
+  display: block;
+  color: #fff;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .control-row {
@@ -315,7 +342,7 @@ kbd.is-active {
 }
 
 .control-note {
-  margin-top: 8px;
+  margin-top: 5px;
   color: rgb(255 255 255 / 48%);
   font-size: 11px;
 }
@@ -339,7 +366,7 @@ kbd.is-active {
   z-index: 8;
   top: 116px;
   right: 20px;
-  width: 292px;
+  width: 330px;
   padding: 14px 16px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 14px;
@@ -433,8 +460,78 @@ kbd.is-active {
   box-shadow: 0 0 0 2px rgb(72 201 250 / 13%);
 }
 
-.crop-actions {
+.crop-rotation {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(98 213 255 / 16%);
+}
+
+.crop-rotation__heading {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+
+.crop-rotation__heading strong {
+  color: rgb(229 248 255 / 88%);
+  font-size: 11px;
+}
+
+.crop-rotation__heading small,
+.crop-shortcuts {
+  color: rgb(255 255 255 / 44%);
+  font-size: 9px;
+}
+
+.crop-rotation label {
+  display: grid;
+  grid-template-columns: 44px 1fr 58px;
+  align-items: center;
+  gap: 7px;
+  min-height: 29px;
+}
+
+.crop-rotation label b {
+  color: #62d5ff;
+  font-size: 10px;
+}
+
+.crop-rotation input[type="range"] {
+  width: 100%;
+  accent-color: #62d5ff;
+  cursor: ew-resize;
+}
+
+.crop-rotation input[type="number"] {
+  width: 58px;
+  height: 25px;
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 6px;
+  outline: none;
+  color: #e9f9ff;
+  background: rgb(0 0 0 / 24%);
+  font: inherit;
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.crop-rotation input[type="number"]:focus {
+  border-color: #48c9fa;
+  box-shadow: 0 0 0 2px rgb(72 201 250 / 13%);
+}
+
+.crop-shortcuts {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.crop-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   margin-top: 10px;
 }
@@ -452,7 +549,7 @@ kbd.is-active {
 }
 
 .crop-actions button.is-primary {
-  margin-left: auto;
+  grid-column: 1 / -1;
   color: #071a21;
   border-color: #62d5ff;
   background: #62d5ff;
@@ -477,7 +574,7 @@ kbd.is-active {
   letter-spacing: 0.12em;
 }
 
-.camera-hud label {
+.camera-hud > label {
   display: grid;
   grid-template-columns: 38px 1fr 46px;
   align-items: center;
@@ -485,25 +582,81 @@ kbd.is-active {
   margin-top: 11px;
 }
 
-.camera-hud b,
-.camera-hud output {
+.camera-hud > label b,
+.camera-hud > label output {
   font-size: 11px;
   font-weight: 500;
 }
 
-.camera-hud b {
+.camera-hud > label b {
   color: rgb(255 255 255 / 50%);
 }
 
-.camera-hud output {
+.camera-hud > label output {
   color: rgb(255 255 255 / 84%);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.camera-hud input {
+.camera-hud > label input {
   width: 100%;
   accent-color: #e4c087;
+}
+
+.camera-transform-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.camera-transform-fields label {
+  display: grid;
+  gap: 4px;
+}
+
+.camera-transform-fields b {
+  color: rgb(255 255 255 / 50%);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.camera-transform-fields input {
+  width: 100%;
+  height: 29px;
+  padding: 0 7px;
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 7px;
+  outline: none;
+  color: rgb(255 255 255 / 88%);
+  background: rgb(0 0 0 / 24%);
+  font: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.camera-transform-fields input:focus {
+  border-color: #e4c087;
+  box-shadow: 0 0 0 2px rgb(228 192 135 / 14%);
+}
+
+.camera-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.camera-actions button {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  color: rgb(255 255 255 / 76%);
+  background: rgb(255 255 255 / 7%);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
 }
 
 .pose-hud > span {

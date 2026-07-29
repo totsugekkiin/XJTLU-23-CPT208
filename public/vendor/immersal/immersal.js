@@ -227,12 +227,16 @@ class Immersal extends EventTarget {
             console.log(`[IMMERSAL] PosePlugin init`);
             this.#locWorker.postMessage({type: "ValidateUser", data: params.developerToken});
 
-            Camera.Initialize(this.#mediaConstraints)
-              .then(camera => onCameraReady(camera))
-              .catch(error => {
-                console.log(`[IMMERSAL] Camera error: ${error}`);
-                reject(error);
-              });
+            if (params.camera?.el) {
+              onCameraReady(params.camera);
+            } else {
+              Camera.Initialize(this.#mediaConstraints)
+                .then(camera => onCameraReady(camera))
+                .catch(error => {
+                  console.log(`[IMMERSAL] Camera error: ${error}`);
+                  reject(error);
+                });
+            }
           }
         }, {once: true});
         this.#locWorker.addEventListener("error", (e) => {
@@ -257,12 +261,14 @@ class Immersal extends EventTarget {
       solverType,
       imageDownScale,
       mapSwitchConfirmations,
+      ownsCamera = true,
     } = params
     
     this.#addEventListeners();
 
     this.container = container;
     this.camera = camera;
+    this.ownsCamera = ownsCamera !== false;
     this.deviceData = deviceData;
     this.developerToken = developerToken;
     this.mapIds = mapIds;
@@ -381,6 +387,14 @@ class Immersal extends EventTarget {
   #resetCamera() {
     if (!this.camera) return;
 
+    if (!this.ownsCamera) {
+      this.camera.width = this.camera.el.videoWidth || this.camera.width;
+      this.camera.height = this.camera.el.videoHeight || this.camera.height;
+      this.localization.localizing = false;
+      this.#initVideo();
+      return;
+    }
+
     const constraints = this.#getMediaConstraints();
 
     this.camera.dispose();
@@ -492,57 +506,85 @@ class Immersal extends EventTarget {
     return pose;
   }
 
-  loadMap(mapId) {
+  loadMap(mapId, preloadedData = null) {
     return new Promise((resolve, reject) => {
-      try {
-        Immersal.#locWorker.addEventListener("message", (e) => {
-          const {type, data} = e.data;
+      let settled = false;
+      const cleanup = () => {
+        Immersal.#locWorker.removeEventListener("message", handleMessage);
+        Immersal.#locWorker.removeEventListener("error", handleError);
+      };
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const succeed = (mapHandle) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(mapHandle);
+      };
+      const handleError = (event) => fail(event);
+      const handleMessage = (e) => {
+        const {type, data} = e.data;
+        // Other worker responses can arrive while maps are added in the
+        // background. Keep listening until this operation gets LoadMap.
+        if (type !== "LoadMap") return;
 
-          if (type === "LoadMap") {
-            const mapHandle = data;
-            console.log(`[IMMERSAL] Map Loaded: [${mapHandle}]`);
-            if (mapHandle >= 0) {
-              const url = Immersal.BASE_URL + Immersal.ECEF;
-              const json = {token: this.developerToken, id: mapId};
-              fetch(url, {method: "POST", body: JSON.stringify(json)})
-                .then(response => {
-                  if (!response.ok) {
-                    reject(new Error(response.status));
-                    return;
-                  }
-                  return response.json();
-                })
-                .then(data => {
-                  const mapData = {
-                    id: mapId,
-                    mapToEcef: (data && data.error === "none") ? data.ecef : [13]
-                  };
-                  this.mapDict[mapHandle] = mapData;
-                  resolve(mapHandle);
-                });
-            }
-          }
-        }, {once: true});
-        Immersal.#locWorker.addEventListener("error", (e) => {
-          reject(e);
-        }, {once: true});
+        const mapHandle = data;
+        console.log(`[IMMERSAL] Map Loaded: [${mapHandle}]`);
+        if (mapHandle < 0) {
+          fail(new Error(`Unable to load map ${mapId}`));
+          return;
+        }
 
-        const url = Immersal.BASE_URL + Immersal.DOWNLOAD_MAP + "?token=" + this.developerToken + "&id=" + mapId;
-        fetch(url)
+        const url = Immersal.BASE_URL + Immersal.ECEF;
+        const json = {token: this.developerToken, id: mapId};
+        fetch(url, {method: "POST", body: JSON.stringify(json)})
           .then(response => {
-            if (!response.ok) {
-              reject(new Error(response.status));
-              return;
-            }
-            return response.arrayBuffer();
+            if (!response.ok) throw new Error(response.status);
+            return response.json();
           })
           .then(data => {
-            const map = new Uint8Array(data);
+            const mapData = {
+              id: mapId,
+              mapToEcef: (data && data.error === "none") ? data.ecef : [13]
+            };
+            this.mapDict[mapHandle] = mapData;
+            succeed(mapHandle);
+          })
+          .catch(fail);
+      };
+
+      try {
+        Immersal.#locWorker.addEventListener("message", handleMessage);
+        Immersal.#locWorker.addEventListener("error", handleError);
+
+        const mapDataPromise = preloadedData == null
+          ? fetch(
+              Immersal.BASE_URL +
+                Immersal.DOWNLOAD_MAP +
+                "?token=" +
+                this.developerToken +
+                "&id=" +
+                mapId
+            )
+          .then(response => {
+            if (!response.ok) throw new Error(response.status);
+            return response.arrayBuffer();
+          })
+          : Promise.resolve(preloadedData);
+
+        mapDataPromise
+          .then(data => {
+            const map = data instanceof Uint8Array ? data : new Uint8Array(data);
             Immersal.#locWorker.postMessage({type: "LoadMap", data: map});
-          });
+          })
+          .catch(fail);
       } catch (e) {
         console.log(`[IMMERSAL] loadMap: Error, unable to load map data`, e);
-        reject(e);
+        fail(e);
       }
     });
   }
@@ -581,7 +623,7 @@ class Immersal extends EventTarget {
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("focus", this.handleFocus);
     screen.orientation?.removeEventListener?.("change", this.handleScreenOrientationChange);
-    this.camera?.dispose();
+    if (this.ownsCamera) this.camera?.dispose();
     this.camera = null;
   }
 

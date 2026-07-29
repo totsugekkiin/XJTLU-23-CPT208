@@ -60,8 +60,8 @@ export function HomePage() {
             <a href="marker-ar.html" className="nav-item nav-item--ar" aria-label="打开 MindAR 纹样识别">
               [MINDAR]
             </a>
-            <a href="loc-ar.html" className="nav-item nav-item--ar" aria-label="打开 Immersal 地图 AR">
-              [IMMERSAL]
+            <a href="loc-ar.html" className="nav-item nav-item--ar" aria-label="打开地图与纹理统一 AR">
+              [AR]
             </a>
           </li>
           <li>

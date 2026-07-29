@@ -18,8 +18,6 @@ import {
   resolvePortalPerspectivePose,
 } from "./portalSceneConfig.js";
 
-const GAUSSIAN_URL = PORTAL_RUNTIME_SCENE.url;
-const GAUSSIAN_COUNT = PORTAL_RUNTIME_SCENE.gaussians;
 const EDITOR_HOME_PITCH = 35;
 const TEXTURE_HEIGHT = 960;
 const TEXTURE_WIDTH = Math.round(
@@ -38,9 +36,7 @@ function applyEditorCameraPose(entity, view) {
   const cameraBaseRotation = new pc.Quat()
     .setFromEulerAngles(EDITOR_HOME_PITCH, 0, 0)
     .mul(new pc.Quat().setFromEulerAngles(0, 0, 180));
-  const sceneUp = cameraBaseRotation
-    .transformVector(new pc.Vec3(0, 1, 0), new pc.Vec3())
-    .normalize();
+  const sceneUp = new pc.Vec3(0, -1, 0);
   const yawRotation = new pc.Quat().setFromAxisAngle(
     sceneUp,
     view.yaw,
@@ -122,12 +118,14 @@ class GaussianPortalRenderer {
     viewDistance = PORTAL_REFERENCE_VIEW_DISTANCE,
     perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL,
     apertureCv = true,
+    portalScene = PORTAL_RUNTIME_SCENE,
   }) {
     this.scene = scene;
     this.target = target;
     this.anchorObject = anchorObject || target.object3D;
     this.THREE = window.AFRAME.THREE;
     this.cropBounds = portalCropBounds(crop);
+    this.portalScene = portalScene;
     this.modelScale =
       Number.isFinite(modelScale) && modelScale > 0
         ? modelScale
@@ -763,14 +761,16 @@ class GaussianPortalRenderer {
   }
 
   loadScene() {
+    const gaussianUrl = this.portalScene.url;
+    const gaussianCount = this.portalScene.gaussians;
     this.target.emit("gaussian-portal-loading", {
-      url: GAUSSIAN_URL,
-      gaussians: GAUSSIAN_COUNT,
+      url: gaussianUrl,
+      gaussians: gaussianCount,
     });
     const asset = new pc.Asset(
-      "changgate-courtyard",
+      `changgate-portal-${this.portalScene.id ?? "scene"}`,
       "gsplat",
-      { url: GAUSSIAN_URL },
+      { url: gaussianUrl },
     );
     this.app.assets.add(asset);
     asset.ready((loadedAsset) => {
@@ -783,15 +783,15 @@ class GaussianPortalRenderer {
       this.setTracking(this.tracking);
       this.requestRender(true);
       this.target.emit("gaussian-portal-loaded", {
-        url: GAUSSIAN_URL,
-        gaussians: GAUSSIAN_COUNT,
+        url: gaussianUrl,
+        gaussians: gaussianCount,
       });
     });
     asset.on("error", (error) => {
       if (this.destroyed) return;
       console.error("Unable to load Gaussian portal scene", error);
       this.target.emit("gaussian-portal-error", {
-        url: GAUSSIAN_URL,
+        url: gaussianUrl,
         message: error?.message ?? "unknown error",
       });
     });

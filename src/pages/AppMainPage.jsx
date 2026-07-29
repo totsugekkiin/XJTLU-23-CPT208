@@ -4,11 +4,35 @@ import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
 
+const AR_GATE_RESUME_KEY = "changmen.ar.resume-gate.v1";
+
+function hasGateResumeRequest() {
+  if (typeof window === "undefined") return false;
+
+  const queryResume = new URLSearchParams(window.location.search).get("resume") === "gate";
+  let storedResume = false;
+  try {
+    storedResume = window.sessionStorage.getItem(AR_GATE_RESUME_KEY) === "1";
+  } catch {
+    // sessionStorage is an enhancement; the query parameter remains the fallback.
+  }
+  return queryResume || storedResume;
+}
+
+function markArGateResume() {
+  try {
+    window.sessionStorage.setItem(AR_GATE_RESUME_KEY, "1");
+  } catch {
+    // The AR exit URL still carries resume=gate if storage is unavailable.
+  }
+}
+
 export function AppMainPage() {
   // 路线区段（含高德地图）首屏被 CSS display:none 隐藏。
   // 直接 mount 会让首屏就请求高德 SDK + 初始化 WebGL，浪费资源、加剧卡顿。
   // 这里改为只在用户实际进入“河流页”后再挂载，挂载后保留（避免反复初始化地图）。
   const [shouldMountRoute, setShouldMountRoute] = useState(false);
+  const [resumeAtGate] = useState(hasGateResumeRequest);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -36,14 +60,69 @@ export function AppMainPage() {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+    let firstFrame = null;
+    let secondFrame = null;
+
+    const scrollToGate = () => {
+      const gate = document.getElementById("cm-transition");
+      if (!gate) return;
+
+      gate.scrollIntoView({ behavior: "auto", block: "start" });
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("resume");
+      url.hash = "cm-transition";
+      window.history.replaceState(window.history.state, "", url);
+    };
+
+    const consumeStoredGateResume = () => {
+      let shouldResume = false;
+      try {
+        shouldResume = window.sessionStorage.getItem(AR_GATE_RESUME_KEY) === "1";
+        if (shouldResume) window.sessionStorage.removeItem(AR_GATE_RESUME_KEY);
+      } catch {
+        shouldResume = false;
+      }
+      if (!shouldResume) return;
+
+      globalThis.__CHANGMEN_PRELOADER_DONE__ = true;
+      firstFrame = window.requestAnimationFrame(() => {
+        scrollToGate();
+        secondFrame = window.requestAnimationFrame(scrollToGate);
+      });
+    };
+
+    const onPageShow = (event) => {
+      if (event.persisted) consumeStoredGateResume();
+    };
+
+    if (resumeAtGate) {
+      try {
+        window.sessionStorage.removeItem(AR_GATE_RESUME_KEY);
+      } catch {
+        // The resume query remains sufficient when storage is unavailable.
+      }
+      globalThis.__CHANGMEN_PRELOADER_DONE__ = true;
+      firstFrame = window.requestAnimationFrame(() => {
+        scrollToGate();
+        secondFrame = window.requestAnimationFrame(scrollToGate);
+      });
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+
+    window.addEventListener("pageshow", onPageShow);
 
     return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      if (firstFrame !== null) window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame);
       if ("scrollRestoration" in window.history) {
         window.history.scrollRestoration = previousScrollRestoration;
       }
     };
-  }, []);
+  }, [resumeAtGate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +151,7 @@ export function AppMainPage() {
 
   return (
     <>
-      <ChangmenGatePreloader />
+      {!resumeAtGate && <ChangmenGatePreloader />}
       <section className="hero" id="hero">
         <div className="cloud-field" aria-hidden="true">
           <span className="cloud cloud--a" style={{ "--cx": "4%", "--cy": "3%", "--cs": 1.05, "--co": 0.95, "--cd": "-0.2s" }} />
@@ -293,8 +372,43 @@ export function AppMainPage() {
       <ScrollRevealWords
         id="scroll-reveal-changmen"
         splitMode="char"
+        handoffTargetId="ar-entry-section"
         text="剥开这四层初印象，阊门的底色藏在岁月深处。让我们沿着时间轴，重走这繁华阅尽的千年。"
       />
+
+      <section className="ar-entry-section" id="ar-entry-section" aria-labelledby="ar-entry-title">
+        <div className="ar-entry-section__orbit" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="ar-entry-section__content">
+          <p className="ar-entry-section__eyebrow">CHANGMEN · AR 现场体验</p>
+          <h2 id="ar-entry-title">让消失的阊门，<br />回到你的眼前。</h2>
+          <p className="ar-entry-section__description">
+            开启镜头，对准阊门建筑或现场纹理，在真实空间中寻找一卷跨越千年的城门记忆。
+          </p>
+          <div className="ar-entry-section__actions">
+            <a
+              className="ar-entry-section__primary"
+              href="loc-ar.html?from=app-main&return=gate"
+              onClick={markArGateResume}
+            >
+              <span className="ar-entry-section__button-mark" aria-hidden="true">AR</span>
+              <span>
+                <strong>进入 AR 浏览</strong>
+                <small>需要允许使用摄像头</small>
+              </span>
+              <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
+            </a>
+            <a className="ar-entry-section__skip" href="#cm-transition">
+              暂时跳过，继续浏览
+              <span aria-hidden="true">↓</span>
+            </a>
+          </div>
+        </div>
+        <p className="ar-entry-section__scroll-note" aria-hidden="true">继续下滑也可跳过 AR</p>
+      </section>
 
       <section className="cm-mask-transition" id="cm-transition" aria-label="阊门挖洞转场">
         <div className="cm-mask-transition__scroll" id="cm-mask-scroll">

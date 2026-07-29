@@ -17,6 +17,7 @@ export default defineConfig({
         markerAr: resolve(__dirname, "marker-ar.html"),
         markerTextureTests: resolve(__dirname, "marker-texture-tests.html"),
         portalModelEditor: resolve(__dirname, "portal-model-editor.html"),
+        bambooNoticePreview: resolve(__dirname, "bamboo-notice-preview.html"),
       },
     },
   },

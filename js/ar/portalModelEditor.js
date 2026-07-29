@@ -6,19 +6,25 @@ import {
 import {
   PORTAL_CROP_BOX,
   PORTAL_CROP_BOUNDS,
-  PORTAL_RUNTIME_SCENE,
-  PORTAL_SOURCE_SCENE,
   PORTAL_VIEW_PRESET,
+  getPortalScene,
+  portalCropBounds,
   portalFrameFov,
   readPortalRuntimeConfig,
   savePortalRuntimeConfig,
 } from "./portalSceneConfig.js";
 
 const initialQuery = new URLSearchParams(window.location.search);
-const usingSourceScene = initialQuery.get("sourceScene") === "1";
+const portalSceneProfile = getPortalScene(
+  initialQuery.get("scene") ?? initialQuery.get("dynasty"),
+);
+// Spatial crop editing must start from the complete source. The quick scene
+// has already discarded points outside the old axis-aligned crop and cannot
+// preview a moved or rotated crop correctly.
+const usingSourceScene = initialQuery.get("sourceScene") !== "0";
 const sceneConfig = usingSourceScene
-  ? PORTAL_SOURCE_SCENE
-  : PORTAL_RUNTIME_SCENE;
+  ? portalSceneProfile.source
+  : portalSceneProfile.runtime;
 const GAUSSIAN_URL = sceneConfig.url;
 const GAUSSIAN_COUNT = sceneConfig.gaussians;
 const stage = document.querySelector("#preview-stage");
@@ -36,6 +42,10 @@ const toggleSceneSource = document.querySelector(
 const toggleCropButton = document.querySelector("#toggle-crop-box");
 const cropRecommendedButton = document.querySelector("#crop-recommended");
 const cropFullButton = document.querySelector("#crop-full");
+const cropResetRotationButton = document.querySelector(
+  "#crop-reset-rotation",
+);
+const cropFaceCameraButton = document.querySelector("#crop-face-camera");
 const copyCropButton = document.querySelector("#copy-crop-command");
 const cropBoundsOutput = document.querySelector("#crop-bounds-output");
 const sceneCompass = document.querySelector("#scene-compass");
@@ -49,6 +59,16 @@ const fovInput = document.querySelector("#camera-fov");
 const pitchOutput = document.querySelector("#camera-pitch-output");
 const rollOutput = document.querySelector("#camera-roll-output");
 const fovOutput = document.querySelector("#camera-fov-output");
+const focusCropButton = document.querySelector("#focus-crop");
+const setOrbitCenterButton = document.querySelector("#set-orbit-center");
+const cameraTransformInputs = {
+  x: document.querySelector("#camera-x"),
+  y: document.querySelector("#camera-y"),
+  z: document.querySelector("#camera-z"),
+  yaw: document.querySelector("#camera-yaw"),
+  pitch: document.querySelector("#camera-pitch-number"),
+  roll: document.querySelector("#camera-roll-number"),
+};
 const arViewFrame = document.querySelector(".ar-view-frame");
 const cropInputs = {
   cx: document.querySelector("#crop-center-x"),
@@ -58,6 +78,16 @@ const cropInputs = {
   sy: document.querySelector("#crop-size-y"),
   sz: document.querySelector("#crop-size-z"),
 };
+const cropRotationInputs = {
+  rx: document.querySelector("#crop-rotation-x"),
+  ry: document.querySelector("#crop-rotation-y"),
+  rz: document.querySelector("#crop-rotation-z"),
+};
+const cropRotationSliders = {
+  rx: document.querySelector("#crop-rotate-x"),
+  ry: document.querySelector("#crop-rotate-y"),
+  rz: document.querySelector("#crop-rotate-z"),
+};
 
 const FULL_CROP = Object.freeze({
   cx: -1.348,
@@ -66,18 +96,23 @@ const FULL_CROP = Object.freeze({
   sx: 51.175,
   sy: 42.905,
   sz: 43.02,
+  rx: 0,
+  ry: 0,
+  rz: 0,
 });
 const savedPortalConfig = readPortalRuntimeConfig();
 const RECOMMENDED_CROP = Object.freeze({
-  ...PORTAL_CROP_BOX,
+  ...(portalSceneProfile.crop ?? PORTAL_CROP_BOX),
 });
 const cropState = {
-  ...(savedPortalConfig?.crop ?? RECOMMENDED_CROP),
+  ...(portalSceneProfile.crop ?? savedPortalConfig?.crop ?? RECOMMENDED_CROP),
   visible: true,
 };
+const runtimeCropBounds =
+  portalSceneProfile.runtime.bounds ?? PORTAL_CROP_BOUNDS;
 
 const defaults = {
-  ...(savedPortalConfig?.view ?? PORTAL_VIEW_PRESET),
+  ...(portalSceneProfile.view ?? savedPortalConfig?.view ?? PORTAL_VIEW_PRESET),
 };
 const EDITOR_HOME_PITCH = 35;
 const state = { ...defaults };
@@ -86,11 +121,16 @@ const movement = new pc.Vec3();
 const cameraBaseRotation = new pc.Quat()
   .setFromEulerAngles(EDITOR_HOME_PITCH, 0, 0)
   .mul(new pc.Quat().setFromEulerAngles(0, 0, 180));
-const sceneUp = cameraBaseRotation
-  .transformVector(new pc.Vec3(0, 1, 0), new pc.Vec3())
-  .normalize();
+// The raw scan is corrected by a 180° X rotation below, so its actual
+// vertical direction in editor world space is -Y.
+const sceneUp = new pc.Vec3(0, -1, 0);
 const yawRotation = new pc.Quat();
 const cameraRotation = new pc.Quat();
+const orbitPivot = new pc.Vec3();
+const orbitPosition = new pc.Vec3();
+const panOffset = new pc.Vec3();
+const cropWorldCenter = new pc.Vec3();
+let orbitDistance = 4;
 let dragging = null;
 let lastFrameTime = performance.now();
 let frameRequest = 0;
@@ -190,6 +230,16 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function normalizeDegrees(value) {
+  const finite = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return ((finite + 180) % 360 + 360) % 360 - 180;
+}
+
+function adjustCropRotation(axis, delta) {
+  cropState[axis] = normalizeDegrees(cropState[axis] + delta);
+  applyCropBox();
+}
+
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -228,6 +278,10 @@ function resize() {
 
 function buildViewUrl() {
   const url = new URL("/portal-model-editor.html", window.location.href);
+  url.searchParams.set("scene", portalSceneProfile.id);
+  if (!usingSourceScene) {
+    url.searchParams.set("sourceScene", "0");
+  }
   Object.entries(state).forEach(([key, value]) => {
     url.searchParams.set(key, Number(value).toFixed(key === "fov" ? 0 : 3));
   });
@@ -251,6 +305,7 @@ function currentPortalFov() {
 
 function buildArUrl(portalFov) {
   const url = new URL("/marker-ar.html", window.location.href);
+  url.searchParams.set("scene", portalSceneProfile.id);
   Object.entries(state).forEach(([key, value]) => {
     url.searchParams.set(
       key,
@@ -288,45 +343,47 @@ function readViewUrl() {
 }
 
 function cropBounds() {
-  const hx = cropState.sx / 2;
-  const hy = cropState.sy / 2;
-  const hz = cropState.sz / 2;
-  return {
-    min: [
-      cropState.cx - hx,
-      cropState.cy - hy,
-      cropState.cz - hz,
-    ],
-    max: [
-      cropState.cx + hx,
-      cropState.cy + hy,
-      cropState.cz + hz,
-    ],
-  };
+  return portalCropBounds(cropState);
 }
 
 function cropExceedsRuntimeAsset(bounds = cropBounds()) {
   return bounds.min.some(
-    (value, index) => value < PORTAL_CROP_BOUNDS.min[index] - 1e-4,
+    (value, index) => value < runtimeCropBounds.min[index] - 1e-4,
   ) || bounds.max.some(
-    (value, index) => value > PORTAL_CROP_BOUNDS.max[index] + 1e-4,
+    (value, index) => value > runtimeCropBounds.max[index] + 1e-4,
   );
 }
 
 function buildCropCommand() {
   const bounds = cropBounds();
-  const values = [...bounds.min, ...bounds.max]
-    .map((value) => value.toFixed(3))
-    .join(",");
-  return `npx splat-transform --overwrite public/models/changgate-courtyard.sog --filter-box=${values} public/models/changgate-courtyard-cropped.sog`;
+  const precision = 1000;
+  const values = [
+    ...bounds.min.map(
+      (value) => Math.floor(value * precision) / precision,
+    ),
+    ...bounds.max.map(
+      (value) => Math.ceil(value * precision) / precision,
+    ),
+  ].map((value) => value.toFixed(3)).join(",");
+  const sourceFilename = portalSceneProfile.source.url.split("/").at(-1);
+  const runtimeFilename = portalSceneProfile.runtime.url.split("/").at(-1);
+  return `npx splat-transform --overwrite public/models/${sourceFilename} --filter-box=${values} public/models/${runtimeFilename}`;
 }
 
 function applyCropBox() {
   cropState.sx = Math.max(0.5, Number(cropState.sx) || 0.5);
   cropState.sy = Math.max(0.5, Number(cropState.sy) || 0.5);
   cropState.sz = Math.max(0.5, Number(cropState.sz) || 0.5);
+  cropState.rx = normalizeDegrees(cropState.rx);
+  cropState.ry = normalizeDegrees(cropState.ry);
+  cropState.rz = normalizeDegrees(cropState.rz);
   cropBoxRoot.enabled = cropState.visible;
   cropBoxRoot.setLocalPosition(cropState.cx, cropState.cy, cropState.cz);
+  cropBoxRoot.setLocalEulerAngles(
+    cropState.rx,
+    cropState.ry,
+    cropState.rz,
+  );
 
   const hx = cropState.sx / 2;
   const hy = cropState.sy / 2;
@@ -360,15 +417,21 @@ function applyCropBox() {
   Object.entries(cropInputs).forEach(([key, input]) => {
     input.value = Number(cropState[key]).toFixed(2);
   });
+  Object.entries(cropRotationInputs).forEach(([key, input]) => {
+    input.value = Number(cropState[key]).toFixed(1);
+    cropRotationSliders[key].value = String(cropState[key]);
+  });
   toggleCropButton.textContent =
     `裁剪盒：${cropState.visible ? "显示" : "隐藏"}`;
   toggleCropButton.setAttribute("aria-pressed", String(cropState.visible));
   const bounds = cropBounds();
   const runtimeLimit = cropExceedsRuntimeAsset(bounds)
-    ? "  ·  超出部分需重新生成裁后 SOG 才能进入 AR"
+    ? "  ·  超出快速场景范围，进入 AR 时将自动使用完整源场景"
     : "";
+  const rotationText =
+    `  ·  旋转 ${cropState.rx.toFixed(1)}° / ${cropState.ry.toFixed(1)}° / ${cropState.rz.toFixed(1)}°`;
   cropBoundsOutput.textContent =
-    `保留范围  min ${bounds.min.map((value) => value.toFixed(2)).join(" / ")}  ·  max ${bounds.max.map((value) => value.toFixed(2)).join(" / ")}${runtimeLimit}`;
+    `包围范围  min ${bounds.min.map((value) => value.toFixed(2)).join(" / ")}  ·  max ${bounds.max.map((value) => value.toFixed(2)).join(" / ")}${rotationText}${runtimeLimit}`;
   updateCropMaterials();
   requestRender();
 }
@@ -385,10 +448,18 @@ function renderHud() {
   pitchOutput.textContent = `${state.pitch.toFixed(1)}°`;
   rollOutput.textContent = `${state.roll.toFixed(1)}°`;
   fovOutput.textContent = `${Math.round(state.fov)}°`;
+  Object.entries(cameraTransformInputs).forEach(([key, input]) => {
+    if (document.activeElement === input) return;
+    input.value = Number(state[key]).toFixed(
+      ["x", "y", "z"].includes(key) ? 3 : 1,
+    );
+  });
   const viewUrl = buildViewUrl();
   parameterOutput.textContent = `${viewUrl.pathname}${viewUrl.search}`;
   const sourceToggleUrl = new URL(viewUrl);
-  if (!usingSourceScene) {
+  if (usingSourceScene) {
+    sourceToggleUrl.searchParams.set("sourceScene", "0");
+  } else {
     sourceToggleUrl.searchParams.set("sourceScene", "1");
   }
   toggleSceneSource.href = sourceToggleUrl.href;
@@ -409,7 +480,7 @@ function renderHud() {
     yawDelta < 40 && pitchDelta < 35 && distanceFromHome < 24;
 }
 
-function applyCamera() {
+function syncCameraTransform() {
   cameraEntity.setPosition(state.x, state.y, state.z);
   yawRotation.setFromAxisAngle(sceneUp, state.yaw);
   cameraRotation.mul2(yawRotation, cameraBaseRotation);
@@ -417,6 +488,10 @@ function applyCamera() {
   cameraEntity.rotateLocal(state.pitch - EDITOR_HOME_PITCH, 0, 0);
   cameraEntity.rotateLocal(0, 0, state.roll);
   cameraEntity.camera.fov = state.fov;
+}
+
+function applyCamera() {
+  syncCameraTransform();
   renderHud();
   requestRender();
 }
@@ -428,14 +503,111 @@ function setKeyVisual(code, active) {
 }
 
 function moveCamera(distanceForward, distanceRight, distanceUp) {
+  // Modeling-view keyboard nudges follow the visible camera axes and move
+  // the orbit target with the camera, matching a viewport pan/fly operation.
+  syncCameraTransform();
   movement
     .set(0, 0, 0)
     .add(cameraEntity.forward.clone().mulScalar(distanceForward))
-    .add(cameraEntity.right.clone().mulScalar(distanceRight));
-  movement.y += distanceUp;
+    .add(cameraEntity.right.clone().mulScalar(distanceRight))
+    .add(cameraEntity.up.clone().mulScalar(distanceUp));
   state.x += movement.x;
   state.y += movement.y;
   state.z += movement.z;
+  orbitPivot.add(movement);
+}
+
+function setStatePosition(position) {
+  state.x = position.x;
+  state.y = position.y;
+  state.z = position.z;
+}
+
+function resetOrbitCenter(distance = orbitDistance) {
+  syncCameraTransform();
+  orbitDistance = clamp(Number(distance) || 4, 0.1, 500);
+  orbitPivot
+    .copy(cameraEntity.getPosition())
+    .add(cameraEntity.forward.clone().mulScalar(orbitDistance));
+}
+
+function initializeOrbitCenter() {
+  syncCameraTransform();
+  cropWorldCenter.copy(cropBoxRoot.getPosition());
+  const cameraPosition = cameraEntity.getPosition();
+  const toCrop = cropWorldCenter.clone().sub(cameraPosition);
+  const projectedDistance = toCrop.dot(cameraEntity.forward);
+  orbitDistance = clamp(
+    projectedDistance > 0.25 ? projectedDistance : toCrop.length(),
+    0.25,
+    500,
+  );
+  resetOrbitCenter(orbitDistance);
+}
+
+function positionCameraAroundOrbit() {
+  syncCameraTransform();
+  orbitPosition
+    .copy(orbitPivot)
+    .sub(cameraEntity.forward.clone().mulScalar(orbitDistance));
+  setStatePosition(orbitPosition);
+}
+
+function orbitCamera(deltaYaw, deltaPitch) {
+  state.yaw += deltaYaw;
+  state.pitch = clamp(state.pitch + deltaPitch, -89, 89);
+  positionCameraAroundOrbit();
+  applyCamera();
+}
+
+function panCamera(deltaX, deltaY) {
+  syncCameraTransform();
+  const viewportHeight = Math.max(1, viewport.clientHeight);
+  const unitsPerPixel =
+    (2 * orbitDistance * Math.tan((state.fov * Math.PI) / 360)) /
+    viewportHeight;
+  panOffset
+    .copy(cameraEntity.right)
+    .mulScalar(-deltaX * unitsPerPixel)
+    .add(
+      cameraEntity.up
+        .clone()
+        .mulScalar(deltaY * unitsPerPixel),
+    );
+  setStatePosition(cameraEntity.getPosition().clone().add(panOffset));
+  orbitPivot.add(panOffset);
+  applyCamera();
+}
+
+function lookCamera(deltaYaw, deltaPitch) {
+  state.yaw += deltaYaw;
+  state.pitch = clamp(state.pitch + deltaPitch, -89, 89);
+  applyCamera();
+  resetOrbitCenter(orbitDistance);
+}
+
+function dollyCamera(wheelDelta) {
+  syncCameraTransform();
+  orbitDistance = clamp(
+    orbitDistance * Math.exp(wheelDelta * 0.0015),
+    0.1,
+    500,
+  );
+  positionCameraAroundOrbit();
+  applyCamera();
+}
+
+function focusCrop() {
+  syncCameraTransform();
+  cropWorldCenter.copy(cropBoxRoot.getPosition());
+  orbitDistance = clamp(
+    cameraEntity.getPosition().distance(cropWorldCenter),
+    0.5,
+    500,
+  );
+  orbitPivot.copy(cropWorldCenter);
+  positionCameraAroundOrbit();
+  applyCamera();
 }
 
 function applyTapStep(code, boosted) {
@@ -447,8 +619,13 @@ function applyTapStep(code, boosted) {
   else if (code === "KeyD") moveCamera(0, distance, 0);
   else if (code === "Space") moveCamera(0, 0, distance);
   else if (code === "KeyC") moveCamera(0, 0, -distance);
-  else if (code === "KeyQ") state.yaw -= turn;
-  else if (code === "KeyE") state.yaw += turn;
+  else if (code === "KeyQ") {
+    orbitCamera(-turn, 0);
+    return;
+  } else if (code === "KeyE") {
+    orbitCamera(turn, 0);
+    return;
+  }
   else return;
   applyCamera();
 }
@@ -462,6 +639,7 @@ function updateMovement(now) {
   const speed = (boosted ? 12 : 3.2) * elapsed;
   const turnSpeed = (boosted ? 115 : 58) * elapsed;
   let changed = false;
+  let orbitChanged = false;
 
   if (pressedKeys.has("KeyW")) {
     moveCamera(speed, 0, 0);
@@ -490,11 +668,14 @@ function updateMovement(now) {
   if (pressedKeys.has("KeyQ")) {
     state.yaw -= turnSpeed;
     changed = true;
+    orbitChanged = true;
   }
   if (pressedKeys.has("KeyE")) {
     state.yaw += turnSpeed;
     changed = true;
+    orbitChanged = true;
   }
+  if (orbitChanged) positionCameraAroundOrbit();
   if (changed) applyCamera();
   if (
     [...pressedKeys].some((code) =>
@@ -528,6 +709,7 @@ const controlledCodes = new Set([
   "KeyS",
   "KeyD",
   "KeyC",
+  "KeyF",
   "KeyH",
   "Space",
   "ShiftLeft",
@@ -537,9 +719,30 @@ const controlledCodes = new Set([
 window.addEventListener("keydown", (event) => {
   if (!controlledCodes.has(event.code)) return;
   event.preventDefault();
+  if (event.altKey) {
+    const cropRotationKeys = {
+      KeyW: ["rx", 1],
+      KeyS: ["rx", -1],
+      KeyA: ["ry", -1],
+      KeyD: ["ry", 1],
+      KeyQ: ["rz", -1],
+      KeyE: ["rz", 1],
+    };
+    const rotationAction = cropRotationKeys[event.code];
+    if (rotationAction) {
+      const [axis, direction] = rotationAction;
+      adjustCropRotation(axis, direction * (event.shiftKey ? 5 : 0.5));
+    }
+    return;
+  }
   if (event.code === "KeyH") {
     Object.assign(state, defaults);
     applyCamera();
+    initializeOrbitCenter();
+    return;
+  }
+  if (event.code === "KeyF") {
+    focusCrop();
     return;
   }
   if (!event.repeat && !pressedKeys.has(event.code)) {
@@ -573,43 +776,62 @@ stage.addEventListener("pointerdown", (event) => {
   ) {
     return;
   }
+  let mode = null;
+  if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
+    mode = "pan";
+  } else if (event.button === 2) {
+    mode = "look";
+  } else if (event.button === 0) {
+    mode = "orbit";
+  }
+  if (!mode) return;
+  event.preventDefault();
   dragging = {
     pointerId: event.pointerId,
+    mode,
     x: event.clientX,
     y: event.clientY,
   };
-  stage.setPointerCapture?.(event.pointerId);
+  try {
+    stage.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Synthetic test events do not own an OS pointer capture.
+  }
   stage.classList.add("is-dragging");
+  stage.dataset.dragMode = mode;
 });
 
 stage.addEventListener("pointermove", (event) => {
   if (!dragging || dragging.pointerId !== event.pointerId) return;
-  state.yaw -= (event.clientX - dragging.x) * 0.18;
-  state.pitch = clamp(
-    state.pitch - (event.clientY - dragging.y) * 0.16,
-    -89,
-    89,
-  );
+  const deltaX = event.clientX - dragging.x;
+  const deltaY = event.clientY - dragging.y;
   dragging.x = event.clientX;
   dragging.y = event.clientY;
-  applyCamera();
+  if (dragging.mode === "orbit") {
+    orbitCamera(-deltaX * 0.18, -deltaY * 0.16);
+  } else if (dragging.mode === "pan") {
+    panCamera(deltaX, deltaY);
+  } else {
+    lookCamera(-deltaX * 0.18, -deltaY * 0.16);
+  }
 });
 
 function endDrag(event) {
   if (!dragging || dragging.pointerId !== event.pointerId) return;
   dragging = null;
   stage.classList.remove("is-dragging");
+  delete stage.dataset.dragMode;
 }
 
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
+stage.addEventListener("contextmenu", (event) => event.preventDefault());
 stage.addEventListener(
   "wheel",
   (event) => {
     if (event.target.closest?.(".camera-hud, .crop-hud")) return;
     event.preventDefault();
-    state.fov = clamp(state.fov + event.deltaY * 0.025, 30, 100);
-    applyCamera();
+    dollyCamera(event.deltaY);
   },
   { passive: false },
 );
@@ -617,10 +839,12 @@ stage.addEventListener(
 pitchInput.addEventListener("input", () => {
   state.pitch = Number(pitchInput.value);
   applyCamera();
+  resetOrbitCenter(orbitDistance);
 });
 rollInput.addEventListener("input", () => {
   state.roll = Number(rollInput.value);
   applyCamera();
+  resetOrbitCenter(orbitDistance);
 });
 fovInput.addEventListener("input", () => {
   state.fov = Number(fovInput.value);
@@ -629,6 +853,31 @@ fovInput.addEventListener("input", () => {
 levelButton.addEventListener("click", () => {
   state.roll = 0;
   applyCamera();
+  resetOrbitCenter(orbitDistance);
+});
+
+Object.entries(cameraTransformInputs).forEach(([key, input]) => {
+  input.addEventListener("input", () => {
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) {
+      renderHud();
+      return;
+    }
+    state[key] = value;
+    state.pitch = clamp(state.pitch, -89, 89);
+    state.roll = clamp(state.roll, -45, 45);
+    applyCamera();
+    resetOrbitCenter(orbitDistance);
+  });
+});
+
+focusCropButton.addEventListener("click", focusCrop);
+setOrbitCenterButton.addEventListener("click", () => {
+  resetOrbitCenter(orbitDistance);
+  setOrbitCenterButton.textContent = "观察中心已更新";
+  window.setTimeout(() => {
+    setOrbitCenterButton.textContent = "当前视点设为中心";
+  }, 1200);
 });
 
 Object.entries(cropInputs).forEach(([key, input]) => {
@@ -638,6 +887,16 @@ Object.entries(cropInputs).forEach(([key, input]) => {
     cropState[key] = key.startsWith("s") ? Math.max(0.5, value) : value;
     applyCropBox();
   });
+});
+
+Object.entries(cropRotationInputs).forEach(([key, input]) => {
+  const slider = cropRotationSliders[key];
+  const applyValue = (value) => {
+    cropState[key] = normalizeDegrees(Number(value));
+    applyCropBox();
+  };
+  input.addEventListener("input", () => applyValue(input.value));
+  slider.addEventListener("input", () => applyValue(slider.value));
 });
 
 toggleCropButton.addEventListener("click", () => {
@@ -661,9 +920,29 @@ cropFullButton.addEventListener("click", () => {
   applyCropBox();
 });
 
+cropResetRotationButton.addEventListener("click", () => {
+  cropState.rx = 0;
+  cropState.rz = 0;
+  applyCropBox();
+});
+
+cropFaceCameraButton.addEventListener("click", () => {
+  const scanInverseRotation = scanRoot.getRotation().clone().invert();
+  const cropScreenRotation = new pc.Quat().mul2(
+    scanInverseRotation,
+    cameraEntity.getRotation(),
+  );
+  const cropEuler = cropScreenRotation.getEulerAngles();
+  cropState.rx = normalizeDegrees(cropEuler.x);
+  cropState.ry = normalizeDegrees(cropEuler.y);
+  cropState.rz = normalizeDegrees(cropEuler.z);
+  applyCropBox();
+});
+
 function returnToMainView() {
   Object.assign(state, defaults);
   applyCamera();
+  initializeOrbitCenter();
 }
 
 resetButton.addEventListener("click", returnToMainView);
@@ -760,7 +1039,7 @@ function loadScene() {
       unified: true,
     });
     loadState.textContent =
-      `${usingSourceScene ? "完整源场景" : "MindAR 裁后场景"}已就绪 · ${GAUSSIAN_COUNT.toLocaleString("zh-CN")} 高斯点`;
+      `${portalSceneProfile.label} · ${usingSourceScene ? "完整源场景" : "MindAR 裁后场景"}已就绪 · ${GAUSSIAN_COUNT.toLocaleString("zh-CN")} 高斯点`;
     loadState.className = "load-state is-ready";
     requestRender(true);
   });
@@ -776,4 +1055,5 @@ readViewUrl();
 resize();
 applyCamera();
 applyCropBox();
+initializeOrbitCenter();
 loadScene();
