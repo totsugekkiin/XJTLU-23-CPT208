@@ -94,6 +94,15 @@ export function ArEditorPage() {
             当前锚点
             <select id="ar-editor-anchor-select" />
           </label>
+          <div className="ar-editor-row">
+            <button id="ar-editor-add-bamboo" type="button" className="ar-editor-primary">
+              ＋ 添加竹简
+            </button>
+            <button id="ar-editor-delete-anchor" type="button">
+              删除当前竹简
+            </button>
+          </div>
+          <p className="ar-editor-hint">同一地图的其他竹简会同时显示；只有当前竹简带有操控轴。</p>
           <div id="ar-editor-bamboo-content-field" hidden>
             <label className="ar-editor-field">
               竹简内容

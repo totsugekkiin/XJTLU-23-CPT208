@@ -1,5 +1,5 @@
 /** 默认测试地图（单地图模式或未指定时使用） */
-export const DEFAULT_MAP_ID = 148688;
+export const DEFAULT_MAP_ID = 148753;
 
 /**
  * 多地图 AR 配置：每张 Immersal 地图可有独立锚点
@@ -9,84 +9,70 @@ export const DEFAULT_MAP_ID = 148688;
  */
 export const AR_MAP_PROFILES = [
   {
-    mapId: 148688,
-    label: "Map 148688",
-    anchors: [
-      {
-        id: "bamboo-notice",
-        type: "bamboo-notice",
-        label: "阊门竹简",
-        url: "/models/bamboo-notice-ar.glb",
-        content: "spring-autumn",
-        position: [0.2061, -0.0643, 0.1626],
-        rotation: [0, 0, 0],
-        scale: [0.6672, 0.6672, 0.6672],
-      },
-    ],
-  },
-  {
-    mapId: 149467,
-    label: "小悬眼（新扫描）",
-    anchors: [
-      {
-        id: "small-opening-portal",
-        type: "portal",
-        label: "小悬眼 Portal（20×26×40 cm）",
-        // 新点云中悬眼入口面的初始估计；现场只需微调位置和旋转。
-        position: [0.0147, -0.1179, 0.3236],
-        // Portal 本地 +X 朝向观察者，-X 穿过 40 cm 墙体进入虚拟场景。
-        rotation: [0.1085, 1.3233, -0.1044],
-        // [X 墙深, Y 洞口高度, Z 洞口宽度]，单位为米。
-        scale: [0.4, 0.26, 0.2],
-        content: "calibration-grid",
-      },
-    ],
-  },
-  {
     mapId: 148753,
-    label: "Map 148753",
+    label: "Part 1",
     anchors: [
       {
         id: "bamboo-notice",
-        type: "bamboo-notice",
         label: "阊门竹简",
+        type: "bamboo-notice",
         url: "/models/bamboo-notice-ar.glb",
-        content: "spring-autumn",
-        position: [2.3519, -0.439, -1.2461],
+        content: "modern",
+        position: [2.4187, -0.439, -1.2079],
         rotation: [0, -0.5203, 0],
         scale: [1.3485, 1.3339, 2.2],
       },
     ],
   },
   {
-    mapId: 148755,
-    label: "城墙大悬眼",
+    mapId: 149877,
+    label: "Part 2",
     anchors: [
       {
         id: "bamboo-notice",
+        label: "阊门竹简 1",
         type: "bamboo-notice",
-        label: "阊门竹简",
         url: "/models/bamboo-notice-ar.glb",
-        content: "spring-autumn",
-        position: [-0.004, -0.1412, 0.6506],
-        rotation: [-0.3146, 0, 0],
-        scale: [0.17, 0.17, 0.17],
+        content: "ming-qing",
+        position: [0.8467, -0.3162, 3.8729],
+        rotation: [3.1416, -0.9895, 3.1416],
+        scale: [1.5421, 1.4866, 1],
+      },
+      {
+        id: "bamboo-notice-2",
+        label: "阊门竹简 2",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "southern-song",
+        position: [-1.8524, -0.3162, 7.5703],
+        rotation: [3.1416, -0.9895, 3.1416],
+        scale: [1.5421, 1.4866, 1],
       },
     ],
   },
   {
-    mapId: 148756,
-    label: "城墙垛口",
+    mapId: 149878,
+    label: "Part 3",
     anchors: [
       {
         id: "bamboo-notice",
+        label: "阊门竹简 1",
         type: "bamboo-notice",
-        label: "阊门竹简",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "tang",
+        position: [0.8032, -0.61, 4.6908],
+        rotation: [3.1416, -0.1139, 3.1416],
+        scale: [1, 1, 1],
+      },
+      {
+        id: "bamboo-notice-2",
+        label: "阊门竹简 2",
+        type: "bamboo-notice",
         url: "/models/bamboo-notice-ar.glb",
         content: "spring-autumn",
-        position: [15.5465, 0.645, 36.3138],
-        rotation: [0, 0.4142, 0],
-        scale: [0.85, 0.85, 1.7],
+        position: [-2.9579, -0.6099, -0.8632],
+        rotation: [0, 0.2169, 0],
+        scale: [1, 1, 1],
       },
     ],
   },
@@ -96,10 +82,7 @@ export function getAllMapIds() {
   return AR_MAP_PROFILES.map((profile) => profile.mapId);
 }
 
-const MAP_ID_ALIASES = new Map([
-  // 148752 是同一悬眼的旧扫描；旧链接自动进入新地图。
-  [148752, 149467],
-]);
+const MAP_ID_ALIASES = new Map();
 
 function normalizeMapId(mapId) {
   const id = Number(mapId);

@@ -15,6 +15,7 @@ const IMMERSAL_BASE = "https://api.immersal.com";
 const CLIENT_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
 const CAMERA_KEY_MOVE_SPEED = 4;
 const CAMERA_KEY_BOOST = 3;
+const DEFAULT_BAMBOO_MODEL_URL = "/models/bamboo-notice-ar.glb";
 
 function radToDeg(r) {
   return (r * 180) / Math.PI;
@@ -74,11 +75,12 @@ function generateAnchorsModule(profiles) {
   const profilesBody = profiles
     .map((profile) => {
       const anchorsBody = profile.anchors.map(formatAnchorExport).join(",\n");
+      const anchorsBlock = anchorsBody ? `${anchorsBody},\n` : "";
       return `  {
     mapId: ${profile.mapId},
     label: ${JSON.stringify(profile.label)},
     anchors: [
-${anchorsBody},
+${anchorsBlock}
     ],
   }`;
     })
@@ -103,9 +105,7 @@ export function getAllMapIds() {
   return AR_MAP_PROFILES.map((profile) => profile.mapId);
 }
 
-const MAP_ID_ALIASES = new Map([
-  [148752, 149467],
-]);
+const MAP_ID_ALIASES = new Map();
 
 function normalizeMapId(mapId) {
   const id = Number(mapId);
@@ -169,6 +169,8 @@ export function bootstrapArPlacementEditor(rootEl) {
   const canvas = rootEl.querySelector("#ar-editor-canvas");
   const statusEl = rootEl.querySelector("#ar-editor-status");
   const anchorSelect = rootEl.querySelector("#ar-editor-anchor-select");
+  const addBambooBtn = rootEl.querySelector("#ar-editor-add-bamboo");
+  const deleteAnchorBtn = rootEl.querySelector("#ar-editor-delete-anchor");
   const loadSparseBtn = rootEl.querySelector("#ar-editor-load-sparse");
   const loadDenseBtn = rootEl.querySelector("#ar-editor-load-dense");
   const refFileInput = rootEl.querySelector("#ar-editor-ref-file");
@@ -291,8 +293,14 @@ export function bootstrapArPlacementEditor(rootEl) {
   modelRoot.name = "ar-model-root";
   scene.add(modelRoot);
 
+  const inactiveAnchorsRoot = new THREE.Group();
+  inactiveAnchorsRoot.name = "ar-inactive-anchors-root";
+  scene.add(inactiveAnchorsRoot);
+
   const plyLoader = new PLYLoader();
   const gltfLoader = new GLTFLoader();
+  const modelAssetCache = new Map();
+  let inactivePreviewVersion = 0;
 
   bambooContentSelect?.replaceChildren(
     ...BAMBOO_NOTICE_CONTENT_OPTIONS.map((content) => {
@@ -334,7 +342,17 @@ export function bootstrapArPlacementEditor(rootEl) {
     populateAnchorSelect();
     updateMapHint();
     clearReference();
-    if (activeAnchorId) loadModelFromState(getActiveState());
+    inactivePreviewVersion += 1;
+    inactiveAnchorsRoot.clear();
+    if (activeAnchorId) {
+      loadModelFromState(getActiveState());
+    } else {
+      modelRoot.clear();
+      modelObject = null;
+      transformControls.detach();
+      clearPortalTestWorld();
+      setStatus(`Map ${activeMapId} 还没有锚点，请点击“添加竹简”`);
+    }
   }
 
   function getExportProfiles() {
@@ -371,6 +389,83 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   function getActiveState() {
     return anchorStates.find((a) => a.id === activeAnchorId) ?? null;
+  }
+
+  function createBambooAnchorState() {
+    const bambooAnchors = anchorStates.filter((anchor) => anchor.type === "bamboo-notice");
+    const usedContentIds = new Set(bambooAnchors.map((anchor) => anchor.content));
+    const content = BAMBOO_NOTICE_CONTENT_OPTIONS.find(
+      (option) => !usedContentIds.has(option.id),
+    ) ?? BAMBOO_NOTICE_CONTENT_OPTIONS[bambooAnchors.length % BAMBOO_NOTICE_CONTENT_OPTIONS.length];
+    const activeState = getActiveState();
+    const source = activeState?.type === "bamboo-notice"
+      ? activeState
+      : bambooAnchors[bambooAnchors.length - 1];
+
+    let sequence = bambooAnchors.length + 1;
+    let id = sequence === 1 ? "bamboo-notice" : `bamboo-notice-${sequence}`;
+    const existingIds = new Set(anchorStates.map((anchor) => anchor.id));
+    while (existingIds.has(id)) {
+      sequence += 1;
+      id = `bamboo-notice-${sequence}`;
+    }
+
+    const position = source
+      ? [source.position[0] + 0.8, source.position[1], source.position[2]]
+      : orbitControls.target.toArray();
+
+    return anchorToState({
+      id,
+      type: "bamboo-notice",
+      label: `阊门竹简 ${sequence}`,
+      url: source?.url || DEFAULT_BAMBOO_MODEL_URL,
+      content: content.id,
+      position: position.map(formatNum),
+      rotation: source?.rotation ?? [0, 0, 0],
+      scale: source?.scale ?? [1, 1, 1],
+    });
+  }
+
+  async function addBambooAnchor() {
+    readStateFromObject();
+    const state = createBambooAnchorState();
+    anchorStates.push(state);
+    initialAnchorStates.set(`${activeMapId}:${state.id}`, anchorToState(state));
+    activeAnchorId = state.id;
+    populateAnchorSelect();
+    await loadModelFromState(state);
+    setTransformMode("translate");
+    if (modelObject) focusOnObject(modelObject);
+    setStatus(`${state.label} 已添加；可拖动 Gizmo 摆放，导出配置后保存`);
+  }
+
+  async function deleteCurrentBambooAnchor() {
+    const state = getActiveState();
+    if (state?.type !== "bamboo-notice") return;
+    const confirmed = window.confirm(`删除“${state.label}”？此操作会从本次编辑配置中移除它。`);
+    if (!confirmed) return;
+
+    const index = anchorStates.findIndex((anchor) => anchor.id === state.id);
+    if (index < 0) return;
+    anchorStates.splice(index, 1);
+    initialAnchorStates.delete(`${activeMapId}:${state.id}`);
+    inactivePreviewVersion += 1;
+    inactiveAnchorsRoot.clear();
+    activeAnchorId = anchorStates[index]?.id ?? anchorStates[index - 1]?.id ?? null;
+    populateAnchorSelect();
+
+    if (activeAnchorId) {
+      await loadModelFromState(getActiveState());
+    } else {
+      modelRoot.clear();
+      inactiveAnchorsRoot.clear();
+      modelObject = null;
+      transformControls.detach();
+      clearPortalTestWorld();
+      bambooContentField?.setAttribute("hidden", "");
+      if (portalSummary) portalSummary.textContent = "";
+    }
+    setStatus(`${state.label} 已删除；导出配置后保存`);
   }
 
   function clearPortalTestWorld() {
@@ -809,6 +904,52 @@ export function bootstrapArPlacementEditor(rootEl) {
     }
   }
 
+  function loadModelAsset(url) {
+    if (!modelAssetCache.has(url)) {
+      const promise = gltfLoader.loadAsync(url).catch((error) => {
+        modelAssetCache.delete(url);
+        throw error;
+      });
+      modelAssetCache.set(url, promise);
+    }
+    return modelAssetCache.get(url);
+  }
+
+  async function refreshInactiveAnchorPreviews() {
+    const version = ++inactivePreviewVersion;
+    const previewMapId = activeMapId;
+    inactiveAnchorsRoot.clear();
+
+    const previewStates = anchorStates.filter(
+      (state) => state.id !== activeAnchorId && state.type !== "portal" && state.url,
+    );
+
+    await Promise.all(previewStates.map(async (state) => {
+      try {
+        const gltf = await loadModelAsset(state.url);
+        if (version !== inactivePreviewVersion || previewMapId !== activeMapId) return;
+        const preview = gltf.scene.clone(true);
+        preview.name = `inactive-anchor-${state.id}`;
+        preview.traverse((node) => {
+          if (node.isMesh) node.frustumCulled = false;
+        });
+        if (state.type === "bamboo-notice") {
+          const content = getBambooNoticeContent(state.content);
+          attachBambooNoticeText(preview, {
+            columns: content.columns,
+            anisotropy: renderer.capabilities.getMaxAnisotropy(),
+          });
+        }
+        preview.position.copy(vec3FromArray(state.position));
+        preview.rotation.copy(eulerFromArray(state.rotation));
+        preview.scale.copy(vec3FromArray(state.scale, 1));
+        inactiveAnchorsRoot.add(preview);
+      } catch (error) {
+        console.warn(`[AR editor] 无法预览锚点 ${state.id}`, error);
+      }
+    }));
+  }
+
   async function loadModelFromState(state) {
     modelRoot.clear();
     modelObject = null;
@@ -888,20 +1029,22 @@ export function bootstrapArPlacementEditor(rootEl) {
       modelRoot.add(modelObject);
       transformControls.attach(modelObject);
       syncUiFromState();
+      refreshInactiveAnchorPreviews();
       setStatus(`Portal 已加载：${state.label}（X/Y/Z = 墙深/洞高/洞宽）`);
       return;
     }
 
     setStatus(`正在加载模型 ${state.label}…`);
     try {
-      const gltf = await gltfLoader.loadAsync(state.url);
-      modelObject = gltf.scene;
+      const gltf = await loadModelAsset(state.url);
+      modelObject = gltf.scene.clone(true);
       modelObject.name = `anchor-${state.id}`;
       decorateModelForEditing(modelObject, state);
       applyStateToObject(state);
       modelRoot.add(modelObject);
       transformControls.attach(modelObject);
       syncUiFromState();
+      refreshInactiveAnchorPreviews();
       setStatus(`模型已加载：${state.label}`);
     } catch (err) {
       setStatus(`模型加载失败：${err?.message || err}`, true);
@@ -923,6 +1066,7 @@ export function bootstrapArPlacementEditor(rootEl) {
       modelRoot.add(modelObject);
       transformControls.attach(modelObject);
       syncUiFromState();
+      refreshInactiveAnchorPreviews();
       setStatus(`已替换当前锚点模型：${file.name}`);
     } catch (err) {
       setStatus(`模型文件加载失败：${err?.message || err}`, true);
@@ -940,6 +1084,10 @@ export function bootstrapArPlacementEditor(rootEl) {
       }),
     );
     anchorSelect.value = activeAnchorId ?? "";
+    anchorSelect.disabled = anchorStates.length === 0;
+    if (deleteAnchorBtn) {
+      deleteAnchorBtn.disabled = getActiveState()?.type !== "bamboo-notice";
+    }
   }
 
   function setTransformMode(mode) {
@@ -1125,6 +1273,26 @@ export function bootstrapArPlacementEditor(rootEl) {
     activeAnchorId = anchorSelect.value;
     const state = getActiveState();
     if (state) loadModelFromState(state);
+  });
+
+  addBambooBtn?.addEventListener("click", async () => {
+    addBambooBtn.disabled = true;
+    try {
+      await addBambooAnchor();
+    } catch (error) {
+      setStatus(`添加竹简失败：${error?.message || error}`, true);
+    } finally {
+      addBambooBtn.disabled = false;
+    }
+  });
+
+  deleteAnchorBtn?.addEventListener("click", async () => {
+    deleteAnchorBtn.disabled = true;
+    try {
+      await deleteCurrentBambooAnchor();
+    } finally {
+      deleteAnchorBtn.disabled = getActiveState()?.type !== "bamboo-notice";
+    }
   });
 
   bambooContentSelect?.addEventListener("change", () => {

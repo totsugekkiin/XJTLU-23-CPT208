@@ -36,18 +36,20 @@ export const BAMBOO_NOTICE_COLUMN_POSITIONS = Object.freeze([
 
 const DEFAULT_OPTIONS = {
   columns: DEFAULT_COLUMNS,
-  color: "#6a4027",
+  color: "#241108",
+  strokeColor: "#100704",
+  strokeWidth: 3,
   textureWidth: 3072,
   textureHeight: 1800,
   fontFamily: '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif',
-  fontWeight: "400",
-  fontSize: 126,
+  fontWeight: "600",
+  fontSize: 132,
   columnStartX: BAMBOO_NOTICE_LAYOUT.columnStartX,
   columnGapRatio: BAMBOO_NOTICE_LAYOUT.columnGap,
   characterGap: 14,
   columnPositions: BAMBOO_NOTICE_COLUMN_POSITIONS,
   topOffsetRatio: BAMBOO_NOTICE_LAYOUT.topOffset,
-  opacity: 0.82,
+  opacity: 0.98,
   widthRatio: 0.79,
   heightRatio: 0.75,
   surfaceOffset: 0.006,
@@ -71,6 +73,9 @@ function drawInkColumns(canvas, options) {
   context.globalAlpha = options.opacity;
   context.textAlign = "center";
   context.textBaseline = "middle";
+  context.lineJoin = "round";
+  context.strokeStyle = options.strokeColor;
+  context.lineWidth = options.strokeWidth;
   context.font = `${options.fontWeight} ${options.fontSize}px ${options.fontFamily}`;
 
   const top = canvas.height * options.topOffsetRatio;
@@ -84,6 +89,9 @@ function drawInkColumns(canvas, options) {
     Array.from(column).forEach((character, characterIndex) => {
       const y = top + characterIndex * lineHeight;
       if (y <= canvas.height - options.fontSize * 0.4) {
+        if (options.strokeWidth > 0) {
+          context.strokeText(character, x, y);
+        }
         context.fillText(character, x, y);
       }
     });
