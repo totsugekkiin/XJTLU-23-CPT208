@@ -14,6 +14,7 @@ import {
   readPortalRuntimeConfig,
   savePortalRuntimeConfig,
 } from "./portalSceneConfig.js";
+import { readPortalCameraView } from "./portalCameraView.js";
 import { PortalFlightController } from "./portalFlightController.js";
 
 const initialQuery = new URLSearchParams(window.location.search);
@@ -685,13 +686,17 @@ function beginFlightMode() {
 
 function endFlightMode() {
   if (!flightMode) return;
+  const currentView = readPortalCameraView(cameraEntity, {
+    homePitch: EDITOR_HOME_PITCH,
+  });
   flightController.end();
-  retainedFlightView = true;
+  Object.assign(state, currentView);
+  retainedFlightView = false;
   syncFlightModeUi(false);
-  // Exiting only releases pointer lock. The final camera pose remains the
-  // viewport source until H / reset or an exact AR field is edited.
+  applyCamera();
   resetOrbitCenter(orbitDistance);
-  renderHud();
+  flightModeButton.textContent = "当前视角已写入 AR 参数";
+  window.setTimeout(() => syncFlightModeUi(false), 1400);
   requestRender(true);
 }
 
