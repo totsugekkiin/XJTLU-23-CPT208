@@ -357,6 +357,7 @@ body.is-river-page .scroll-reveal-words {
 }
 
 .ar-entry-section__primary:focus-visible,
+.ar-entry-section__test-links a:focus-visible,
 .ar-entry-section__skip:focus-visible {
   outline: 3px solid #111;
   outline-offset: 4px;
@@ -396,6 +397,85 @@ body.is-river-page .scroll-reveal-words {
   padding-right: 0.35rem;
   font-size: 1.8rem;
   line-height: 1;
+}
+
+.ar-entry-section__tests {
+  width: min(100%, 34rem);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ar-entry-section__tests-label {
+  color: rgba(23, 50, 71, 0.62);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.ar-entry-section__test-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.ar-entry-section__test-links a {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.78rem 0.85rem;
+  border: 2px solid rgba(40, 103, 199, 0.38);
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.44);
+  color: var(--cm-blue);
+  text-align: left;
+  text-decoration: none;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.ar-entry-section__test-links a:hover {
+  transform: translateY(-2px);
+  border-color: var(--cm-blue);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.ar-entry-section__test-links a > span:first-child {
+  width: 2.25rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--cm-blue);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.ar-entry-section__test-links strong,
+.ar-entry-section__test-links small {
+  display: block;
+}
+
+.ar-entry-section__test-links strong {
+  overflow: hidden;
+  font-size: 0.86rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-entry-section__test-links small {
+  margin-top: 0.2rem;
+  color: rgba(23, 50, 71, 0.62);
+  font-size: 0.66rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ar-entry-section__test-links i {
+  font-size: 1rem;
+  font-style: normal;
 }
 
 .ar-entry-section__skip {
@@ -455,10 +535,19 @@ body.is-river-page .ar-entry-section {
   .ar-entry-section__button-mark {
     width: 3.25rem;
   }
+
+  .ar-entry-section__tests {
+    width: min(100%, 23rem);
+  }
+
+  .ar-entry-section__test-links {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ar-entry-section__primary {
+  .ar-entry-section__primary,
+  .ar-entry-section__test-links a {
     transition: none;
   }
 }

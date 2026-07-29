@@ -402,6 +402,30 @@ export function AppMainPage() {
                 </span>
                 <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
               </a>
+              <div className="ar-entry-section__tests" aria-label="AR 单项测试入口">
+                <span className="ar-entry-section__tests-label">单项测试</span>
+                <div className="ar-entry-section__test-links">
+                  <a href="marker-ar.html?from=app-main" onClick={markArGateResume}>
+                    <span aria-hidden="true">M</span>
+                    <span>
+                      <strong>MindAR 测试</strong>
+                      <small>图像标记追踪</small>
+                    </span>
+                    <i aria-hidden="true">↗</i>
+                  </a>
+                  <a
+                    href="loc-ar.html?dev&recognition=immersal&from=app-main&return=gate&variant=ar"
+                    onClick={markArGateResume}
+                  >
+                    <span aria-hidden="true">I</span>
+                    <span>
+                      <strong>Immersal 测试</strong>
+                      <small>空间地图定位</small>
+                    </span>
+                    <i aria-hidden="true">↗</i>
+                  </a>
+                </div>
+              </div>
               <a className="ar-entry-section__skip" href="#cm-transition">
                 继续查看时间线
                 <span aria-hidden="true">↓</span>

@@ -164,7 +164,9 @@ const AXIS_ROT = quatFromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI);
 export function bootstrapArScene(rootEl) {
   const params = new URLSearchParams(window.location.search);
   const debugMode = params.has("debug") || params.has("dev");
+  const immersalOnlyMode = params.get("recognition") === "immersal";
   rootEl.classList.toggle("is-debug-mode", debugMode);
+  rootEl.classList.toggle("is-immersal-only", immersalOnlyMode);
   const video = rootEl.querySelector("#ar-camera");
   const overlay = rootEl.querySelector("#ar-start-overlay");
   const startBtn = rootEl.querySelector("#ar-start-btn");
@@ -1863,7 +1865,11 @@ export function bootstrapArScene(rootEl) {
         debugPanel?.classList.remove("is-hidden");
       }
       rootEl.classList.add("is-ar-active");
-      void startMarkerRecognition();
+      if (immersalOnlyMode) {
+        setDebug({ marker: "disabled (Immersal-only)" }, "MindAR 已在 Immersal 单项测试中停用");
+      } else {
+        void startMarkerRecognition();
+      }
 
       // The model is not required to open the camera or begin localization.
       // Keeping it in parallel removes a hard wait for first-time visitors.
@@ -1875,7 +1881,9 @@ export function bootstrapArScene(rootEl) {
           setGuide(
             "scanning",
             "正在识别现场",
-            "可对准建筑地图区域，也可将完整纹理边框放入画面",
+            immersalOnlyMode
+              ? "请对准建筑地图区域，缓慢左右移动手机"
+              : "可对准建筑地图区域，也可将完整纹理边框放入画面",
           );
         }
         setDebug({ status: "running (sdk)" }, "Immersal SDK 连续定位已启动");
@@ -1894,7 +1902,9 @@ export function bootstrapArScene(rootEl) {
             setGuide(
               "scanning",
               "正在识别现场",
-              "可对准建筑地图区域，也可将完整纹理边框放入画面",
+              immersalOnlyMode
+                ? "请对准建筑地图区域，缓慢左右移动手机"
+                : "可对准建筑地图区域，也可将完整纹理边框放入画面",
             );
           }
         });

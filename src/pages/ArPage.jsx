@@ -2,6 +2,9 @@ import React, { useEffect } from "react";
 import { AR_MAP_PROFILES } from "../../js/ar/arAnchors.js";
 
 export function ArPage() {
+  const immersalOnlyMode =
+    new URLSearchParams(window.location.search).get("recognition") === "immersal";
+
   const exitAr = () => {
     const returnUrl = new URL("appMain.html?variant=ar&resume=gate", window.location.href);
     window.location.replace(returnUrl.href);
@@ -51,9 +54,13 @@ export function ArPage() {
         <div id="ar-start-overlay">
           <div className="ar-start-mark" aria-hidden="true">簡</div>
           <div className="ar-start-copy">
-            <span>阊门 · 实景导览</span>
-            <h1>在现场查看阊门历史</h1>
-            <p>开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。</p>
+            <span>{immersalOnlyMode ? "IMMERSAL · 单项测试" : "阊门 · 实景导览"}</span>
+            <h1>{immersalOnlyMode ? "空间地图定位测试" : "在现场查看阊门历史"}</h1>
+            <p>
+              {immersalOnlyMode
+                ? "开启相机后，对准已扫描的建筑区域并缓慢移动手机。本模式仅运行 Immersal 空间定位，不启动 MindAR 图像追踪。"
+                : "开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。"}
+            </p>
           </div>
           <label className="ar-field ar-dev-only" htmlFor="ar-map-select">
             识别区域
@@ -67,7 +74,7 @@ export function ArPage() {
             </select>
           </label>
           <button id="ar-start-btn" type="button">
-            开始实景导览
+            {immersalOnlyMode ? "开始 Immersal 测试" : "开始实景导览"}
           </button>
           <div id="ar-preload" className="ar-preload" aria-live="polite">
             <div className="ar-preload__copy">
