@@ -61,6 +61,22 @@ export function HomePage() {
               [TEAM]
             </a>
           </li>
+          <li className="nav-ar-group" aria-label="AR 单项测试入口">
+            <a
+              href="marker-ar.html?from=home"
+              className="nav-item nav-item--ar"
+              aria-label="打开 MindAR 图像标记追踪测试"
+            >
+              [MINDAR]
+            </a>
+            <a
+              href="loc-ar.html?dev&recognition=immersal&from=home"
+              className="nav-item nav-item--ar"
+              aria-label="打开 Immersal 空间地图定位测试"
+            >
+              [IMMERSAL]
+            </a>
+          </li>
           <li>
             <a href="portfolio.html" className="nav-item">
               [PORTFOLIO]
