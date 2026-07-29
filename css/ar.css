@@ -114,6 +114,10 @@ body {
   opacity: 1;
 }
 
+.far-aperture-cv-overlay {
+  display: none;
+}
+
 #ar-three-canvas {
   position: absolute;
   top: 50%;

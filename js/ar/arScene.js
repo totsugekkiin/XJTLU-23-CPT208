@@ -15,7 +15,7 @@ const SDK_DEBUG_INTERVAL_MS = 250;
 const STABLE_LOCALIZATION_COUNT = 2;
 const MAP_SWITCH_CONFIRMATIONS = 3;
 const LOCALIZATION_GRACE_MS = 2200;
-const MARKER_LOST_GRACE_MS = 1800;
+const MARKER_LOST_GRACE_MS = 900;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -704,6 +704,30 @@ export function bootstrapArScene(rootEl) {
           onLost: handleMarkerLost,
           onStatus(status, error) {
             debugState.marker = status;
+            if (recognitionMode === "marker") {
+              if (status === "portal-loading") {
+                setGuide(
+                  "loading",
+                  "正在打开历史场景",
+                  "首次进入需要加载场景，请保持纹理边框在画面中",
+                );
+              } else if (status === "portal-fallback") {
+                setGuide(
+                  "loading",
+                  "正在切换兼容场景",
+                  "高斯场景暂不可用，正在载入实景模型",
+                );
+              } else if (
+                status === "portal-ready" ||
+                status === "fallback-ready"
+              ) {
+                setGuide(
+                  "recognized",
+                  "已识别纹理入口",
+                  "保持纹理边框在画面中，移动手机查看门后的历史场景",
+                );
+              }
+            }
             if (error) {
               logDebug("MindAR 纹理模式异常", error?.message || String(error));
             } else {
@@ -1105,9 +1129,8 @@ export function bootstrapArScene(rootEl) {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" },
-        aspectRatio: { ideal: 4 / 3 },
-        width: { ideal: 1280 },
-        height: { ideal: 960 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
       },
       audio: false,
     });

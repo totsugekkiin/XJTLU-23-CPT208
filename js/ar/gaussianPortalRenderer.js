@@ -110,6 +110,7 @@ class GaussianPortalRenderer {
   constructor({
     scene,
     target,
+    video = null,
     view,
     anchorObject = null,
     crop = PORTAL_CROP_BOX,
@@ -164,6 +165,7 @@ class GaussianPortalRenderer {
     this.apertureSnapper = createFarApertureCvSnapper({
       scene: this.scene,
       target: this.target,
+      video,
       enabled: apertureCv,
     });
 

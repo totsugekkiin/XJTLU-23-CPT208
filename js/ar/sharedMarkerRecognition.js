@@ -1,3 +1,4 @@
+import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
 import {
   DEFAULT_PORTAL_SCENE_ID,
   PORTAL_CROP_BOX,
@@ -12,8 +13,41 @@ import {
 } from "./portalSceneConfig.js";
 
 const TARGET_URL = "/markers/changgate-window-frame-border-only.mind";
-const SCAN_BURST_FRAMES = 3;
-const SCAN_BURST_PAUSE_MS = 160;
+export const MARKER_TRACKING_HOLD_MS = 900;
+
+export function createTrackingLossGuard({
+  holdMs = MARKER_TRACKING_HOLD_MS,
+  onExpired,
+  setTimer = (callback, delay) => globalThis.setTimeout(callback, delay),
+  clearTimer = (timerId) => globalThis.clearTimeout(timerId),
+}) {
+  let timerId = null;
+
+  return {
+    get pending() {
+      return timerId !== null;
+    },
+    markMissing() {
+      if (timerId !== null) return false;
+      timerId = setTimer(() => {
+        timerId = null;
+        onExpired?.();
+      }, holdMs);
+      return true;
+    },
+    markPresent() {
+      if (timerId === null) return false;
+      clearTimer(timerId);
+      timerId = null;
+      return true;
+    },
+    cancel() {
+      if (timerId === null) return;
+      clearTimer(timerId);
+      timerId = null;
+    },
+  };
+}
 
 export function syncVideoFrameSize(video) {
   const width = Number(video?.videoWidth);
@@ -115,9 +149,8 @@ function updateMarkerProjection(scene, controller, video) {
 }
 
 /**
- * Runs MindAR against a video element owned by the host page. The controller
- * uses short acquisition bursts while searching, then switches to continuous
- * tracking after a target is found.
+ * Runs the same continuous MindAR tracking and portal renderer as the
+ * dedicated marker page against a video element owned by the host page.
  */
 export async function createSharedMarkerRecognition({
   rootEl,
@@ -140,8 +173,10 @@ export async function createSharedMarkerRecognition({
 
   await waitForScene(scene);
   onStatus?.("loading");
+  registerPortalOcclusionTest();
 
   const THREE = window.AFRAME.THREE;
+  const portalConfig = resolvePortalConfig();
   const invisibleMatrix = new THREE.Matrix4().set(
     0, 0, 0, 0,
     0, 0, 0, 0,
@@ -156,11 +191,31 @@ export async function createSharedMarkerRecognition({
   let destroyed = false;
   let paused = false;
   let tracking = false;
-  let burstFrames = 0;
-  let burstTimer = 0;
   let postMatrix = null;
   let portalRenderer = null;
   let portalPromise = null;
+
+  const applyFallbackConfig = (loadModel = false) => {
+    const { view } = portalConfig;
+    target.setAttribute("portal-occlusion-test", {
+      direction: -1,
+      occlusion: true,
+      nearFrame: false,
+      farFrame: false,
+      loadModel,
+      useViewPose: true,
+      viewX: view.x,
+      viewY: view.y,
+      viewZ: view.z,
+      viewYaw: view.yaw,
+      viewPitch: view.pitch,
+      viewRoll: view.roll,
+      viewFov: view.fov,
+      modelScale: PORTAL_WORLD_SCALE,
+    });
+  };
+
+  applyFallbackConfig(false);
 
   const setTracking = (nextTracking, notify = true) => {
     const next = Boolean(nextTracking);
@@ -177,26 +232,64 @@ export async function createSharedMarkerRecognition({
     }
   };
 
+  const hideTrackedTarget = (notify = true) => {
+    targetObject.visible = false;
+    targetObject.matrix.copy(invisibleMatrix);
+    targetObject.updateMatrixWorld(true);
+    setTracking(false, notify);
+  };
+
+  const trackingLossGuard = createTrackingLossGuard({
+    onExpired() {
+      if (destroyed || paused || !tracking) return;
+      hideTrackedTarget();
+      onStatus?.("lost");
+    },
+  });
+
+  const handlePortalLoading = () => onStatus?.("portal-loading");
+  const handlePortalLoaded = () => onStatus?.("portal-ready");
+  const handlePortalError = (event) => {
+    applyFallbackConfig(true);
+    onStatus?.(
+      "portal-fallback",
+      new Error(event.detail?.message || "Gaussian portal failed to load"),
+    );
+  };
+  const handleFallbackLoaded = () => onStatus?.("fallback-ready");
+  const handleFallbackError = (event) => {
+    onStatus?.(
+      "fallback-error",
+      new Error(event.detail?.message || "Portal fallback failed to load"),
+    );
+  };
+  target.addEventListener("gaussian-portal-loading", handlePortalLoading);
+  target.addEventListener("gaussian-portal-loaded", handlePortalLoaded);
+  target.addEventListener("gaussian-portal-error", handlePortalError);
+  target.addEventListener("portal-model-loaded", handleFallbackLoaded);
+  target.addEventListener("portal-model-error", handleFallbackError);
+
   const ensurePortal = () => {
     if (portalPromise) return portalPromise;
-    const { profile, view, crop, portalFov } = resolvePortalConfig();
+    const { profile, view, crop, portalFov } = portalConfig;
     portalPromise = import("./gaussianPortalRenderer.js")
       .then(({ createGaussianPortalRenderer }) => {
         if (destroyed) return null;
         portalRenderer = createGaussianPortalRenderer({
           scene,
           target,
+          video,
           view,
           crop,
           portalFov,
           modelScale: PORTAL_WORLD_SCALE,
           viewDistance: PORTAL_REFERENCE_VIEW_DISTANCE,
           perspectiveMode: PORTAL_PERSPECTIVE_MODES.PHYSICAL,
-          // The unified page uses a shared, cover-fitted video. Keep the
-          // portal projection deterministic and leave the optional CV aperture
-          // correction to the dedicated marker calibration page.
-          apertureCv: false,
-          portalScene: profile.runtime,
+          apertureCv: true,
+          portalScene: {
+            ...profile.runtime,
+            id: profile.id,
+          },
         });
         portalRenderer.setOcclusion(true);
         portalRenderer.setDirection(-1);
@@ -204,9 +297,9 @@ export async function createSharedMarkerRecognition({
         return portalRenderer;
       })
       .catch((error) => {
-        portalPromise = null;
-        onStatus?.("portal-error", error);
-        throw error;
+        applyFallbackConfig(true);
+        onStatus?.("portal-fallback", error);
+        return null;
       });
     return portalPromise;
   };
@@ -221,32 +314,18 @@ export async function createSharedMarkerRecognition({
     missTolerance: 20,
     onUpdate(data) {
       if (destroyed) return;
-      if (data.type === "processDone") {
-        if (!paused && !tracking) {
-          burstFrames += 1;
-          if (burstFrames >= SCAN_BURST_FRAMES) {
-            controller.stopProcessVideo();
-            window.clearTimeout(burstTimer);
-            burstTimer = window.setTimeout(() => {
-              if (destroyed || paused || tracking) return;
-              burstFrames = 0;
-              controller.processVideo(video);
-            }, SCAN_BURST_PAUSE_MS);
-          }
-        }
-        return;
-      }
+      if (data.type === "processDone") return;
       if (data.type !== "updateMatrix") return;
 
       const worldMatrix = data.worldMatrix;
       if (!worldMatrix) {
-        targetObject.visible = false;
-        targetObject.matrix.copy(invisibleMatrix);
-        targetObject.updateMatrixWorld(true);
-        setTracking(false);
+        if (tracking && trackingLossGuard.markMissing()) {
+          onStatus?.("tracking-hold");
+        }
         return;
       }
 
+      trackingLossGuard.markPresent();
       const matrix = new THREE.Matrix4();
       matrix.fromArray(worldMatrix);
       matrix.multiply(postMatrix);
@@ -294,6 +373,7 @@ export async function createSharedMarkerRecognition({
     controller.dispose();
     throw new Error("Marker recognition was disposed during startup");
   }
+  void ensurePortal();
   onStatus?.("ready");
   controller.processVideo(video);
 
@@ -304,18 +384,18 @@ export async function createSharedMarkerRecognition({
     pause() {
       if (destroyed || paused) return;
       paused = true;
-      window.clearTimeout(burstTimer);
+      trackingLossGuard.cancel();
       controller.stopProcessVideo();
       scene.pause?.();
       setTracking(false, false);
       targetObject.visible = false;
+      targetObject.matrix.copy(invisibleMatrix);
       targetObject.updateMatrixWorld(true);
       rootEl.classList.remove("is-marker-tracking");
     },
     resume() {
       if (destroyed || !paused) return;
       paused = false;
-      burstFrames = 0;
       scene.play?.();
       controller.processVideo(video);
     },
@@ -325,14 +405,20 @@ export async function createSharedMarkerRecognition({
     dispose() {
       if (destroyed) return;
       destroyed = true;
-      window.clearTimeout(burstTimer);
+      trackingLossGuard.cancel();
       window.removeEventListener("resize", resize);
       window.removeEventListener("orientationchange", resize);
+      target.removeEventListener("gaussian-portal-loading", handlePortalLoading);
+      target.removeEventListener("gaussian-portal-loaded", handlePortalLoaded);
+      target.removeEventListener("gaussian-portal-error", handlePortalError);
+      target.removeEventListener("portal-model-loaded", handleFallbackLoaded);
+      target.removeEventListener("portal-model-error", handleFallbackError);
       controller.dispose();
       portalRenderer?.destroy();
       portalRenderer = null;
       portalPromise = null;
       targetObject.visible = false;
+      target.removeAttribute("portal-occlusion-test");
       rootEl.classList.remove("is-marker-tracking");
     },
   };

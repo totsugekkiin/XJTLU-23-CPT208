@@ -638,7 +638,7 @@ function lumaFromImageData(imageData) {
   return luma;
 }
 
-function resolveCoverSource(video, viewportBounds) {
+export function resolveCoverSource(video, viewportBounds) {
   const videoWidth = video.videoWidth;
   const videoHeight = video.videoHeight;
   const videoBounds = video.getBoundingClientRect();
@@ -673,9 +673,10 @@ function resolveCoverSource(video, viewportBounds) {
 }
 
 export class FarApertureCvSnapper {
-  constructor({ scene, target, enabled = true }) {
+  constructor({ scene, target, video = null, enabled = true }) {
     this.scene = scene;
     this.target = target;
+    this.video = video;
     this.enabled = enabled;
     this.occlusion = true;
     this.tracking = false;
@@ -771,7 +772,10 @@ export class FarApertureCvSnapper {
   }
 
   readFrame(searchCorners, viewportBounds, locked) {
-    const video = document.querySelector("video");
+    const video =
+      this.video ||
+      this.scene?.systems?.["mindar-image-system"]?.video ||
+      document.querySelector("video");
     if (
       !this.processingContext ||
       !video ||
@@ -1013,6 +1017,7 @@ export class FarApertureCvSnapper {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.video = null;
     this.overlay.remove();
     this.processingCanvas.width = 0;
     this.processingCanvas.height = 0;
