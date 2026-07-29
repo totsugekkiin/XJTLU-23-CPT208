@@ -4,7 +4,11 @@ import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { AR_MAP_PROFILES, DEFAULT_MAP_ID, resolveActiveMapIds } from "./arAnchors.js";
-import { attachBambooNoticeText } from "./bambooNotice.js";
+import {
+  attachBambooNoticeText,
+  BAMBOO_NOTICE_CONTENT_OPTIONS,
+  getBambooNoticeContent,
+} from "./bambooNotice.js";
 import { createPortalTestScene, disposePortalTestScene } from "./portalTestScene.js";
 
 const IMMERSAL_BASE = "https://api.immersal.com";
@@ -33,12 +37,15 @@ function formatNum(n) {
 }
 
 function anchorToState(anchor) {
+  const type = anchor.type ?? "model";
   return {
     id: anchor.id,
-    type: anchor.type ?? "model",
+    type,
     label: anchor.label ?? anchor.id,
     url: anchor.url ?? "",
-    content: anchor.content ?? null,
+    content: type === "bamboo-notice"
+      ? getBambooNoticeContent(anchor.content).id
+      : anchor.content ?? null,
     position: [...(anchor.position ?? [0, 0, 0])],
     rotation: [...(anchor.rotation ?? [0, 0, 0])],
     scale: [...(anchor.scale ?? [1, 1, 1])],
@@ -184,6 +191,9 @@ export function bootstrapArPlacementEditor(rootEl) {
   const nudgeStepSelect = rootEl.querySelector("#ar-editor-nudge-step");
   const resetAnchorBtn = rootEl.querySelector("#ar-editor-reset-anchor");
   const copyCurrentBtn = rootEl.querySelector("#ar-editor-copy-current");
+  const bambooContentField = rootEl.querySelector("#ar-editor-bamboo-content-field");
+  const bambooContentSelect = rootEl.querySelector("#ar-editor-bamboo-content-select");
+  const bambooContentSummary = rootEl.querySelector("#ar-editor-bamboo-content-summary");
   const pointSizeInput = rootEl.querySelector("#ar-editor-point-size");
   const pointSizeOutput = rootEl.querySelector("#ar-editor-point-size-output");
   const pointOpacityInput = rootEl.querySelector("#ar-editor-point-opacity");
@@ -283,6 +293,15 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   const plyLoader = new PLYLoader();
   const gltfLoader = new GLTFLoader();
+
+  bambooContentSelect?.replaceChildren(
+    ...BAMBOO_NOTICE_CONTENT_OPTIONS.map((content) => {
+      const option = document.createElement("option");
+      option.value = content.id;
+      option.textContent = `${content.label} · ${content.description}`;
+      return option;
+    }),
+  );
 
   function getActiveProfile() {
     return profileStates.get(activeMapId) ?? null;
@@ -394,7 +413,10 @@ export function bootstrapArPlacementEditor(rootEl) {
 
   function decorateModelForEditing(model, state) {
     if (state.type === "bamboo-notice") {
-      attachBambooNoticeText(model, {
+      const content = getBambooNoticeContent(state.content);
+      state.content = content.id;
+      model.userData.bambooNoticeText = attachBambooNoticeText(model, {
+        columns: content.columns,
         anisotropy: renderer.capabilities.getMaxAnisotropy(),
       });
     }
@@ -460,6 +482,16 @@ export function bootstrapArPlacementEditor(rootEl) {
       if (output) output.value = Number.parseFloat(input.value || "0").toFixed(3);
     });
     const isPortal = state.type === "portal";
+    const isBambooNotice = state.type === "bamboo-notice";
+    bambooContentField?.toggleAttribute("hidden", !isBambooNotice);
+    if (isBambooNotice) {
+      const content = getBambooNoticeContent(state.content);
+      state.content = content.id;
+      if (bambooContentSelect) bambooContentSelect.value = content.id;
+      if (bambooContentSummary) {
+        bambooContentSummary.textContent = `${content.description}。共 ${content.columns.length} 列，选择后会立即更新模型预览。`;
+      }
+    }
     portalSection?.removeAttribute("hidden");
     modelFileField?.toggleAttribute("hidden", isPortal);
     rootEl.querySelector("#ar-editor-model-tools")?.toggleAttribute("hidden", isPortal);
@@ -493,6 +525,10 @@ export function bootstrapArPlacementEditor(rootEl) {
         );
         lines.push(`实际尺寸: ${(physicalSize[0] * 100).toFixed(1)} × ${(physicalSize[1] * 100).toFixed(1)} × ${(physicalSize[2] * 100).toFixed(1)} cm`);
         lines.push("正面方向: 模型本地 +Z（黄色箭头）");
+      }
+      if (isBambooNotice) {
+        const content = getBambooNoticeContent(state.content);
+        lines.push(`竹简内容: ${content.label} (${content.id})`);
       }
       portalSummary.textContent = lines.join("\n");
     }
@@ -943,6 +979,9 @@ export function bootstrapArPlacementEditor(rootEl) {
         mapId: activeMapId,
         id: state.id,
         type: state.type,
+        label: state.label,
+        url: state.url,
+        content: state.content,
         position: state.position.map(formatNum),
         rotation: state.rotation.map(formatNum),
         scale: state.scale.map(formatNum),
@@ -952,7 +991,7 @@ export function bootstrapArPlacementEditor(rootEl) {
     );
     try {
       await navigator.clipboard.writeText(text);
-      setStatus("当前遮罩参数已复制");
+      setStatus("当前锚点参数和内容已复制");
     } catch {
       setStatus("复制失败，请从下方参数框手动复制", true);
     }
@@ -965,9 +1004,14 @@ export function bootstrapArPlacementEditor(rootEl) {
     state.position = [...initial.position];
     state.rotation = [...initial.rotation];
     state.scale = [...initial.scale];
+    state.content = initial.content;
+    if (state.type === "bamboo-notice") {
+      const content = getBambooNoticeContent(state.content);
+      modelObject?.userData?.bambooNoticeText?.update(content.columns);
+    }
     applyStateToObject(state);
     syncUiFromState();
-    setStatus("已恢复代码中的初始锚点参数");
+    setStatus("已恢复代码中的初始锚点参数和内容");
   }
 
   function importConfigFromJson(data) {
@@ -1081,6 +1125,16 @@ export function bootstrapArPlacementEditor(rootEl) {
     activeAnchorId = anchorSelect.value;
     const state = getActiveState();
     if (state) loadModelFromState(state);
+  });
+
+  bambooContentSelect?.addEventListener("change", () => {
+    const state = getActiveState();
+    if (state?.type !== "bamboo-notice") return;
+    const content = getBambooNoticeContent(bambooContentSelect.value);
+    state.content = content.id;
+    modelObject?.userData?.bambooNoticeText?.update(content.columns);
+    syncUiFromState();
+    setStatus(`竹简内容已切换：${content.label}`);
   });
 
   loadSparseBtn?.addEventListener("click", () => loadImmersalPly("sparse"));

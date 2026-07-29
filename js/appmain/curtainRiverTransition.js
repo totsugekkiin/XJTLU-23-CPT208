@@ -9,7 +9,8 @@ export function createCurtainRiverTransition({
   onClosed,
   onBeforeOpen,
   onOpened,
-  beforeOpenDelay = 0.12,
+  beforeOpenDelay = 0.06,
+  beforeOpenFadeDuration = 0.18,
 } = {}) {
   const gsap = typeof window !== "undefined" ? window.gsap : null;
   if (!gsap) {
@@ -25,15 +26,33 @@ export function createCurtainRiverTransition({
 
   const state = { topP: 0, botP: 0 };
   let tl = null;
-  let isClosed = false;
+  let phase = "open";
   let hasCalledClosed = false;
   let pendingBeforeOpen = null;
+  let fadeTween = null;
 
   function setCurtainPaths(leftCurtain, rightCurtain) {
     const lPath = `M0,0 L${state.topP},0 L${state.botP},100 L0,100 Z`;
     const rPath = `M100,0 L${100 - state.topP},0 L${100 - state.botP},100 L100,100 Z`;
     leftCurtain.setAttribute("d", lPath);
     rightCurtain.setAttribute("d", rPath);
+  }
+
+  function killPendingBeforeOpen() {
+    if (!pendingBeforeOpen) return;
+    pendingBeforeOpen.kill();
+    pendingBeforeOpen = null;
+  }
+
+  function showCurtainOverlay() {
+    const { curtainOverlay } = getEls();
+    if (!curtainOverlay) return;
+    if (fadeTween) {
+      fadeTween.kill();
+      fadeTween = null;
+    }
+    curtainOverlay.style.opacity = "1";
+    curtainOverlay.classList.add("is-active");
   }
 
   function ensureTimeline() {
@@ -45,10 +64,11 @@ export function createCurtainRiverTransition({
 
     tl = gsap.timeline({ paused: true });
     tl.eventCallback("onStart", () => {
-      curtainOverlay.classList.add("is-active");
+      showCurtainOverlay();
       update();
     });
     tl.eventCallback("onComplete", () => {
+      phase = "closed";
       if (!hasCalledClosed) {
         hasCalledClosed = true;
         if (typeof onClosed === "function") {
@@ -61,7 +81,9 @@ export function createCurtainRiverTransition({
       }
     });
     tl.eventCallback("onReverseComplete", () => {
+      phase = "open";
       curtainOverlay.classList.remove("is-active");
+      curtainOverlay.style.opacity = "";
       state.topP = 0;
       state.botP = 0;
       update();
@@ -83,42 +105,78 @@ export function createCurtainRiverTransition({
 
   function playClose() {
     ensureTimeline();
-    if (!tl) return;
-    isClosed = true;
+    if (!tl || phase === "closing" || phase === "closed") return;
+    killPendingBeforeOpen();
+    showCurtainOverlay();
+    phase = "closing";
     tl.play();
   }
 
   function reverseOpen() {
     ensureTimeline();
-    if (!tl) return;
-    isClosed = false;
-    if (pendingBeforeOpen) {
-      pendingBeforeOpen.kill();
-      pendingBeforeOpen = null;
-    }
+    if (!tl || phase === "open" || phase === "opening") return;
+    killPendingBeforeOpen();
+    tl.pause();
+    phase = "opening";
 
-    if (typeof onBeforeOpen === "function") {
-      try {
-        onBeforeOpen();
-      } catch (e) {
-        console.error("[curtainTransition] onBeforeOpen 回调执行失败", e);
+    const beginOpen = () => {
+      if (phase !== "opening") return;
+      if (typeof onBeforeOpen === "function") {
+        try {
+          onBeforeOpen();
+        } catch (e) {
+          console.error("[curtainTransition] onBeforeOpen 回调执行失败", e);
+        }
       }
+
+      pendingBeforeOpen = gsap.delayedCall(Math.max(0, beforeOpenDelay), () => {
+        pendingBeforeOpen = null;
+        if (phase !== "opening") return;
+        tl.reverse();
+      });
+    };
+
+    const { curtainOverlay } = getEls();
+    if (!curtainOverlay) {
+      beginOpen();
+      return;
     }
 
-    pendingBeforeOpen = gsap.delayedCall(Math.max(0, beforeOpenDelay), () => {
-      pendingBeforeOpen = null;
-      tl.reverse();
+    const currentOpacity = Number.parseFloat(getComputedStyle(curtainOverlay).opacity) || 0;
+    if (fadeTween) {
+      fadeTween.kill();
+      fadeTween = null;
+    }
+    curtainOverlay.style.opacity = String(currentOpacity);
+    curtainOverlay.classList.add("is-active");
+
+    if (currentOpacity >= 0.995 || beforeOpenFadeDuration <= 0) {
+      curtainOverlay.style.opacity = "1";
+      beginOpen();
+      return;
+    }
+
+    fadeTween = gsap.to(curtainOverlay, {
+      opacity: 1,
+      duration: beforeOpenFadeDuration,
+      ease: "power2.out",
+      onComplete: () => {
+        fadeTween = null;
+        beginOpen();
+      },
     });
   }
 
   function fadeOutAndHide({ duration = 0.65 } = {}) {
     const { curtainOverlay } = getEls();
     if (!curtainOverlay || !gsap) return;
-    gsap.to(curtainOverlay, {
+    if (fadeTween) fadeTween.kill();
+    fadeTween = gsap.to(curtainOverlay, {
       opacity: 0,
       duration,
       ease: "power2.out",
       onComplete: () => {
+        fadeTween = null;
         curtainOverlay.classList.remove("is-active");
         curtainOverlay.style.opacity = "";
       },
@@ -127,23 +185,47 @@ export function createCurtainRiverTransition({
 
   // 固定点触发：不把动画进度绑定滚动，只在跨阈值时切换 play/reverse
   function handleProgress(progress) {
-    // 只在末段范围才考虑触发（额外保护，避免前段误触）
-    if (progress < startAt && isClosed) {
-      // 如果某些情况下提前关闭了，且已回到 startAt 之前，就打开
-      reverseOpen();
-      return;
-    }
+    const p = clamp01(progress);
+    const closeThreshold = Math.max(clamp01(startAt), clamp01(enterAt));
+    const openThreshold = Math.min(clamp01(leaveAt), closeThreshold);
 
-    if (!isClosed && progress >= enterAt) {
+    if ((phase === "open" || phase === "opening") && p >= closeThreshold) {
       playClose();
       return;
     }
 
-    if (isClosed && progress <= leaveAt) {
+    if ((phase === "closing" || phase === "closed") && p <= openThreshold) {
       reverseOpen();
     }
   }
 
-  return { handleProgress, playClose, reverseOpen, fadeOutAndHide };
+  function destroy() {
+    killPendingBeforeOpen();
+    if (fadeTween) {
+      fadeTween.kill();
+      fadeTween = null;
+    }
+    tl?.kill?.();
+    tl = null;
+    phase = "open";
+    hasCalledClosed = false;
+    const { curtainOverlay, leftCurtain, rightCurtain } = getEls();
+    curtainOverlay?.classList.remove("is-active");
+    if (curtainOverlay) curtainOverlay.style.opacity = "";
+    state.topP = 0;
+    state.botP = 0;
+    if (leftCurtain && rightCurtain) setCurtainPaths(leftCurtain, rightCurtain);
+  }
+
+  return {
+    handleProgress,
+    playClose,
+    reverseOpen,
+    fadeOutAndHide,
+    destroy,
+    get phase() {
+      return phase;
+    },
+  };
 }
 

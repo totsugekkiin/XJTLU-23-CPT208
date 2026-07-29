@@ -1,5 +1,11 @@
 export const DEFAULT_PORTAL_SCENE_ID = "song";
 
+// The Gaussian captures are Z-up. The renderer applies a 180° rotation around
+// X to every scan, so physical elevation in editor world space is -Z. Keep
+// this separate from the legacy serialized camera-yaw axis: changing that
+// older axis would reinterpret the locked dynasty view data.
+export const PORTAL_NAVIGATION_UP = Object.freeze([0, 0, -1]);
+
 export const PORTAL_SCENES = Object.freeze({
   song: Object.freeze({
     id: "song",
@@ -27,8 +33,8 @@ export const PORTAL_SCENES = Object.freeze({
     }),
     runtime: Object.freeze({
       url: "/models/changgate-ming-cropped.sog",
-      gaussians: 134519,
-      megabytes: 1.6,
+      gaussians: 655972,
+      megabytes: 7.4,
     }),
   }),
   qing: Object.freeze({

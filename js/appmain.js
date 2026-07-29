@@ -123,7 +123,15 @@ export function bootstrapAppMain() {
     routeSectionObserver = new IntersectionObserver(
       (entries) => {
         const e = entries[0];
-        riverStageEl.classList.toggle("river-stage--behind-route", !!e?.isIntersecting);
+        const routeOffsetTop = routeSectionEl.offsetTop;
+        const layoutSettled = routeOffsetTop > window.innerHeight;
+        const hasReachedRoute = window.scrollY >= Math.max(0, routeOffsetTop - window.innerHeight);
+        const shouldSitBehindRoute =
+          document.body.classList.contains("is-river-page") &&
+          !!e?.isIntersecting &&
+          layoutSettled &&
+          hasReachedRoute;
+        riverStageEl.classList.toggle("river-stage--behind-route", shouldSitBehindRoute);
       },
       { threshold: 0.02 }
     );
@@ -139,55 +147,70 @@ export function bootstrapAppMain() {
     cmBottomScrollY: 0,
     exitArmed: false,
     lastScrollY: 0,
+    pendingExitTargetY: null,
+  };
+
+  // 河流接管期间统一管理滚动锁和待执行帧，回退时可以完整取消，避免旧任务再次把页面切回河流。
+  const riverScrollLock = {
+    locked: false,
+    y: 0,
+  };
+  const preventRiverScroll = (e) => e.preventDefault();
+  const preventRiverScrollKeys = (e) => {
+    const keys = ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"];
+    if (keys.includes(e.key)) e.preventDefault();
+  };
+
+  const lockRiverScroll = () => {
+    if (riverScrollLock.locked) return;
+    riverScrollLock.locked = true;
+    riverScrollLock.y = window.scrollY;
+    document.body.classList.add("is-scroll-locked");
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${riverScrollLock.y}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    window.addEventListener("wheel", preventRiverScroll, { passive: false });
+    window.addEventListener("touchmove", preventRiverScroll, { passive: false });
+    window.addEventListener("keydown", preventRiverScrollKeys, { passive: false });
+  };
+
+  const unlockRiverScroll = () => {
+    if (!riverScrollLock.locked) return;
+    riverScrollLock.locked = false;
+    document.body.classList.remove("is-scroll-locked");
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    window.removeEventListener("wheel", preventRiverScroll);
+    window.removeEventListener("touchmove", preventRiverScroll);
+    window.removeEventListener("keydown", preventRiverScrollKeys);
+    window.scrollTo({ top: riverScrollLock.y, behavior: "auto" });
+  };
+
+  let riverHandoffGeneration = 0;
+  let pendingRiverStartRaf = null;
+  let pendingCurtainRevealRaf = null;
+
+  const cancelPendingRiverHandoff = () => {
+    riverHandoffGeneration += 1;
+    if (pendingRiverStartRaf !== null) {
+      cancelAnimationFrame(pendingRiverStartRaf);
+      pendingRiverStartRaf = null;
+    }
+    if (pendingCurtainRevealRaf !== null) {
+      cancelAnimationFrame(pendingCurtainRevealRaf);
+      pendingCurtainRevealRaf = null;
+    }
   };
 
   const transition = createCurtainRiverTransition({
     onClosed() {
       if (!riverScene) return;
       // 幕布合拢后：幕布本身作为“地面”，河流从幕布上流下（不跳转、不切页面结构）
-      const gsap = window.gsap;
-
-      // ====== 幕布合拢后：短暂锁定滚动，直到河流蔓延触底 ======
-      const scrollLock = { locked: false, y: 0 };
-      const lockScroll = () => {
-        if (scrollLock.locked) return;
-        scrollLock.locked = true;
-        scrollLock.y = window.scrollY;
-        document.body.classList.add("is-scroll-locked");
-        // 用 fixed 锁住视觉位置，防止任何滚动（包含触摸惯性）
-        document.body.style.position = "fixed";
-        document.body.style.top = `-${scrollLock.y}px`;
-        document.body.style.left = "0";
-        document.body.style.right = "0";
-        document.body.style.width = "100%";
-
-        const prevent = (e) => e.preventDefault();
-        const preventKeys = (e) => {
-          const keys = ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"];
-          if (keys.includes(e.key)) e.preventDefault();
-        };
-        scrollLock._prevent = prevent;
-        scrollLock._preventKeys = preventKeys;
-        window.addEventListener("wheel", prevent, { passive: false });
-        window.addEventListener("touchmove", prevent, { passive: false });
-        window.addEventListener("keydown", preventKeys, { passive: false });
-      };
-
-      const unlockScroll = () => {
-        if (!scrollLock.locked) return;
-        scrollLock.locked = false;
-        document.body.classList.remove("is-scroll-locked");
-        document.body.style.position = "";
-        document.body.style.top = "";
-        document.body.style.left = "";
-        document.body.style.right = "";
-        document.body.style.width = "";
-        window.removeEventListener("wheel", scrollLock._prevent);
-        window.removeEventListener("touchmove", scrollLock._prevent);
-        window.removeEventListener("keydown", scrollLock._preventKeys);
-        // 恢复到锁定前的 scrollY（fixed 解锁时需要手动回填）
-        window.scrollTo({ top: scrollLock.y, behavior: "auto" });
-      };
 
       const enterRiverPage = () => {
         if (riverPage.exiting) return;
@@ -229,34 +252,48 @@ export function bootstrapAppMain() {
           ease: prefersReducedMotion ? "none" : "power2.inOut",
           boatDelay: prefersReducedMotion ? 0 : 0.55,
           boatEnterDuration: prefersReducedMotion ? 0.01 : 0.7,
-          onReachedBottom: () => unlockScroll(),
+          onReachedBottom: () => unlockRiverScroll(),
         });
 
-      // 双保险：确保幕布完全铺好（合拢完成）后，再启动河流/船/内容显现链路
-      // 关键：先把页面切到“河流页”并跳转滚动位置，再 startFlow，确保 riverScene 记录的 scroll.startY 正确
-      if (gsap?.delayedCall && !prefersReducedMotion) {
-        gsap.delayedCall(0.06, () => {
-          enterRiverPage();
-          // 先滚到河流页顶部（spacer），再锁滚动，避免锁住时无法 scrollIntoView 导致直接露出地图段
-          requestAnimationFrame(() => {
-            lockScroll();
-            start();
+      // 幕布保持完全闭合，跨过 display/layout/scroll 切换；河流至少完成一帧绘制后再淡出幕布。
+      cancelPendingRiverHandoff();
+      const handoffGeneration = riverHandoffGeneration;
+      enterRiverPage();
+      pendingRiverStartRaf = requestAnimationFrame(() => {
+        pendingRiverStartRaf = null;
+        if (handoffGeneration !== riverHandoffGeneration) return;
+        lockRiverScroll();
+        start();
+
+        const revealCurtain = () => {
+          if (handoffGeneration !== riverHandoffGeneration) return;
+          pendingCurtainRevealRaf = requestAnimationFrame(() => {
+            pendingCurtainRevealRaf = null;
+            if (handoffGeneration !== riverHandoffGeneration) return;
+            transition.fadeOutAndHide({ duration: prefersReducedMotion ? 0.01 : 0.24 });
           });
-        });
-      } else {
-        // reduce motion：立即锁住 -> 启动瞬时流动 -> onReachedBottom 会立刻解锁
-        enterRiverPage();
-        requestAnimationFrame(() => {
-          lockScroll();
-          start();
-        });
-      }
+        };
+        pendingCurtainRevealRaf = requestAnimationFrame(revealCurtain);
+      });
     },
     onBeforeOpen() {
       // 回退时：先让幕布后内容消失，再开幕布
+      cancelPendingRiverHandoff();
+      unlockRiverScroll();
       riverScene?.stopAndHide?.();
       document.body.classList.remove("is-river-page");
+      riverStageEl?.classList.remove("river-stage--behind-route");
       riverPage.active = false;
+      if (Number.isFinite(riverPage.pendingExitTargetY)) {
+        const targetY = riverPage.pendingExitTargetY;
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: targetY, behavior: "auto" });
+        });
+      }
+    },
+    onOpened() {
+      riverPage.pendingExitTargetY = null;
+      riverPage.exiting = false;
     },
   });
 
@@ -265,21 +302,20 @@ export function bootstrapAppMain() {
     riverPage.exiting = true;
     // 退出河流页：先开幕布（内部会 stopAndHide），再恢复滚动到胶片段附近
     try {
+      const safeRetreat = Math.max(36, window.innerHeight * 0.08);
+      riverPage.pendingExitTargetY = Math.max(
+        0,
+        (riverPage.cmBottomScrollY || riverPage.preScrollY) - safeRetreat
+      );
       transition.reverseOpen();
     } catch (e) {
       console.error("[riverPage] reverseOpen failed", e);
       riverScene?.stopAndHide?.();
       document.body.classList.remove("is-river-page");
       riverPage.active = false;
+      riverPage.pendingExitTargetY = null;
+      riverPage.exiting = false;
     }
-
-    // 还原到胶片段“最底部附近”（避免回到初始阊门界面）
-    const targetY = Math.max(0, (riverPage.cmBottomScrollY || riverPage.preScrollY) - 12);
-    // display none 切换会改变文档高度：等一帧再滚动，避免浏览器把 scrollY 钳到 0
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: targetY, behavior: "auto" });
-    });
-    riverPage.exiting = false;
   };
 
   const handleRiverPageExitScroll = (y) => {
@@ -676,6 +712,9 @@ export function bootstrapAppMain() {
       routeSectionObserver?.disconnect?.();
       routeIntroObserver?.disconnect?.();
       if (rafId !== null) cancelAnimationFrame(rafId);
+      cancelPendingRiverHandoff();
+      unlockRiverScroll();
+      transition.destroy?.();
       onDockClick && context.heroPetDockBtn?.removeEventListener("click", onDockClick);
       comic?.destroy?.();
       pet?.destroy?.();
@@ -688,4 +727,3 @@ export function bootstrapAppMain() {
 if (!globalThis.__APPMAIN_NO_AUTOBOOT__) {
   bootstrapAppMain();
 }
-

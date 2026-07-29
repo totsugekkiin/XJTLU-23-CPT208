@@ -94,6 +94,13 @@ export function ArEditorPage() {
             当前锚点
             <select id="ar-editor-anchor-select" />
           </label>
+          <div id="ar-editor-bamboo-content-field" hidden>
+            <label className="ar-editor-field">
+              竹简内容
+              <select id="ar-editor-bamboo-content-select" />
+            </label>
+            <p id="ar-editor-bamboo-content-summary" className="ar-editor-hint" />
+          </div>
           <label id="ar-editor-model-file-field" className="ar-editor-file">
             替换模型 (.glb)
             <input id="ar-editor-model-file" type="file" accept=".glb,.gltf" />

@@ -172,61 +172,11 @@ export function AppMainPage() {
         </div>
 
         <div className="hero-changmen-silhouette" aria-hidden="true">
-          <svg className="hero-changmen-silhouette__svg" viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg" focusable="false">
-            <g fill="#FDFBF1">
-              <rect x="0" y="520" width="300" height="180" />
-              <rect x="700" y="520" width="300" height="180" />
-              <rect x="300" y="450" width="400" height="250" />
-              <rect x="0" y="490" width="18" height="30" />
-              <rect x="30" y="490" width="18" height="30" />
-              <rect x="60" y="490" width="18" height="30" />
-              <rect x="90" y="490" width="18" height="30" />
-              <rect x="120" y="490" width="18" height="30" />
-              <rect x="150" y="490" width="18" height="30" />
-              <rect x="180" y="490" width="18" height="30" />
-              <rect x="210" y="490" width="18" height="30" />
-              <rect x="240" y="490" width="18" height="30" />
-              <rect x="270" y="490" width="18" height="30" />
-              <rect x="302" y="420" width="18" height="30" />
-              <rect x="331" y="420" width="18" height="30" />
-              <rect x="360" y="420" width="18" height="30" />
-              <rect x="389" y="420" width="18" height="30" />
-              <rect x="418" y="420" width="18" height="30" />
-              <rect x="447" y="420" width="18" height="30" />
-              <rect x="476" y="420" width="18" height="30" />
-              <rect x="505" y="420" width="18" height="30" />
-              <rect x="534" y="420" width="18" height="30" />
-              <rect x="563" y="420" width="18" height="30" />
-              <rect x="592" y="420" width="18" height="30" />
-              <rect x="621" y="420" width="18" height="30" />
-              <rect x="650" y="420" width="18" height="30" />
-              <rect x="679" y="420" width="18" height="30" />
-              <rect x="712" y="490" width="18" height="30" />
-              <rect x="742" y="490" width="18" height="30" />
-              <rect x="772" y="490" width="18" height="30" />
-              <rect x="802" y="490" width="18" height="30" />
-              <rect x="832" y="490" width="18" height="30" />
-              <rect x="862" y="490" width="18" height="30" />
-              <rect x="892" y="490" width="18" height="30" />
-              <rect x="922" y="490" width="18" height="30" />
-              <rect x="952" y="490" width="18" height="30" />
-              <rect x="982" y="490" width="18" height="30" />
-              <rect x="370" y="320" width="260" height="130" />
-              <rect x="390" y="335" width="40" height="115" fill="#f6cd45" />
-              <rect x="450" y="335" width="100" height="115" fill="#f6cd45" />
-              <rect x="570" y="335" width="40" height="115" fill="#f6cd45" />
-              <path d="M 250 330 Q 320 340 370 320 L 400 250 L 600 250 L 630 320 Q 680 340 750 330 Q 720 280 620 230 L 380 230 Q 280 280 250 330 Z" />
-              <rect x="410" y="160" width="180" height="90" />
-              <rect x="430" y="175" width="30" height="75" fill="#f6cd45" />
-              <rect x="480" y="175" width="40" height="75" fill="#f6cd45" />
-              <rect x="540" y="175" width="30" height="75" fill="#f6cd45" />
-              <path d="M 310 170 Q 360 180 410 160 L 440 90 L 560 90 L 590 160 Q 640 180 690 170 Q 650 120 570 70 L 430 70 Q 350 120 310 170 Z" />
-              <rect x="475" y="45" width="50" height="25" />
-              <path d="M 450 45 L 550 45 L 530 20 L 470 20 Z" />
-            </g>
-            <path d="M 400 700 L 400 620 A 100 100 0 0 1 600 620 L 600 700 Z" fill="#f6cd45" />
-            <path d="M 425 700 L 425 620 A 75 75 0 0 1 575 620 L 575 700 Z" fill="#e8c23f" />
-          </svg>
+          <img
+            className="hero-changmen-silhouette__image"
+            src="images/gate/gate.png"
+            alt=""
+          />
         </div>
 
         <article className="hero-copy hero-card" id="hero-card" data-component="hero-card">
@@ -561,15 +511,16 @@ export function AppMainPage() {
               </svg>
             </div>
 
-            <div className="curtain-container" id="curtainOverlay" aria-hidden="true">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
-                <path id="leftCurtain" d="M0,0 L0,0 L0,100 L0,100 Z" fill="#f4f1ea" />
-                <path id="rightCurtain" d="M100,0 L100,0 L100,100 L100,100 Z" fill="#f4f1ea" />
-              </svg>
-            </div>
           </div>
         </div>
       </section>
+
+      <div className="curtain-container" id="curtainOverlay" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
+          <path id="leftCurtain" d="M0,0 L0,0 L0,100 L0,100 Z" fill="#f4f1ea" />
+          <path id="rightCurtain" d="M100,0 L100,0 L100,100 L100,100 Z" fill="#f4f1ea" />
+        </svg>
+      </div>
 
       <div id="river-scroll-spacer" aria-hidden="true" />
 

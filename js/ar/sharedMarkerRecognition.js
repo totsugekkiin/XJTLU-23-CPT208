@@ -15,6 +15,22 @@ const TARGET_URL = "/markers/changgate-window-frame-border-only.mind";
 const SCAN_BURST_FRAMES = 3;
 const SCAN_BURST_PAUSE_MS = 160;
 
+export function syncVideoFrameSize(video) {
+  const width = Number(video?.videoWidth);
+  const height = Number(video?.videoHeight);
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    return false;
+  }
+
+  // MindAR's input loader draws HTMLVideoElement frames with video.width and
+  // video.height rather than the intrinsic videoWidth/videoHeight. Its own
+  // camera system sets these attributes after loadedmetadata; the unified AR
+  // page owns the video element, so it must mirror that step explicitly.
+  video.width = width;
+  video.height = height;
+  return true;
+}
+
 function waitForScene(scene) {
   if (scene?.hasLoaded) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -118,7 +134,7 @@ export async function createSharedMarkerRecognition({
   if (!window.AFRAME?.THREE || !window.MINDAR?.IMAGE?.Controller) {
     throw new Error("MindAR image tracking is unavailable");
   }
-  if (!video?.videoWidth || !video?.videoHeight) {
+  if (!syncVideoFrameSize(video)) {
     throw new Error("Shared camera has no readable video frame");
   }
 

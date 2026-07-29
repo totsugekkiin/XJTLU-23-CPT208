@@ -34,6 +34,14 @@
             回到 MindAR 视角（H）
           </button>
           <button id="level-camera" class="hud-button" type="button">一键调平</button>
+          <button
+            id="flight-mode"
+            class="hud-button is-flight"
+            type="button"
+            aria-pressed="false"
+          >
+            进入自由飞行
+          </button>
           <button id="copy-parameters" class="hud-button" type="button">
             复制视角参数
           </button>
@@ -55,23 +63,27 @@
         主场景不在当前方向 · 点击返回
       </button>
 
-      <aside class="control-hud" aria-label="建模视口操作说明">
-        <strong class="viewport-controls-title">建模视口</strong>
+      <aside class="control-hud" aria-label="相机控制台说明">
+        <strong class="viewport-controls-title">双模式相机控制台</strong>
         <div class="viewport-control-grid">
-          <span><i>左键拖动</i>环绕观察中心</span>
+          <span><i>构图编辑</i>读取锁定的 AR 数据</span>
+          <span><i>左键拖动</i>环绕构图中心</span>
           <span><i>Shift+左键 / 中键</i>平移视图</span>
-          <span><i>右键拖动</i>自由观察</span>
           <span><i>滚轮</i>推近 / 拉远</span>
           <span><i>F</i>聚焦裁剪盒</span>
-          <span><i>WASD / Space / C</i>微调镜头</span>
+          <span><i>自由飞行</i>鼠标环视 · WASD 移动</span>
+          <span><i>Space / C</i>沿场景竖直轴升降</span>
         </div>
         <div class="control-note">
-          鼠标操作不会自动修改倾斜角；所有相机数值都可在右侧精确输入
+          宋朝与清朝基准参数保持原值；自由飞行不会写回任何配置
         </div>
       </aside>
 
       <aside class="camera-hud" aria-label="摄像头角度校正">
-        <span>相机变换</span>
+        <div class="camera-hud__heading">
+          <span>AR 构图基准数据</span>
+          <small id="scene-data-lock">场景配置只读</small>
+        </div>
         <div class="camera-transform-fields" aria-label="相机精确变换">
           <label><b>位置 X</b><input id="camera-x" type="number" step="0.01" /></label>
           <label><b>位置 Y</b><input id="camera-y" type="number" step="0.01" /></label>
@@ -172,7 +184,7 @@
       </aside>
 
       <aside class="pose-hud" aria-live="polite">
-        <span>当前自由相机</span>
+        <span>当前 AR 构图数据</span>
         <dl>
           <div><dt>水平</dt><dd id="yaw-value">0°</dd></div>
           <div><dt>俯仰 / 倾斜</dt><dd id="angle-value">35° / 0°</dd></div>
@@ -181,6 +193,18 @@
         </dl>
         <code id="parameter-output">SPZ 场景加载后生成视角参数</code>
       </aside>
+
+      <div id="flight-mode-hud" class="flight-mode-hud" hidden aria-live="polite">
+        <div class="flight-mode-hud__title">
+          <strong>自由飞行 · 临时视角</strong>
+          <span>鼠标环视 · WASD 移动 · Space / C 升降 · Shift 加速 · Esc 退出</span>
+        </div>
+        <dl>
+          <div><dt>航向</dt><dd id="flight-heading">0.0°</dd></div>
+          <div><dt>仰角</dt><dd id="flight-elevation">0.0°</dd></div>
+          <div><dt>位置</dt><dd id="flight-position">0.00 / 0.00 / 0.00</dd></div>
+        </dl>
+      </div>
 
       <div class="bottom-hint">
         中央框内容会映射到 AR 蓝色远端窗眼；红框到蓝框之间保持真实相机画面

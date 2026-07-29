@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { agentDebugLog } from "./agentDebugLog.js";
-import { attachBambooNoticeText } from "./bambooNotice.js";
+import {
+  attachBambooNoticeText,
+  getBambooNoticeContent,
+} from "./bambooNotice.js";
 import { createPortalTestScene } from "./portalTestScene.js";
 
 const ROTATION_LERP = 0.28;
@@ -119,8 +122,9 @@ export function createArRenderer(cameraWrap, options = {}) {
             model.name = `anchor-${profile.mapId}-${anchor.id}`;
             model.userData.arMapId = profile.mapId;
             if (anchor.type === "bamboo-notice") {
+              const content = getBambooNoticeContent(anchor.content);
               attachBambooNoticeText(model, {
-                ...(Array.isArray(anchor.columns) ? { columns: anchor.columns } : {}),
+                columns: Array.isArray(anchor.columns) ? anchor.columns : content.columns,
                 anisotropy: renderer.capabilities.getMaxAnisotropy(),
               });
             }

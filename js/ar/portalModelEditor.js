@@ -6,6 +6,7 @@ import {
 import {
   PORTAL_CROP_BOX,
   PORTAL_CROP_BOUNDS,
+  PORTAL_NAVIGATION_UP,
   PORTAL_VIEW_PRESET,
   getPortalScene,
   portalCropBounds,
@@ -13,6 +14,7 @@ import {
   readPortalRuntimeConfig,
   savePortalRuntimeConfig,
 } from "./portalSceneConfig.js";
+import { PortalFlightController } from "./portalFlightController.js";
 
 const initialQuery = new URLSearchParams(window.location.search);
 const portalSceneProfile = getPortalScene(
@@ -33,6 +35,12 @@ const loadState = document.querySelector("#load-state");
 const parameterOutput = document.querySelector("#parameter-output");
 const resetButton = document.querySelector("#reset-view");
 const levelButton = document.querySelector("#level-camera");
+const flightModeButton = document.querySelector("#flight-mode");
+const flightModeHud = document.querySelector("#flight-mode-hud");
+const flightHeadingOutput = document.querySelector("#flight-heading");
+const flightElevationOutput = document.querySelector("#flight-elevation");
+const flightPositionOutput = document.querySelector("#flight-position");
+const sceneDataLock = document.querySelector("#scene-data-lock");
 const copyButton = document.querySelector("#copy-parameters");
 const applyToArButton = document.querySelector("#apply-to-ar");
 const copyArLinkButton = document.querySelector("#copy-ar-link");
@@ -121,9 +129,12 @@ const movement = new pc.Vec3();
 const cameraBaseRotation = new pc.Quat()
   .setFromEulerAngles(EDITOR_HOME_PITCH, 0, 0)
   .mul(new pc.Quat().setFromEulerAngles(0, 0, 180));
-// The raw scan is corrected by a 180° X rotation below, so its actual
-// vertical direction in editor world space is -Y.
-const sceneUp = new pc.Vec3(0, -1, 0);
+// This axis is part of the existing serialized view convention and must not be
+// changed, otherwise the locked dynasty yaw values would render differently.
+const serializedViewYawAxis = new pc.Vec3(0, -1, 0);
+// Physical scan elevation is a different axis. Free-flight yaw and Space / C
+// use it so the horizon follows the courtyard instead of the legacy view data.
+const navigationUp = new pc.Vec3(...PORTAL_NAVIGATION_UP);
 const yawRotation = new pc.Quat();
 const cameraRotation = new pc.Quat();
 const orbitPivot = new pc.Vec3();
@@ -132,6 +143,8 @@ const panOffset = new pc.Vec3();
 const cropWorldCenter = new pc.Vec3();
 let orbitDistance = 4;
 let dragging = null;
+let flightMode = false;
+let retainedFlightView = false;
 let lastFrameTime = performance.now();
 let frameRequest = 0;
 let renderRequested = true;
@@ -162,6 +175,15 @@ cameraEntity.addComponent("camera", {
   farClip: 1000,
 });
 app.root.addChild(cameraEntity);
+const flightController = new PortalFlightController(cameraEntity, {
+  worldUp: navigationUp,
+  entryElevationLimit: 60,
+  maximumElevation: 85,
+  mouseSensitivity: 0.1,
+});
+sceneDataLock.textContent = ["song", "qing"].includes(portalSceneProfile.id)
+  ? `${portalSceneProfile.label}基准已锁定`
+  : "场景配置只读";
 
 const scanRoot = new pc.Entity("scan-axis-correction");
 scanRoot.setEulerAngles(180, 0, 0);
@@ -481,8 +503,9 @@ function renderHud() {
 }
 
 function syncCameraTransform() {
+  if (retainedFlightView) return;
   cameraEntity.setPosition(state.x, state.y, state.z);
-  yawRotation.setFromAxisAngle(sceneUp, state.yaw);
+  yawRotation.setFromAxisAngle(serializedViewYawAxis, state.yaw);
   cameraRotation.mul2(yawRotation, cameraBaseRotation);
   cameraEntity.setRotation(cameraRotation);
   cameraEntity.rotateLocal(state.pitch - EDITOR_HOME_PITCH, 0, 0);
@@ -491,7 +514,7 @@ function syncCameraTransform() {
 }
 
 function applyCamera() {
-  syncCameraTransform();
+  if (!retainedFlightView) syncCameraTransform();
   renderHud();
   requestRender();
 }
@@ -510,10 +533,17 @@ function moveCamera(distanceForward, distanceRight, distanceUp) {
     .set(0, 0, 0)
     .add(cameraEntity.forward.clone().mulScalar(distanceForward))
     .add(cameraEntity.right.clone().mulScalar(distanceRight))
-    .add(cameraEntity.up.clone().mulScalar(distanceUp));
-  state.x += movement.x;
-  state.y += movement.y;
-  state.z += movement.z;
+    .add(
+      (retainedFlightView ? navigationUp : cameraEntity.up)
+        .clone()
+        .mulScalar(distanceUp),
+    );
+  const nextPosition = cameraEntity.getPosition().clone().add(movement);
+  if (retainedFlightView) {
+    cameraEntity.setPosition(nextPosition);
+  } else {
+    setStatePosition(nextPosition);
+  }
   orbitPivot.add(movement);
 }
 
@@ -550,10 +580,23 @@ function positionCameraAroundOrbit() {
   orbitPosition
     .copy(orbitPivot)
     .sub(cameraEntity.forward.clone().mulScalar(orbitDistance));
-  setStatePosition(orbitPosition);
+  if (retainedFlightView) {
+    cameraEntity.setPosition(orbitPosition);
+  } else {
+    setStatePosition(orbitPosition);
+  }
 }
 
 function orbitCamera(deltaYaw, deltaPitch) {
+  if (retainedFlightView) {
+    flightController.begin({ fov: cameraEntity.camera.fov });
+    flightController.lookByDegrees(deltaYaw, deltaPitch);
+    positionCameraAroundOrbit();
+    flightController.end();
+    renderHud();
+    requestRender();
+    return;
+  }
   state.yaw += deltaYaw;
   state.pitch = clamp(state.pitch + deltaPitch, -89, 89);
   positionCameraAroundOrbit();
@@ -574,16 +617,85 @@ function panCamera(deltaX, deltaY) {
         .clone()
         .mulScalar(deltaY * unitsPerPixel),
     );
-  setStatePosition(cameraEntity.getPosition().clone().add(panOffset));
+  const nextPosition = cameraEntity.getPosition().clone().add(panOffset);
+  if (retainedFlightView) {
+    cameraEntity.setPosition(nextPosition);
+  } else {
+    setStatePosition(nextPosition);
+  }
   orbitPivot.add(panOffset);
   applyCamera();
 }
 
-function lookCamera(deltaYaw, deltaPitch) {
-  state.yaw += deltaYaw;
-  state.pitch = clamp(state.pitch + deltaPitch, -89, 89);
-  applyCamera();
+function renderFlightHud(pose = flightController.getPose()) {
+  flightHeadingOutput.textContent = `${pose.heading.toFixed(1)}°`;
+  flightElevationOutput.textContent = `${pose.elevation.toFixed(1)}°`;
+  flightPositionOutput.textContent =
+    `${pose.x.toFixed(2)} / ${pose.y.toFixed(2)} / ${pose.z.toFixed(2)}`;
+}
+
+function syncFlightModeUi(active) {
+  flightMode = active;
+  stage.classList.toggle("is-flight-mode", active);
+  stage.classList.toggle(
+    "has-retained-flight-view",
+    !active && retainedFlightView,
+  );
+  flightModeHud.hidden = !active;
+  flightModeButton.textContent = active
+    ? "退出自由飞行（Esc）"
+    : retainedFlightView
+      ? "从当前位置继续飞行"
+      : "进入自由飞行";
+  flightModeButton.setAttribute("aria-pressed", String(active));
+}
+
+function clearRetainedFlightView() {
+  if (!retainedFlightView) return;
+  retainedFlightView = false;
+  if (!flightMode) syncFlightModeUi(false);
+}
+
+function beginFlightMode() {
+  // After an earlier exit, the camera entity itself owns the retained pose.
+  // Otherwise seed flight from the locked AR composition.
+  if (!retainedFlightView) syncCameraTransform();
+  const pose = flightController.begin({
+    fov: retainedFlightView ? cameraEntity.camera.fov : state.fov,
+  });
+  syncFlightModeUi(true);
+  renderFlightHud(pose);
+  requestRender(true);
+}
+
+function endFlightMode() {
+  if (!flightMode) return;
+  flightController.end();
+  retainedFlightView = true;
+  syncFlightModeUi(false);
+  // Exiting only releases pointer lock. The final camera pose remains the
+  // viewport source until H / reset or an exact AR field is edited.
   resetOrbitCenter(orbitDistance);
+  renderHud();
+  requestRender(true);
+}
+
+function toggleFlightMode() {
+  if (document.pointerLockElement === stage) {
+    document.exitPointerLock?.();
+    return;
+  }
+  if (typeof stage.requestPointerLock !== "function") {
+    flightModeButton.textContent = "当前浏览器不支持鼠标锁定";
+    window.setTimeout(() => syncFlightModeUi(false), 1800);
+    return;
+  }
+  const lockRequest = stage.requestPointerLock();
+  lockRequest?.catch?.(() => {
+    endFlightMode();
+    flightModeButton.textContent = "鼠标锁定被浏览器拒绝";
+    window.setTimeout(() => syncFlightModeUi(false), 1800);
+  });
 }
 
 function dollyCamera(wheelDelta) {
@@ -613,19 +725,32 @@ function focusCrop() {
 function applyTapStep(code, boosted) {
   const distance = boosted ? 1.1 : 0.28;
   const turn = boosted ? 9 : 2.5;
+
+  if (flightMode) {
+    let pose = null;
+    if (code === "KeyW") pose = flightController.move(distance, 0, 0);
+    else if (code === "KeyS") pose = flightController.move(-distance, 0, 0);
+    else if (code === "KeyA") pose = flightController.move(0, -distance, 0);
+    else if (code === "KeyD") pose = flightController.move(0, distance, 0);
+    else if (code === "Space") pose = flightController.move(0, 0, distance);
+    else if (code === "KeyC") pose = flightController.move(0, 0, -distance);
+    else if (code === "KeyQ") pose = flightController.turn(-turn);
+    else if (code === "KeyE") pose = flightController.turn(turn);
+    if (pose) {
+      renderFlightHud(pose);
+      requestRender();
+    }
+    return;
+  }
+
   if (code === "KeyW") moveCamera(distance, 0, 0);
   else if (code === "KeyS") moveCamera(-distance, 0, 0);
   else if (code === "KeyA") moveCamera(0, -distance, 0);
   else if (code === "KeyD") moveCamera(0, distance, 0);
   else if (code === "Space") moveCamera(0, 0, distance);
   else if (code === "KeyC") moveCamera(0, 0, -distance);
-  else if (code === "KeyQ") {
-    orbitCamera(-turn, 0);
-    return;
-  } else if (code === "KeyE") {
-    orbitCamera(turn, 0);
-    return;
-  }
+  else if (code === "KeyQ") return orbitCamera(-turn, 0);
+  else if (code === "KeyE") return orbitCamera(turn, 0);
   else return;
   applyCamera();
 }
@@ -638,45 +763,57 @@ function updateMovement(now) {
     pressedKeys.has("ShiftLeft") || pressedKeys.has("ShiftRight");
   const speed = (boosted ? 12 : 3.2) * elapsed;
   const turnSpeed = (boosted ? 115 : 58) * elapsed;
-  let changed = false;
-  let orbitChanged = false;
+  let forward = 0;
+  let right = 0;
+  let vertical = 0;
+  let turn = 0;
 
-  if (pressedKeys.has("KeyW")) {
-    moveCamera(speed, 0, 0);
-    changed = true;
+  if (pressedKeys.has("KeyW")) forward += speed;
+  if (pressedKeys.has("KeyS")) forward -= speed;
+  if (pressedKeys.has("KeyA")) right -= speed;
+  if (pressedKeys.has("KeyD")) right += speed;
+  if (pressedKeys.has("Space")) vertical += speed;
+  if (pressedKeys.has("KeyC")) vertical -= speed;
+  if (pressedKeys.has("KeyQ")) turn -= turnSpeed;
+  if (pressedKeys.has("KeyE")) turn += turnSpeed;
+
+  if (flightMode) {
+    let pose = flightController.getPose();
+    if (forward || right || vertical) {
+      pose = flightController.move(forward, right, vertical);
+    }
+    if (turn) pose = flightController.turn(turn);
+    if (forward || right || vertical || turn) {
+      renderFlightHud(pose);
+      requestRender();
+    }
+  } else {
+    let changed = false;
+    let orbitChanged = false;
+
+    if (forward) {
+      moveCamera(forward, 0, 0);
+      changed = true;
+    }
+    if (right) {
+      moveCamera(0, right, 0);
+      changed = true;
+    }
+    if (vertical) {
+      moveCamera(0, 0, vertical);
+      changed = true;
+    }
+    if (turn && retainedFlightView) {
+      orbitCamera(turn, 0);
+      changed = true;
+    } else if (turn) {
+      state.yaw += turn;
+      changed = true;
+      orbitChanged = true;
+    }
+    if (orbitChanged) positionCameraAroundOrbit();
+    if (changed) applyCamera();
   }
-  if (pressedKeys.has("KeyS")) {
-    moveCamera(-speed, 0, 0);
-    changed = true;
-  }
-  if (pressedKeys.has("KeyA")) {
-    moveCamera(0, -speed, 0);
-    changed = true;
-  }
-  if (pressedKeys.has("KeyD")) {
-    moveCamera(0, speed, 0);
-    changed = true;
-  }
-  if (pressedKeys.has("Space")) {
-    moveCamera(0, 0, speed);
-    changed = true;
-  }
-  if (pressedKeys.has("KeyC")) {
-    moveCamera(0, 0, -speed);
-    changed = true;
-  }
-  if (pressedKeys.has("KeyQ")) {
-    state.yaw -= turnSpeed;
-    changed = true;
-    orbitChanged = true;
-  }
-  if (pressedKeys.has("KeyE")) {
-    state.yaw += turnSpeed;
-    changed = true;
-    orbitChanged = true;
-  }
-  if (orbitChanged) positionCameraAroundOrbit();
-  if (changed) applyCamera();
   if (
     [...pressedKeys].some((code) =>
       [
@@ -719,7 +856,9 @@ const controlledCodes = new Set([
 window.addEventListener("keydown", (event) => {
   if (!controlledCodes.has(event.code)) return;
   event.preventDefault();
+  if (flightMode && ["KeyF", "KeyH"].includes(event.code)) return;
   if (event.altKey) {
+    if (flightMode) return;
     const cropRotationKeys = {
       KeyW: ["rx", 1],
       KeyS: ["rx", -1],
@@ -736,6 +875,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.code === "KeyH") {
+    clearRetainedFlightView();
     Object.assign(state, defaults);
     applyCamera();
     initializeOrbitCenter();
@@ -779,9 +919,11 @@ stage.addEventListener("pointerdown", (event) => {
   let mode = null;
   if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
     mode = "pan";
-  } else if (event.button === 2) {
-    mode = "look";
-  } else if (event.button === 0) {
+  } else if (
+    event.button === 0 ||
+    event.pointerType === "touch" ||
+    event.pointerType === "pen"
+  ) {
     mode = "orbit";
   }
   if (!mode) return;
@@ -811,9 +953,29 @@ stage.addEventListener("pointermove", (event) => {
     orbitCamera(-deltaX * 0.18, -deltaY * 0.16);
   } else if (dragging.mode === "pan") {
     panCamera(deltaX, deltaY);
-  } else {
-    lookCamera(-deltaX * 0.18, -deltaY * 0.16);
   }
+});
+
+document.addEventListener("mousemove", (event) => {
+  if (!flightMode || document.pointerLockElement !== stage) return;
+  const pose = flightController.lookByPixels(
+    event.movementX,
+    event.movementY,
+  );
+  renderFlightHud(pose);
+  requestRender();
+});
+
+document.addEventListener("pointerlockchange", () => {
+  const active = document.pointerLockElement === stage;
+  if (active) beginFlightMode();
+  else if (flightMode) endFlightMode();
+});
+
+document.addEventListener("pointerlockerror", () => {
+  endFlightMode();
+  flightModeButton.textContent = "鼠标锁定被浏览器拒绝";
+  window.setTimeout(() => syncFlightModeUi(false), 1800);
 });
 
 function endDrag(event) {
@@ -837,24 +999,29 @@ stage.addEventListener(
 );
 
 pitchInput.addEventListener("input", () => {
+  clearRetainedFlightView();
   state.pitch = Number(pitchInput.value);
   applyCamera();
   resetOrbitCenter(orbitDistance);
 });
 rollInput.addEventListener("input", () => {
+  clearRetainedFlightView();
   state.roll = Number(rollInput.value);
   applyCamera();
   resetOrbitCenter(orbitDistance);
 });
 fovInput.addEventListener("input", () => {
+  clearRetainedFlightView();
   state.fov = Number(fovInput.value);
   applyCamera();
 });
 levelButton.addEventListener("click", () => {
+  clearRetainedFlightView();
   state.roll = 0;
   applyCamera();
   resetOrbitCenter(orbitDistance);
 });
+flightModeButton.addEventListener("click", toggleFlightMode);
 
 Object.entries(cameraTransformInputs).forEach(([key, input]) => {
   input.addEventListener("input", () => {
@@ -863,6 +1030,7 @@ Object.entries(cameraTransformInputs).forEach(([key, input]) => {
       renderHud();
       return;
     }
+    clearRetainedFlightView();
     state[key] = value;
     state.pitch = clamp(state.pitch, -89, 89);
     state.roll = clamp(state.roll, -45, 45);
@@ -940,6 +1108,7 @@ cropFaceCameraButton.addEventListener("click", () => {
 });
 
 function returnToMainView() {
+  clearRetainedFlightView();
   Object.assign(state, defaults);
   applyCamera();
   initializeOrbitCenter();
