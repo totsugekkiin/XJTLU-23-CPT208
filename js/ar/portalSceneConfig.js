@@ -1,13 +1,97 @@
-export const PORTAL_SOURCE_SCENE = Object.freeze({
-  url: "/models/changgate-courtyard.sog",
-  gaussians: 916617,
+export const DEFAULT_PORTAL_SCENE_ID = "song";
+
+export const PORTAL_SCENES = Object.freeze({
+  song: Object.freeze({
+    id: "song",
+    label: "宋朝",
+    dynasty: "宋朝",
+    source: Object.freeze({
+      url: "/models/changgate-courtyard.sog",
+      gaussians: 916617,
+      megabytes: 10.5,
+    }),
+    runtime: Object.freeze({
+      url: "/models/changgate-courtyard-cropped.sog",
+      gaussians: 266512,
+      megabytes: 3.2,
+    }),
+  }),
+  ming: Object.freeze({
+    id: "ming",
+    label: "明朝",
+    dynasty: "明朝",
+    source: Object.freeze({
+      url: "/models/changgate-ming.sog",
+      gaussians: 832036,
+      megabytes: 9.5,
+    }),
+    runtime: Object.freeze({
+      url: "/models/changgate-ming-cropped.sog",
+      gaussians: 134519,
+      megabytes: 1.6,
+    }),
+  }),
+  qing: Object.freeze({
+    id: "qing",
+    label: "清朝",
+    dynasty: "清朝",
+    view: Object.freeze({
+      x: -1.169,
+      y: -0.612,
+      z: 1.275,
+      yaw: 23.667,
+      pitch: 62.712,
+      roll: -31.4,
+      fov: 100,
+    }),
+    crop: Object.freeze({
+      cx: 0.3,
+      cy: 1.9,
+      cz: -3.5,
+      sx: 6.4,
+      sy: 6.5,
+      sz: 9.5,
+      rx: 0,
+      ry: 32.5,
+      rz: 39,
+    }),
+    source: Object.freeze({
+      url: "/models/changgate-qing.sog",
+      gaussians: 799722,
+      megabytes: 9.1,
+    }),
+    runtime: Object.freeze({
+      url: "/models/changgate-qing-cropped.sog",
+      gaussians: 487916,
+      megabytes: 5.5,
+      bounds: Object.freeze({
+        min: Object.freeze([-5.827, -3.931, -9.226]),
+        max: Object.freeze([6.427, 7.731, 2.226]),
+      }),
+    }),
+  }),
 });
 
-export const PORTAL_RUNTIME_SCENE = Object.freeze({
-  url: "/models/changgate-courtyard-cropped.sog",
-  gaussians: 266512,
-  megabytes: 3.2,
-});
+export function getPortalScene(sceneId = DEFAULT_PORTAL_SCENE_ID) {
+  const requestedId = String(sceneId || "")
+    .trim()
+    .toLowerCase();
+  const normalized =
+    requestedId === "default" ? DEFAULT_PORTAL_SCENE_ID : requestedId;
+  return (
+    PORTAL_SCENES[normalized] ??
+    Object.values(PORTAL_SCENES).find(
+      (scene) => scene.dynasty === sceneId || scene.label === sceneId,
+    ) ??
+    PORTAL_SCENES[DEFAULT_PORTAL_SCENE_ID]
+  );
+}
+
+export const PORTAL_SOURCE_SCENE =
+  PORTAL_SCENES[DEFAULT_PORTAL_SCENE_ID].source;
+
+export const PORTAL_RUNTIME_SCENE =
+  PORTAL_SCENES[DEFAULT_PORTAL_SCENE_ID].runtime;
 
 export const PORTAL_RUNTIME_STORAGE_KEY =
   "changgate.portal-runtime-config.v1";
@@ -60,6 +144,9 @@ export const PORTAL_CROP_BOX = Object.freeze({
   sx: cropMaxX - cropMinX,
   sy: cropMaxY - cropMinY,
   sz: cropMaxZ - cropMinZ,
+  rx: 0,
+  ry: 0,
+  rz: 0,
 });
 
 export const PORTAL_WORLD_SCALE = 1000 / 260;
@@ -177,22 +264,48 @@ export function normalizePortalCrop(value, fallback = PORTAL_CROP_BOX) {
     sx: Math.max(0.5, finiteNumber(value?.sx, fallback.sx)),
     sy: Math.max(0.5, finiteNumber(value?.sy, fallback.sy)),
     sz: Math.max(0.5, finiteNumber(value?.sz, fallback.sz)),
+    rx: finiteNumber(value?.rx, fallback.rx ?? 0),
+    ry: finiteNumber(value?.ry, fallback.ry ?? 0),
+    rz: finiteNumber(value?.rz, fallback.rz ?? 0),
   };
 }
 
 export function portalCropBounds(crop) {
   const normalized = normalizePortalCrop(crop);
+  const halfExtents = [
+    normalized.sx / 2,
+    normalized.sy / 2,
+    normalized.sz / 2,
+  ];
+  const radians = [normalized.rx, normalized.ry, normalized.rz].map(
+    (angle) => (angle * Math.PI) / 180,
+  );
+  const [sx, sy, sz] = radians.map(Math.sin);
+  const [cx, cy, cz] = radians.map(Math.cos);
+  const rotation = [
+    cy * cz,
+    sx * sy * cz - cx * sz,
+    cx * sy * cz + sx * sz,
+    cy * sz,
+    sx * sy * sz + cx * cz,
+    cx * sy * sz - sx * cz,
+    -sy,
+    sx * cy,
+    cx * cy,
+  ];
+  const aabbHalfExtents = [0, 1, 2].map(
+    (row) =>
+      Math.abs(rotation[row * 3]) * halfExtents[0] +
+      Math.abs(rotation[row * 3 + 1]) * halfExtents[1] +
+      Math.abs(rotation[row * 3 + 2]) * halfExtents[2],
+  );
+  const center = [normalized.cx, normalized.cy, normalized.cz];
   return {
-    min: [
-      normalized.cx - normalized.sx / 2,
-      normalized.cy - normalized.sy / 2,
-      normalized.cz - normalized.sz / 2,
-    ],
-    max: [
-      normalized.cx + normalized.sx / 2,
-      normalized.cy + normalized.sy / 2,
-      normalized.cz + normalized.sz / 2,
-    ],
+    center,
+    halfExtents,
+    rotation: [normalized.rx, normalized.ry, normalized.rz],
+    min: center.map((value, index) => value - aabbHalfExtents[index]),
+    max: center.map((value, index) => value + aabbHalfExtents[index]),
   };
 }
 

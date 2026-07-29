@@ -36,6 +36,11 @@ body {
   transition: transform 0.16s ease-out;
 }
 
+#ar-app.is-unified-camera #ar-camera {
+  display: block;
+  object-fit: cover;
+}
+
 #ar-camera-wrap > video:not(#ar-camera) {
   position: absolute;
   top: 50%;
@@ -49,6 +54,64 @@ body {
 
 #ar-app.is-sdk-camera #ar-camera {
   display: none;
+}
+
+.ar-marker-scene {
+  position: absolute !important;
+  inset: 0;
+  z-index: 7;
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+  pointer-events: none;
+}
+
+.ar-marker-scene canvas {
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+.a-enter-vr,
+.a-orientation-modal {
+  display: none !important;
+}
+
+#ar-app.is-marker-active #ar-three-canvas {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gaussian-portal-clip {
+  position: fixed;
+  z-index: 6;
+  inset: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  contain: strict;
+  clip-path: inset(50%);
+  will-change: clip-path;
+}
+
+#ar-app.is-marker-active .gaussian-portal-clip {
+  visibility: visible;
+}
+
+.gaussian-portal-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+  contain: strict;
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+  transition: opacity 120ms linear;
+}
+
+.gaussian-portal-canvas.is-visible.is-projected {
+  opacity: 1;
 }
 
 #ar-three-canvas {
@@ -200,14 +263,61 @@ body {
   color: #ff6b6b;
 }
 
-.ar-preload-status {
-  min-height: 1.2rem;
-  color: rgba(238, 220, 187, 0.58) !important;
-  font-size: 0.7rem !important;
+.ar-preload {
+  display: grid;
+  gap: 0.42rem;
+  width: min(100%, 19rem);
+  color: rgba(238, 220, 187, 0.68);
+  text-align: left;
 }
 
-.ar-preload-status[data-state="ready"] {
-  color: #a9c7a2 !important;
+.ar-preload__copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+#ar-preload-percent {
+  flex: 0 0 auto;
+  color: rgba(238, 220, 187, 0.48);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-preload__track {
+  position: relative;
+  height: 0.24rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(238, 220, 187, 0.12);
+}
+
+.ar-preload__track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0.45rem;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9b6731, #e1bd7a);
+  box-shadow: 0 0 0.7rem rgba(225, 189, 122, 0.35);
+  transition: width 0.38s ease;
+}
+
+.ar-preload small {
+  color: rgba(238, 220, 187, 0.42);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.ar-preload[data-state="ready"] .ar-preload__copy,
+.ar-preload[data-state="ready"] #ar-preload-percent {
+  color: #abc49f;
+}
+
+.ar-preload[data-state="ready"] .ar-preload__track > span {
+  background: linear-gradient(90deg, #708d63, #b7d0aa);
+  box-shadow: 0 0 0.7rem rgba(183, 208, 170, 0.28);
 }
 
 .ar-dev-only {
@@ -323,6 +433,40 @@ body {
 
 .ar-guide__status strong { font-size: 0.82rem; letter-spacing: 0.04em; }
 .ar-guide__status small { color: rgba(255, 243, 220, 0.66); font-size: 0.66rem; }
+
+.ar-guide__progress {
+  position: relative;
+  display: none;
+  width: 100%;
+  height: 0.18rem;
+  margin-top: 0.16rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(237, 200, 127, 0.14);
+}
+
+.ar-guide__progress.is-visible {
+  display: block;
+}
+
+.ar-guide__progress > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  border-radius: inherit;
+  background: #edc87f;
+  box-shadow: 0 0 0.45rem rgba(237, 200, 127, 0.4);
+  transition: width 0.3s ease;
+}
+
+#ar-guide[data-state="loading"] .ar-reticle {
+  opacity: 0.22;
+  transform: scale(0.96);
+}
+
+#ar-guide[data-state="loading"] .ar-reticle__scan {
+  animation-play-state: paused;
+}
 
 #ar-guide[data-state="recognized"] .ar-reticle,
 #ar-guide[data-state="explore"] .ar-reticle {
@@ -796,16 +940,27 @@ body {
   gap: 0.4rem;
 }
 
-#ar-back-nav a {
+#ar-back-nav a,
+#ar-back-nav button {
   padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  font-family: inherit;
   text-decoration: none;
   color: rgba(244, 241, 234, 0.85);
   background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  cursor: pointer;
+}
+
+#ar-exit {
+  border-color: rgba(246, 205, 69, 0.55) !important;
+  color: #f6cd45 !important;
+  background: rgba(0, 0, 0, 0.62) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 @media (max-width: 480px) {

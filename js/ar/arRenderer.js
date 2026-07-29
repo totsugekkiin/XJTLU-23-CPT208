@@ -91,6 +91,7 @@ export function createArRenderer(cameraWrap, options = {}) {
   let activeMapId = mapProfiles.length === 1 ? mapProfiles[0].mapId : null;
   let anchorCount = 0;
   let contentVisible = false;
+  let renderEnabled = true;
   let revealStartedAt = 0;
 
   const loadPromise = (async () => {
@@ -174,6 +175,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     await Promise.all(loadTasks);
     anchorCount = loadTasks.length;
     modelsReady = true;
+    if (contentVisible && hasPose) setModelsVisible(true);
   })();
 
   loadPromise.catch((err) => {
@@ -227,6 +229,11 @@ export function createArRenderer(cameraWrap, options = {}) {
       child.scale.copy(child.userData.arBaseScale);
       if (shouldAnimate) child.scale.multiplyScalar(REVEAL_START_SCALE);
     });
+  }
+
+  function setEnabled(enabled) {
+    renderEnabled = Boolean(enabled);
+    canvas.style.visibility = renderEnabled ? "visible" : "hidden";
   }
 
   function getViewportSize() {
@@ -337,7 +344,7 @@ export function createArRenderer(cameraWrap, options = {}) {
   }
 
   function renderFrame() {
-    if (!hasPose || !modelsReady) return;
+    if (!renderEnabled || !hasPose || !modelsReady) return;
     if (contentVisible && revealStartedAt) {
       const progress = Math.min(1, (performance.now() - revealStartedAt) / REVEAL_DURATION_MS);
       const eased = 1 - Math.pow(1 - progress, 3);
@@ -423,6 +430,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     updateCameraFromPose,
     setActiveMapId,
     setContentVisible,
+    setEnabled,
     renderFrame,
     getStatus,
     dispose,

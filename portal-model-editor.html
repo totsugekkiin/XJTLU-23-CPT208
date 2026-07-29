@@ -55,33 +55,35 @@
         主场景不在当前方向 · 点击返回
       </button>
 
-      <aside class="control-hud" aria-label="移动操作说明">
-        <div class="control-row direction-row">
-          <strong>方向控制</strong>
-          <div class="key-cluster">
-            <kbd data-key="KeyQ">Q</kbd>
-            <kbd data-key="KeyW">W</kbd>
-            <kbd data-key="KeyE">E</kbd>
-            <kbd data-key="KeyA">A</kbd>
-            <kbd data-key="KeyS">S</kbd>
-            <kbd data-key="KeyD">D</kbd>
-          </div>
-        </div>
-        <div class="control-row">
-          <strong>冲刺 / 加速</strong>
-          <kbd class="wide-key" data-key="ShiftLeft">Shift</kbd>
-        </div>
-        <div class="control-row">
-          <strong>抬升 / 跳跃</strong>
-          <kbd class="wide-key" data-key="Space">Space</kbd>
+      <aside class="control-hud" aria-label="建模视口操作说明">
+        <strong class="viewport-controls-title">建模视口</strong>
+        <div class="viewport-control-grid">
+          <span><i>左键拖动</i>环绕观察中心</span>
+          <span><i>Shift+左键 / 中键</i>平移视图</span>
+          <span><i>右键拖动</i>自由观察</span>
+          <span><i>滚轮</i>推近 / 拉远</span>
+          <span><i>F</i>聚焦裁剪盒</span>
+          <span><i>WASD / Space / C</i>微调镜头</span>
         </div>
         <div class="control-note">
-          W/S 前后 · A/D 横移 · Q/E 转向 · Space/C 升降 · 鼠标拖动观察
+          鼠标操作不会自动修改倾斜角；所有相机数值都可在右侧精确输入
         </div>
       </aside>
 
       <aside class="camera-hud" aria-label="摄像头角度校正">
-        <span>摄像头校正</span>
+        <span>相机变换</span>
+        <div class="camera-transform-fields" aria-label="相机精确变换">
+          <label><b>位置 X</b><input id="camera-x" type="number" step="0.01" /></label>
+          <label><b>位置 Y</b><input id="camera-y" type="number" step="0.01" /></label>
+          <label><b>位置 Z</b><input id="camera-z" type="number" step="0.01" /></label>
+          <label><b>水平</b><input id="camera-yaw" type="number" step="0.1" /></label>
+          <label><b>俯仰</b><input id="camera-pitch-number" type="number" min="-89" max="89" step="0.1" /></label>
+          <label><b>倾斜</b><input id="camera-roll-number" type="number" min="-45" max="45" step="0.1" /></label>
+        </div>
+        <div class="camera-actions">
+          <button id="focus-crop" type="button">聚焦裁剪盒（F）</button>
+          <button id="set-orbit-center" type="button">当前视点设为中心</button>
+        </div>
         <label>
           <b>俯仰</b>
           <input id="camera-pitch" type="range" min="-89" max="89" step="0.1" value="35" />
@@ -133,9 +135,35 @@
             <input id="crop-size-z" type="number" min="0.5" step="0.1" />
           </label>
         </div>
+        <div class="crop-rotation">
+          <div class="crop-rotation__heading">
+            <strong>旋转裁剪盒</strong>
+            <small>拖动滑杆，方向键可精调</small>
+          </div>
+          <label>
+            <b>前后倾</b>
+            <input id="crop-rotate-x" type="range" min="-180" max="180" step="0.5" />
+            <input id="crop-rotation-x" type="number" min="-180" max="180" step="0.5" />
+          </label>
+          <label>
+            <b>水平转</b>
+            <input id="crop-rotate-y" type="range" min="-180" max="180" step="0.5" />
+            <input id="crop-rotation-y" type="number" min="-180" max="180" step="0.5" />
+          </label>
+          <label>
+            <b>左右倾</b>
+            <input id="crop-rotate-z" type="range" min="-180" max="180" step="0.5" />
+            <input id="crop-rotation-z" type="number" min="-180" max="180" step="0.5" />
+          </label>
+          <small class="crop-shortcuts">
+            Alt+W/S 旋转 X · Alt+A/D 旋转 Y · Alt+Q/E 旋转 Z · 加 Shift 快速旋转
+          </small>
+        </div>
         <div class="crop-actions">
           <button id="crop-recommended" type="button">建议范围</button>
           <button id="crop-full" type="button">覆盖全图</button>
+          <button id="crop-reset-rotation" type="button">保持竖直</button>
+          <button id="crop-face-camera" type="button">对齐画面</button>
           <button id="copy-crop-command" class="is-primary" type="button">
             复制裁剪命令
           </button>

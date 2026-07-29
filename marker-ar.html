@@ -10,7 +10,7 @@
     <title>阊门窗口标记追踪测试</title>
     <link rel="stylesheet" href="/css/marker-ar.css" />
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="/vendor/mindar/mindar-image-aframe-field.prod.js"></script>
+    <script src="/vendor/mindar/mindar-image-aframe-field.prod.js?v=20260726-2"></script>
   </head>
   <body>
     <div id="camera-gate" class="camera-gate">
@@ -18,6 +18,23 @@
         <strong>启动窗口 AR 测试</strong>
         <p id="camera-gate-detail">点击后浏览器会申请使用后置摄像头。</p>
         <button id="start-camera" type="button">允许并打开摄像头</button>
+      </div>
+    </div>
+
+    <div id="marker-scan-guide" class="marker-scan-guide" aria-hidden="true">
+      <span>后退一点，让纹样外框接近此大小</span>
+    </div>
+
+    <div
+      id="dynasty-transition"
+      class="dynasty-transition"
+      aria-hidden="true"
+    >
+      <div class="dynasty-transition__wash"></div>
+      <div class="dynasty-transition__content">
+        <span>移步 · 换景</span>
+        <strong id="dynasty-transition-title">正在前往宋朝</strong>
+        <i aria-hidden="true">阊</i>
       </div>
     </div>
 
@@ -29,6 +46,17 @@
           <small id="marker-detail">请将四边纹样完整放入画面</small>
         </div>
       </div>
+      <div
+        id="dynasty-switcher"
+        class="dynasty-switcher"
+        role="group"
+        aria-label="切换时空场景"
+      >
+        <span class="dynasty-switcher__label">时境</span>
+        <button type="button" data-scene="song" aria-pressed="true">宋朝</button>
+        <button type="button" data-scene="ming" aria-pressed="false">明朝</button>
+        <button type="button" data-scene="qing" aria-pressed="false">清朝</button>
+      </div>
       <div class="marker-test-actions">
         <a href="/print/changgate-portal-marker-border-only-a3.pdf" download>下载A3标记</a>
         <a href="/portal-model-editor.html">调整取景</a>
@@ -39,7 +67,7 @@
       </div>
       <p class="marker-test-legend">
         <span class="legend-near">红框：近端洞口</span>
-        <span class="legend-far">蓝框：40 cm远端</span>
+        <span class="legend-far">蓝框：40 cm远端（<span id="far-cv-status">CV校准中</span>）</span>
         <span class="legend-mask">场景只在蓝框内显示，红蓝之间保持透明</span>
       </p>
     </div>
@@ -48,7 +76,7 @@
       embedded
       vr-mode-ui="enabled: false"
       renderer="alpha: true; antialias: true; colorManagement: true"
-      mindar-image="imageTargetSrc: /markers/changgate-window-frame-border-only.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 1; missTolerance: 8;"
+      mindar-image="imageTargetSrc: /markers/changgate-window-frame-border-only.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0005; filterBeta: 0.01; warmupTolerance: 1; missTolerance: 20;"
       color-space="sRGB"
       device-orientation-permission-ui="enabled: false"
     >

@@ -1,12 +1,14 @@
 import { registerPortalOcclusionTest } from "./portalOcclusionTest.js";
 import {
   PORTAL_CROP_BOX,
+  PORTAL_CROP_BOUNDS,
   PORTAL_PERSPECTIVE_MODES,
   PORTAL_REFERENCE_VIEW_DISTANCE,
-  PORTAL_RUNTIME_SCENE,
   PORTAL_VIEW_PRESET,
   PORTAL_WORLD_SCALE,
+  getPortalScene,
   normalizePortalFov,
+  portalCropBounds,
   portalFrameFov,
   readPortalRuntimeConfig,
   savePortalRuntimeConfig,
@@ -24,8 +26,18 @@ const togglePerspectiveButton = document.querySelector("#toggle-perspective");
 const calibrateDistanceButton = document.querySelector("#calibrate-distance");
 const scene = document.querySelector("a-scene");
 const cameraGate = document.querySelector("#camera-gate");
+const markerScanGuide = document.querySelector("#marker-scan-guide");
 const cameraGateDetail = document.querySelector("#camera-gate-detail");
 const startCameraButton = document.querySelector("#start-camera");
+const farCvStatus = document.querySelector("#far-cv-status");
+const dynastySwitcher = document.querySelector("#dynasty-switcher");
+const dynastyButtons = Array.from(
+  document.querySelectorAll("#dynasty-switcher [data-scene]"),
+);
+const dynastyTransition = document.querySelector("#dynasty-transition");
+const dynastyTransitionTitle = document.querySelector(
+  "#dynasty-transition-title",
+);
 
 const REFERENCE_VIEW_DISTANCE = PORTAL_REFERENCE_VIEW_DISTANCE;
 
@@ -40,16 +52,19 @@ let debugAnchorObject = null;
 let targetTracking = false;
 let pageDestroyed = false;
 let perspectiveState = null;
+let apertureCvState = null;
+let dynastySwitching = false;
+let portalLoadWaiter = null;
+let portalRendererGeneration = 0;
 
 const query = new URLSearchParams(window.location.search);
 const debugPortal = query.get("debugPortal") === "1";
+const apertureCvEnabled = query.get("apertureCv") !== "0" && !debugPortal;
 let perspectiveMode =
   query.get("perspective") === PORTAL_PERSPECTIVE_MODES.COMPOSITION
     ? PORTAL_PERSPECTIVE_MODES.COMPOSITION
     : PORTAL_PERSPECTIVE_MODES.PHYSICAL;
 const savedPortalConfig = readPortalRuntimeConfig();
-const configuredView = savedPortalConfig?.view ?? PORTAL_VIEW_PRESET;
-const configuredCrop = savedPortalConfig?.crop ?? PORTAL_CROP_BOX;
 
 function finiteQueryNumber(name, fallback = 0) {
   const rawValue = query.get(name);
@@ -58,30 +73,7 @@ function finiteQueryNumber(name, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const portalView = {
-  x: finiteQueryNumber("x", configuredView.x),
-  y: finiteQueryNumber("y", configuredView.y),
-  z: finiteQueryNumber("z", configuredView.z),
-  yaw: finiteQueryNumber("yaw", configuredView.yaw),
-  pitch: finiteQueryNumber("pitch", configuredView.pitch),
-  roll: finiteQueryNumber("roll", configuredView.roll),
-  fov: finiteQueryNumber("fov", configuredView.fov),
-};
-const portalCrop = {
-  cx: finiteQueryNumber("cropCX", configuredCrop.cx),
-  cy: finiteQueryNumber("cropCY", configuredCrop.cy),
-  cz: finiteQueryNumber("cropCZ", configuredCrop.cz),
-  sx: finiteQueryNumber("cropSX", configuredCrop.sx),
-  sy: finiteQueryNumber("cropSY", configuredCrop.sy),
-  sz: finiteQueryNumber("cropSZ", configuredCrop.sz),
-};
-const portalFov = normalizePortalFov(
-  finiteQueryNumber(
-    "portalFov",
-    savedPortalConfig?.portalFov ?? portalFrameFov(portalView.fov),
-  ),
-);
-const hasPortalQuery = [
+const portalConfigQueryNames = [
   "x",
   "y",
   "z",
@@ -95,8 +87,82 @@ const hasPortalQuery = [
   "cropSX",
   "cropSY",
   "cropSZ",
+  "cropRX",
+  "cropRY",
+  "cropRZ",
   "portalFov",
-].some((name) => query.has(name));
+];
+const hasPortalQuery = portalConfigQueryNames.some((name) => query.has(name));
+
+function resolvePortalSceneConfig(profile, useQueryConfig = false) {
+  const configuredView =
+    profile.view ?? savedPortalConfig?.view ?? PORTAL_VIEW_PRESET;
+  const configuredCrop =
+    profile.crop ?? savedPortalConfig?.crop ?? PORTAL_CROP_BOX;
+  const runtimeCropBounds =
+    profile.runtime.bounds ?? PORTAL_CROP_BOUNDS;
+  const configuredNumber = (name, fallback) =>
+    useQueryConfig ? finiteQueryNumber(name, fallback) : fallback;
+  const view = {
+    x: configuredNumber("x", configuredView.x),
+    y: configuredNumber("y", configuredView.y),
+    z: configuredNumber("z", configuredView.z),
+    yaw: configuredNumber("yaw", configuredView.yaw),
+    pitch: configuredNumber("pitch", configuredView.pitch),
+    roll: configuredNumber("roll", configuredView.roll),
+    fov: configuredNumber("fov", configuredView.fov),
+  };
+  const crop = {
+    cx: configuredNumber("cropCX", configuredCrop.cx),
+    cy: configuredNumber("cropCY", configuredCrop.cy),
+    cz: configuredNumber("cropCZ", configuredCrop.cz),
+    sx: configuredNumber("cropSX", configuredCrop.sx),
+    sy: configuredNumber("cropSY", configuredCrop.sy),
+    sz: configuredNumber("cropSZ", configuredCrop.sz),
+    rx: configuredNumber("cropRX", configuredCrop.rx),
+    ry: configuredNumber("cropRY", configuredCrop.ry),
+    rz: configuredNumber("cropRZ", configuredCrop.rz),
+  };
+  const selectedCropBounds = portalCropBounds(crop);
+  const requiresSource =
+    selectedCropBounds.min.some(
+      (value, index) => value < runtimeCropBounds.min[index] - 1e-4,
+    ) ||
+    selectedCropBounds.max.some(
+      (value, index) => value > runtimeCropBounds.max[index] + 1e-4,
+    );
+  const selectedScene = requiresSource ? profile.source : profile.runtime;
+  const fov = normalizePortalFov(
+    configuredNumber(
+      "portalFov",
+      savedPortalConfig?.portalFov ?? portalFrameFov(view.fov),
+    ),
+  );
+
+  return {
+    view,
+    crop,
+    fov,
+    requiresSource,
+    runtimeScene: {
+      ...selectedScene,
+      id: profile.id,
+    },
+  };
+}
+
+let portalSceneProfile = getPortalScene(
+  query.get("scene") ?? query.get("dynasty"),
+);
+let resolvedPortalConfig = resolvePortalSceneConfig(
+  portalSceneProfile,
+  hasPortalQuery,
+);
+let portalView = resolvedPortalConfig.view;
+let portalCrop = resolvedPortalConfig.crop;
+let portalFov = resolvedPortalConfig.fov;
+let cropRequiresSourceScene = resolvedPortalConfig.requiresSource;
+let portalRuntimeScene = resolvedPortalConfig.runtimeScene;
 
 if (hasPortalQuery) {
   try {
@@ -110,13 +176,36 @@ if (hasPortalQuery) {
   }
 }
 
-if (target) {
-  target.dataset.portalConfigSource = hasPortalQuery
+function applyPortalTargetMetadata(useQueryConfig = false) {
+  if (!target) return;
+  target.dataset.portalSceneId = portalSceneProfile.id;
+  target.dataset.portalSceneLabel = portalSceneProfile.label;
+  target.dataset.portalSceneSource = cropRequiresSourceScene
+    ? "complete"
+    : "optimized";
+  if (portalSceneProfile.dynasty) {
+    target.dataset.portalDynasty = portalSceneProfile.dynasty;
+  } else {
+    delete target.dataset.portalDynasty;
+  }
+  target.dataset.portalConfigSource = useQueryConfig
     ? "url"
     : savedPortalConfig
       ? "saved-editor"
       : "built-in";
 }
+
+function updateDynastyControls() {
+  dynastyButtons.forEach((button) => {
+    const selected = button.dataset.scene === portalSceneProfile.id;
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = dynastySwitching;
+  });
+  dynastySwitcher?.setAttribute("aria-busy", String(dynastySwitching));
+}
+
+applyPortalTargetMetadata(hasPortalQuery);
+updateDynastyControls();
 
 function setTrackingState(tracking) {
   statusUi?.classList.toggle("is-tracking", tracking);
@@ -132,8 +221,15 @@ function setTrackingState(tracking) {
           ? "物理透视（已校准）"
           : "物理透视"
         : "构图优先";
+    const cvText = apertureCvEnabled
+      ? apertureCvState?.mode === "locked"
+        ? " · 洞口CV已吸附"
+        : apertureCvState?.mode === "holding"
+          ? " · 洞口CV保持中"
+          : " · 洞口CV校准中"
+      : "";
     statusDetail.textContent = tracking
-      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒 · ${perspectiveText}${distanceText}`
+      ? `连续追踪 ${Math.max(0, Math.round((performance.now() - foundAt) / 1000))} 秒 · ${perspectiveText}${distanceText}${cvText}`
       : "让四边和四个角尽量完整进入画面";
   }
 }
@@ -168,27 +264,31 @@ function updatePerspectiveControls() {
 
 updatePerspectiveControls();
 
-target?.setAttribute("portal-occlusion-test", {
-  direction: depthDirection,
-  occlusion: occlusionEnabled,
-  farFrame: true,
-  loadModel: false,
-  useViewPose: true,
-  viewX: portalView.x,
-  viewY: portalView.y,
-  viewZ: portalView.z,
-  viewYaw: portalView.yaw,
-  viewPitch: portalView.pitch,
-  viewRoll: portalView.roll,
-  viewFov: portalView.fov,
-  modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
-  modelYaw: finiteQueryNumber("modelYaw"),
-  modelPitch: finiteQueryNumber("modelPitch"),
-  modelRoll: finiteQueryNumber("modelRoll"),
-  modelOffsetX: finiteQueryNumber("modelX"),
-  modelOffsetY: finiteQueryNumber("modelY"),
-  modelOffsetZ: finiteQueryNumber("modelZ"),
-});
+function applyPortalOcclusionConfig() {
+  target?.setAttribute("portal-occlusion-test", {
+    direction: depthDirection,
+    occlusion: occlusionEnabled,
+    farFrame: !apertureCvEnabled,
+    loadModel: false,
+    useViewPose: true,
+    viewX: portalView.x,
+    viewY: portalView.y,
+    viewZ: portalView.z,
+    viewYaw: portalView.yaw,
+    viewPitch: portalView.pitch,
+    viewRoll: portalView.roll,
+    viewFov: portalView.fov,
+    modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
+    modelYaw: finiteQueryNumber("modelYaw"),
+    modelPitch: finiteQueryNumber("modelPitch"),
+    modelRoll: finiteQueryNumber("modelRoll"),
+    modelOffsetX: finiteQueryNumber("modelX"),
+    modelOffsetY: finiteQueryNumber("modelY"),
+    modelOffsetZ: finiteQueryNumber("modelZ"),
+  });
+}
+
+applyPortalOcclusionConfig();
 
 target?.addEventListener("portal-model-transform", (event) => {
   const detail = event.detail ?? {};
@@ -202,15 +302,29 @@ target?.addEventListener("portal-model-transform", (event) => {
 });
 
 target?.addEventListener("gaussian-portal-loading", () => {
-  if (statusText) statusText.textContent = "正在加载完整高斯场景…";
+  if (statusText) {
+    statusText.textContent = cropRequiresSourceScene
+      ? "正在加载完整高斯场景…"
+      : "正在加载裁后快速场景…";
+  }
   if (statusDetail) {
     statusDetail.textContent =
-      `首次打开需要下载约 ${PORTAL_RUNTIME_SCENE.megabytes} MB 场景`;
+      `${portalSceneProfile.label} · 首次打开需要下载约 ${portalRuntimeScene.megabytes} MB 场景`;
   }
 });
 
 target?.addEventListener("gaussian-portal-loaded", (event) => {
-  if (statusText) statusText.textContent = "完整高斯场景已就绪";
+  if (
+    portalLoadWaiter &&
+    event.detail?.url === portalLoadWaiter.url
+  ) {
+    portalLoadWaiter.resolve("loaded");
+  }
+  if (statusText) {
+    statusText.textContent = cropRequiresSourceScene
+      ? "完整高斯场景已就绪"
+      : "裁后快速场景已就绪";
+  }
   if (statusDetail) {
     const gaussians = Number(
       event.detail?.gaussians ?? 0,
@@ -263,7 +377,32 @@ target?.addEventListener("gaussian-portal-perspective", (event) => {
   updatePerspectiveControls();
 });
 
-target?.addEventListener("gaussian-portal-error", () => {
+target?.addEventListener("far-aperture-cv-state", (event) => {
+  apertureCvState = event.detail ?? null;
+  if (target) {
+    target.dataset.apertureCvMode = String(apertureCvState?.mode ?? "fallback");
+    target.dataset.apertureCvConfidence = Number(
+      apertureCvState?.confidence ?? 0,
+    ).toFixed(2);
+  }
+  if (farCvStatus) {
+    farCvStatus.textContent = !apertureCvEnabled
+      ? "已关闭"
+      : apertureCvState?.mode === "locked"
+        ? "CV已吸附"
+        : apertureCvState?.mode === "holding"
+          ? "CV保持"
+          : "CV校准中";
+  }
+});
+
+target?.addEventListener("gaussian-portal-error", (event) => {
+  if (
+    portalLoadWaiter &&
+    (!event.detail?.url || event.detail.url === portalLoadWaiter.url)
+  ) {
+    portalLoadWaiter.resolve("error");
+  }
   target?.setAttribute("portal-occlusion-test", "loadModel", true);
   if (statusText) statusText.textContent = "高斯场景不可用，启用网格回退";
   if (statusDetail) {
@@ -292,12 +431,14 @@ target?.addEventListener("portal-model-error", () => {
 target?.addEventListener("targetFound", () => {
   foundAt = performance.now();
   targetTracking = true;
+  markerScanGuide?.classList.remove("is-active");
   gaussianPortal?.setTracking(true);
   setTrackingState(true);
 });
 
 target?.addEventListener("targetLost", () => {
   targetTracking = false;
+  markerScanGuide?.classList.add("is-active");
   gaussianPortal?.setTracking(false);
   setTrackingState(false);
   if (calibrateDistanceButton) calibrateDistanceButton.disabled = true;
@@ -411,9 +552,15 @@ async function initializeGaussianPortal() {
   if (gaussianPortal || gaussianPortalPromise || !scene || !target) {
     return gaussianPortalPromise;
   }
+  const rendererGeneration = portalRendererGeneration;
   gaussianPortalPromise = import("./gaussianPortalRenderer.js")
     .then(({ createGaussianPortalRenderer }) => {
-      if (pageDestroyed) return null;
+      if (
+        pageDestroyed ||
+        rendererGeneration !== portalRendererGeneration
+      ) {
+        return null;
+      }
       const viewDistance = finiteQueryNumber(
         "viewDistance",
         REFERENCE_VIEW_DISTANCE,
@@ -452,6 +599,8 @@ async function initializeGaussianPortal() {
         modelScale: finiteQueryNumber("modelScale", PORTAL_WORLD_SCALE),
         viewDistance,
         perspectiveMode,
+        apertureCv: apertureCvEnabled,
+        portalScene: portalRuntimeScene,
         anchorObject: debugAnchor,
       });
       gaussianPortal.setOcclusion(occlusionEnabled);
@@ -460,6 +609,7 @@ async function initializeGaussianPortal() {
       return gaussianPortal;
     })
     .catch((error) => {
+      if (rendererGeneration !== portalRendererGeneration) return null;
       gaussianPortalPromise = null;
       console.error("Unable to initialize Gaussian portal", error);
       target.emit("gaussian-portal-error", {
@@ -469,6 +619,119 @@ async function initializeGaussianPortal() {
     });
   return gaussianPortalPromise;
 }
+
+function delay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function waitForPortalResult(url, timeout = 2800) {
+  if (portalLoadWaiter) portalLoadWaiter.resolve("superseded");
+  let timeoutId = 0;
+  const result = new Promise((resolve) => {
+    portalLoadWaiter = {
+      url,
+      resolve(outcome) {
+        window.clearTimeout(timeoutId);
+        resolve(outcome);
+      },
+    };
+    timeoutId = window.setTimeout(
+      () => portalLoadWaiter?.resolve("timeout"),
+      timeout,
+    );
+  });
+  return result.finally(() => {
+    if (portalLoadWaiter?.url === url) portalLoadWaiter = null;
+  });
+}
+
+function showDynastyTransition(profile) {
+  if (!dynastyTransition) return;
+  if (dynastyTransitionTitle) {
+    dynastyTransitionTitle.textContent = `正在前往${profile.label}`;
+  }
+  dynastyTransition.classList.remove("is-revealing");
+  dynastyTransition.classList.add("is-active");
+  dynastyTransition.setAttribute("aria-hidden", "false");
+}
+
+async function hideDynastyTransition() {
+  if (!dynastyTransition) return;
+  dynastyTransition.classList.add("is-revealing");
+  await delay(430);
+  dynastyTransition.classList.remove("is-active", "is-revealing");
+  dynastyTransition.setAttribute("aria-hidden", "true");
+}
+
+function activatePortalScene(profile) {
+  portalSceneProfile = profile;
+  resolvedPortalConfig = resolvePortalSceneConfig(profile, false);
+  portalView = resolvedPortalConfig.view;
+  portalCrop = resolvedPortalConfig.crop;
+  portalFov = resolvedPortalConfig.fov;
+  cropRequiresSourceScene = resolvedPortalConfig.requiresSource;
+  portalRuntimeScene = resolvedPortalConfig.runtimeScene;
+  perspectiveState = null;
+  apertureCvState = null;
+  applyPortalTargetMetadata(false);
+  applyPortalOcclusionConfig();
+
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("scene", profile.id);
+  nextUrl.searchParams.delete("dynasty");
+  portalConfigQueryNames.forEach((name) => nextUrl.searchParams.delete(name));
+  window.history.replaceState(null, "", nextUrl);
+}
+
+async function switchPortalScene(sceneId) {
+  const nextProfile = getPortalScene(sceneId);
+  if (
+    dynastySwitching ||
+    nextProfile.id === portalSceneProfile.id ||
+    pageDestroyed
+  ) {
+    return;
+  }
+
+  dynastySwitching = true;
+  updateDynastyControls();
+  showDynastyTransition(nextProfile);
+  const reducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  await delay(reducedMotion ? 20 : 440);
+
+  portalRendererGeneration += 1;
+  gaussianPortal?.destroy();
+  gaussianPortal = null;
+  gaussianPortalPromise = null;
+  debugAnchorObject = null;
+  activatePortalScene(nextProfile);
+  updateDynastyControls();
+
+  const portalResult = waitForPortalResult(portalRuntimeScene.url);
+  await initializeGaussianPortal();
+  await Promise.all([
+    portalResult,
+    delay(reducedMotion ? 20 : 560),
+  ]);
+  await hideDynastyTransition();
+
+  dynastySwitching = false;
+  updateDynastyControls();
+  if (targetTracking) setTrackingState(true);
+}
+
+dynastyButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    switchPortalScene(button.dataset.scene).catch((error) => {
+      console.error("Unable to switch portal dynasty", error);
+      dynastySwitching = false;
+      updateDynastyControls();
+      hideDynastyTransition();
+    });
+  });
+});
 
 scene?.addEventListener("loaded", () => {
   resolveArSystem();
@@ -483,8 +746,9 @@ if (scene?.hasLoaded && debugPortal) initializeGaussianPortal();
 scene?.addEventListener("arReady", () => {
   starting = false;
   cameraGate?.classList.add("is-hidden");
+  markerScanGuide?.classList.add("is-active");
   if (statusText) statusText.textContent = "摄像头已启动，等待纹样框";
-  if (statusDetail) statusDetail.textContent = "请将20×26 cm窗口周围的纹样完整放入画面";
+  if (statusDetail) statusDetail.textContent = "先后退，让完整外框接近黄色取景框大小";
   initializeGaussianPortal();
 });
 

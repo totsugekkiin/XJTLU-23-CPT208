@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="theme-color" content="#17100c" />
+    <meta
+      name="description"
+      content="竹简告示牌模型与传统竖排深褐色墨迹的交互预览。"
+    />
+    <title>竹简告示牌 · 竖排文字预览</title>
+    <link rel="stylesheet" href="/css/bamboo-notice-preview.css" />
+  </head>
+  <body>
+    <main id="bamboo-preview" class="bamboo-preview">
+      <canvas id="bamboo-canvas" aria-label="可旋转查看的竹简告示牌三维模型"></canvas>
+
+      <header class="bamboo-header">
+        <div class="bamboo-title">
+          <span>Bamboo Notice · AR Asset Preview</span>
+          <h1>竹简告示牌</h1>
+          <p>传统竖排 · 深褐墨色 · 一列一简</p>
+        </div>
+        <div id="bamboo-status" class="bamboo-status" role="status">正在加载竹简模型</div>
+      </header>
+
+      <aside class="bamboo-editor" aria-label="告示牌文字编辑">
+        <label for="bamboo-columns">
+          告示文字
+          <small>固定 9 列；每行对应一根竹片，空行会保留为空列</small>
+        </label>
+        <textarea id="bamboo-columns" spellcheck="false"></textarea>
+        <div class="bamboo-actions">
+          <button id="bamboo-reset" type="button">正面视角</button>
+          <button id="bamboo-rotate" class="is-active" type="button">暂停旋转</button>
+        </div>
+        <section class="bamboo-column-console" aria-labelledby="bamboo-column-title">
+          <div class="bamboo-column-console__header">
+            <div>
+              <strong id="bamboo-column-title">竹片对齐控制台</strong>
+              <small>9 列已按最终数据校准，仍可逐列微调</small>
+            </div>
+            <button id="bamboo-column-reset" type="button">恢复默认</button>
+          </div>
+          <div id="bamboo-column-controls" class="bamboo-column-controls"></div>
+          <button id="bamboo-copy-data" class="bamboo-copy-data" type="button">
+            复制列位置数据
+          </button>
+          <span id="bamboo-copy-feedback" class="bamboo-copy-feedback" aria-live="polite"></span>
+        </section>
+      </aside>
+
+      <p class="bamboo-hint">拖动旋转 · 滚轮缩放 · 右侧可直接换字</p>
+    </main>
+
+    <script type="module" src="/js/ar/bambooNoticePreview.js"></script>
+  </body>
+</html>

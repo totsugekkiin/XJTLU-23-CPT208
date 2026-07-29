@@ -2,6 +2,11 @@ import React, { useEffect } from "react";
 import { AR_MAP_PROFILES } from "../../js/ar/arAnchors.js";
 
 export function ArPage() {
+  const exitAr = () => {
+    const returnUrl = new URL("appMain.html?resume=gate", window.location.href);
+    window.location.replace(returnUrl.href);
+  };
+
   useEffect(() => {
     let cleanup = null;
     let cancelled = false;
@@ -25,6 +30,21 @@ export function ArPage() {
     <div id="ar-app" data-ar-mode="loc-ar">
       <div id="ar-camera-wrap">
         <video id="ar-camera" autoPlay muted playsInline />
+        <a-scene
+          id="ar-marker-scene"
+          class="ar-marker-scene"
+          embedded="true"
+          vr-mode-ui="enabled: false"
+          renderer="alpha: true; antialias: true; colorManagement: true"
+          color-space="sRGB"
+          device-orientation-permission-ui="enabled: false"
+        >
+          <a-entity id="ar-marker-target" />
+          <a-camera
+            position="0 0 0"
+            look-controls="enabled: false"
+          />
+        </a-scene>
       </div>
 
       <div id="ar-ui">
@@ -33,7 +53,7 @@ export function ArPage() {
           <div className="ar-start-copy">
             <span>阊门历史现场</span>
             <h1>寻找消失的城门记忆</h1>
-            <p>开启摄像头，对准阊门建筑并缓慢移动。识别成功后，一卷竹简将在真实空间中出现。</p>
+            <p>开启摄像头后，可对准阊门建筑或完整纹理边框。系统会自动选择地图定位或纹理入口，并显示对应的 AR 内容。</p>
           </div>
           <label className="ar-field ar-dev-only" htmlFor="ar-map-select">
             测试地图
@@ -49,9 +69,24 @@ export function ArPage() {
           <button id="ar-start-btn" type="button">
             开启 AR 探索
           </button>
-          <p id="ar-preload-status" className="ar-preload-status" aria-live="polite">
-            正在准备竹简…
-          </p>
+          <div id="ar-preload" className="ar-preload" aria-live="polite">
+            <div className="ar-preload__copy">
+              <span id="ar-preload-status">正在准备 AR 资源…</span>
+              <span id="ar-preload-percent">8%</span>
+            </div>
+            <div
+              id="ar-preload-progress"
+              className="ar-preload__track"
+              role="progressbar"
+              aria-label="AR 资源准备进度"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="8"
+            >
+              <span id="ar-preload-progress-bar" style={{ width: "8%" }} />
+            </div>
+            <small>资源会在你阅读说明时提前准备，未完成也可以直接开启</small>
+          </div>
           <p id="ar-error-msg" />
         </div>
 
@@ -63,8 +98,11 @@ export function ArPage() {
           <div className="ar-guide__status">
             <span className="ar-guide__indicator" aria-hidden="true" />
             <span>
-              <strong id="ar-guide-title">正在寻找阊门场景</strong>
-              <small id="ar-guide-detail">请对准建筑，缓慢左右移动手机</small>
+              <strong id="ar-guide-title">正在识别现场</strong>
+              <small id="ar-guide-detail">对准建筑区域，或将完整纹理边框放入画面</small>
+              <span id="ar-guide-progress" className="ar-guide__progress" aria-hidden="true">
+                <i id="ar-guide-progress-bar" />
+              </span>
             </span>
           </div>
         </section>
@@ -124,7 +162,7 @@ export function ArPage() {
           </button>
           <div className="ar-debug__inner">
             <div className="ar-debug__header">
-              <span>Immersal Debug</span>
+              <span>Unified AR Debug</span>
               <button id="ar-copy-debug" type="button">
                 复制 debug
               </button>
@@ -149,6 +187,14 @@ export function ArPage() {
             <div className="ar-debug__item">
               <span>Immersal</span>
               <strong id="ar-debug-immersal">not started</strong>
+            </div>
+            <div className="ar-debug__item">
+              <span>当前模式</span>
+              <strong id="ar-debug-mode">scanning</strong>
+            </div>
+            <div className="ar-debug__item">
+              <span>MindAR</span>
+              <strong id="ar-debug-marker">not started</strong>
             </div>
             <div className="ar-debug__item">
               <span>成功/失败</span>
@@ -178,7 +224,9 @@ export function ArPage() {
         <a id="ar-back" className="ar-dev-only" href="loc-ar-editor.html">
           摆放工具
         </a>
-        <a href="index.html">← 返回</a>
+        <button id="ar-exit" type="button" onClick={exitAr}>
+          退出 AR
+        </button>
       </nav>
     </div>
   );

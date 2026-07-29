@@ -3,6 +3,7 @@ import {
   installGaussianCropShader,
   updateGaussianCropMaterial,
 } from "./gaussianCropShader.js";
+import { createFarApertureCvSnapper } from "./farApertureCvSnapper.js";
 import {
   PORTAL_CROP_BOX,
   PORTAL_OPENING_HEIGHT,
@@ -17,8 +18,6 @@ import {
   resolvePortalPerspectivePose,
 } from "./portalSceneConfig.js";
 
-const GAUSSIAN_URL = PORTAL_RUNTIME_SCENE.url;
-const GAUSSIAN_COUNT = PORTAL_RUNTIME_SCENE.gaussians;
 const EDITOR_HOME_PITCH = 35;
 const TEXTURE_HEIGHT = 960;
 const TEXTURE_WIDTH = Math.round(
@@ -31,15 +30,13 @@ const DESKTOP_RENDER_INTERVAL = 1000 / 45;
 const EYE_MOVEMENT_EPSILON = 0.003;
 const EYE_DEPTH_SMOOTHING_MS = 55;
 const EYE_DEPTH_SNAP_DISTANCE = 0.08;
-const PROJECTED_POINT_EPSILON = 0.15;
+const PROJECTED_POINT_EPSILON = 0.65;
 
 function applyEditorCameraPose(entity, view) {
   const cameraBaseRotation = new pc.Quat()
     .setFromEulerAngles(EDITOR_HOME_PITCH, 0, 0)
     .mul(new pc.Quat().setFromEulerAngles(0, 0, 180));
-  const sceneUp = cameraBaseRotation
-    .transformVector(new pc.Vec3(0, 1, 0), new pc.Vec3())
-    .normalize();
+  const sceneUp = new pc.Vec3(0, -1, 0);
   const yawRotation = new pc.Quat().setFromAxisAngle(
     sceneUp,
     view.yaw,
@@ -120,12 +117,15 @@ class GaussianPortalRenderer {
     modelScale = PORTAL_WORLD_SCALE,
     viewDistance = PORTAL_REFERENCE_VIEW_DISTANCE,
     perspectiveMode = PORTAL_PERSPECTIVE_MODES.PHYSICAL,
+    apertureCv = true,
+    portalScene = PORTAL_RUNTIME_SCENE,
   }) {
     this.scene = scene;
     this.target = target;
     this.anchorObject = anchorObject || target.object3D;
     this.THREE = window.AFRAME.THREE;
     this.cropBounds = portalCropBounds(crop);
+    this.portalScene = portalScene;
     this.modelScale =
       Number.isFinite(modelScale) && modelScale > 0
         ? modelScale
@@ -161,6 +161,11 @@ class GaussianPortalRenderer {
     this.hasSmoothedEye = false;
     this.lastEyeSampleAt = 0;
     this.lastPerspectiveEmitAt = 0;
+    this.apertureSnapper = createFarApertureCvSnapper({
+      scene: this.scene,
+      target: this.target,
+      enabled: apertureCv,
+    });
 
     this.worldPoint = new this.THREE.Vector3();
     this.cameraPoint = new this.THREE.Vector3();
@@ -358,6 +363,7 @@ class GaussianPortalRenderer {
       point.y = Number.NaN;
     }
     this.lastNearClipPath = "";
+    this.apertureSnapper.reset();
     this.requestRender(true);
   }
 
@@ -494,6 +500,7 @@ class GaussianPortalRenderer {
     }
     this.hasRenderedEye = false;
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
   }
@@ -506,6 +513,7 @@ class GaussianPortalRenderer {
     this.distanceCalibrated = true;
     this.hasRenderedEye = false;
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
     return this.runtimeEye.z;
@@ -513,6 +521,7 @@ class GaussianPortalRenderer {
 
   setTracking(tracking) {
     this.tracking = tracking;
+    this.apertureSnapper.setTracking(tracking);
     this.splatEntity.enabled =
       this.loaded && this.tracking && !document.hidden;
     this.canvas.classList.toggle(
@@ -529,6 +538,7 @@ class GaussianPortalRenderer {
 
   setOcclusion(enabled) {
     this.occlusion = enabled;
+    this.apertureSnapper.setOcclusion(enabled);
     this.lastTransform = "";
     if (!enabled) {
       this.setNearClipPath("none");
@@ -542,6 +552,7 @@ class GaussianPortalRenderer {
     this.direction = direction < 0 ? -1 : 1;
     this.lastTransform = "";
     this.poseRenderRequested = true;
+    this.apertureSnapper.reset();
     this.requestRender(true);
     this.emitPerspectiveState(true);
   }
@@ -664,10 +675,15 @@ class GaussianPortalRenderer {
       return;
     }
     this.updateNearClipPath();
+    const renderedCorners = this.apertureSnapper.update(
+      this.projectedCorners,
+      sourceBounds,
+      this.nearProjectedCorners,
+    );
 
     let projectionChanged = !this.lastTransform;
     for (let index = 0; index < this.clipCorners.length; index += 1) {
-      const projected = this.projectedCorners[index];
+      const projected = renderedCorners[index];
       const previous = this.lastProjectedCorners[index];
       if (
         Math.abs(projected.x - previous.x) >=
@@ -687,7 +703,7 @@ class GaussianPortalRenderer {
       return;
     }
     const transform = quadTransform(
-      this.projectedCorners,
+      renderedCorners,
       TEXTURE_WIDTH,
       TEXTURE_HEIGHT,
     );
@@ -695,9 +711,9 @@ class GaussianPortalRenderer {
       this.setProjected(false);
       return;
     }
-    for (let index = 0; index < this.projectedCorners.length; index += 1) {
-      this.lastProjectedCorners[index].x = this.projectedCorners[index].x;
-      this.lastProjectedCorners[index].y = this.projectedCorners[index].y;
+    for (let index = 0; index < renderedCorners.length; index += 1) {
+      this.lastProjectedCorners[index].x = renderedCorners[index].x;
+      this.lastProjectedCorners[index].y = renderedCorners[index].y;
     }
     this.setTransform(transform);
     this.setProjected(true);
@@ -745,14 +761,16 @@ class GaussianPortalRenderer {
   }
 
   loadScene() {
+    const gaussianUrl = this.portalScene.url;
+    const gaussianCount = this.portalScene.gaussians;
     this.target.emit("gaussian-portal-loading", {
-      url: GAUSSIAN_URL,
-      gaussians: GAUSSIAN_COUNT,
+      url: gaussianUrl,
+      gaussians: gaussianCount,
     });
     const asset = new pc.Asset(
-      "changgate-courtyard",
+      `changgate-portal-${this.portalScene.id ?? "scene"}`,
       "gsplat",
-      { url: GAUSSIAN_URL },
+      { url: gaussianUrl },
     );
     this.app.assets.add(asset);
     asset.ready((loadedAsset) => {
@@ -765,15 +783,15 @@ class GaussianPortalRenderer {
       this.setTracking(this.tracking);
       this.requestRender(true);
       this.target.emit("gaussian-portal-loaded", {
-        url: GAUSSIAN_URL,
-        gaussians: GAUSSIAN_COUNT,
+        url: gaussianUrl,
+        gaussians: gaussianCount,
       });
     });
     asset.on("error", (error) => {
       if (this.destroyed) return;
       console.error("Unable to load Gaussian portal scene", error);
       this.target.emit("gaussian-portal-error", {
-        url: GAUSSIAN_URL,
+        url: gaussianUrl,
         message: error?.message ?? "unknown error",
       });
     });
@@ -816,6 +834,7 @@ class GaussianPortalRenderer {
       this.handleGsplatFrameRequest,
     );
     this.cropMaterials.clear();
+    this.apertureSnapper.destroy();
     this.app.destroy();
     this.clipLayer.remove();
   }

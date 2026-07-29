@@ -33,17 +33,18 @@ export const BAMBOO_NOTICE_COLUMN_POSITIONS = Object.freeze([
 
 const DEFAULT_OPTIONS = {
   columns: DEFAULT_COLUMNS,
-  color: "#3b2116",
-  textureWidth: 2048,
-  textureHeight: 1200,
-  fontFamily: '"STKaiti", "KaiTi", "Noto Serif SC", "Source Han Serif SC", serif',
-  fontSize: 82,
+  color: "#6a4027",
+  textureWidth: 3072,
+  textureHeight: 1800,
+  fontFamily: '"Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif',
+  fontWeight: "400",
+  fontSize: 126,
   columnStartX: BAMBOO_NOTICE_LAYOUT.columnStartX,
   columnGapRatio: BAMBOO_NOTICE_LAYOUT.columnGap,
-  characterGap: 8,
+  characterGap: 14,
   columnPositions: BAMBOO_NOTICE_COLUMN_POSITIONS,
   topOffsetRatio: BAMBOO_NOTICE_LAYOUT.topOffset,
-  opacity: 0.92,
+  opacity: 0.82,
   widthRatio: 0.79,
   heightRatio: 0.75,
   surfaceOffset: 0.006,
@@ -67,9 +68,7 @@ function drawInkColumns(canvas, options) {
   context.globalAlpha = options.opacity;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.font = `${options.fontSize}px ${options.fontFamily}`;
-  context.shadowColor = "rgba(58, 29, 16, 0.14)";
-  context.shadowBlur = 1.5;
+  context.font = `${options.fontWeight} ${options.fontSize}px ${options.fontFamily}`;
 
   const top = canvas.height * options.topOffsetRatio;
   const lineHeight = options.fontSize + options.characterGap;

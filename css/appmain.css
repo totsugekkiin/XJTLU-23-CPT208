@@ -192,6 +192,261 @@ body.is-river-page .scroll-reveal-words {
 }
 
 /* =========================
+ * AR 入口：黄色叙事与红色阊门转场之间
+ * ========================= */
+.ar-entry-section {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding:
+    max(5.5rem, env(safe-area-inset-top))
+    clamp(1.25rem, 5vw, 4.5rem)
+    max(4.5rem, env(safe-area-inset-bottom));
+  background: #f6cd45;
+  color: #ea580c;
+}
+
+.ar-entry-section::before {
+  content: "";
+  position: absolute;
+  width: min(72vw, 42rem);
+  aspect-ratio: 1;
+  border: clamp(1px, 0.25vw, 3px) solid rgba(234, 88, 12, 0.25);
+  border-radius: 50%;
+  transform: translate(-48%, -42%);
+  pointer-events: none;
+}
+
+.ar-entry-section::after {
+  content: "AR";
+  position: absolute;
+  right: -0.06em;
+  bottom: -0.24em;
+  color: rgba(234, 88, 12, 0.075);
+  font-size: clamp(15rem, 45vw, 38rem);
+  font-weight: 950;
+  line-height: 0.8;
+  letter-spacing: -0.12em;
+  pointer-events: none;
+}
+
+.ar-entry-section__orbit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ar-entry-section__orbit span {
+  position: absolute;
+  display: block;
+  border: 2px solid rgba(234, 88, 12, 0.3);
+  border-radius: 50%;
+}
+
+.ar-entry-section__orbit span:nth-child(1) {
+  top: 12%;
+  right: 9%;
+  width: clamp(2.5rem, 7vw, 5rem);
+  aspect-ratio: 1;
+}
+
+.ar-entry-section__orbit span:nth-child(2) {
+  left: 8%;
+  bottom: 13%;
+  width: clamp(1rem, 2.8vw, 2.2rem);
+  aspect-ratio: 1;
+  background: #1f66db;
+  border-color: #1f66db;
+}
+
+.ar-entry-section__orbit span:nth-child(3) {
+  top: 22%;
+  left: 16%;
+  width: 0.65rem;
+  aspect-ratio: 1;
+  background: #ea580c;
+  border-color: #ea580c;
+}
+
+.ar-entry-section__content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 56rem);
+  text-align: center;
+}
+
+.ar-entry-section__eyebrow {
+  margin: 0 0 clamp(1.15rem, 3vh, 2rem);
+  color: #1f66db;
+  font-size: clamp(0.72rem, 1.8vw, 1rem);
+  font-weight: 900;
+  letter-spacing: 0.22em;
+}
+
+.ar-entry-section h2 {
+  margin: 0;
+  font-size: clamp(3rem, min(10vw, 11vh), 7.5rem);
+  font-weight: 950;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+.ar-entry-section__description {
+  width: min(100%, 38rem);
+  margin: clamp(1.5rem, 4vh, 2.6rem) auto 0;
+  font-size: clamp(0.95rem, 2.2vw, 1.22rem);
+  font-weight: 700;
+  line-height: 1.75;
+  text-wrap: balance;
+}
+
+.ar-entry-section__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-top: clamp(2rem, 5vh, 3.4rem);
+}
+
+.ar-entry-section__primary {
+  width: min(100%, 29rem);
+  min-height: 5.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  border: 2px solid #1f66db;
+  border-radius: 999px;
+  background: #1f66db;
+  color: #fff;
+  text-align: left;
+  text-decoration: none;
+  box-shadow: 0 1rem 2.5rem rgba(31, 102, 219, 0.22);
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.ar-entry-section__primary:hover {
+  transform: translateY(-3px);
+  background: #1558c5;
+  box-shadow: 0 1.25rem 3rem rgba(31, 102, 219, 0.3);
+}
+
+.ar-entry-section__primary:focus-visible,
+.ar-entry-section__skip:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 4px;
+}
+
+.ar-entry-section__button-mark {
+  width: 3.8rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+}
+
+.ar-entry-section__primary strong,
+.ar-entry-section__primary small {
+  display: block;
+}
+
+.ar-entry-section__primary strong {
+  font-size: clamp(1.05rem, 2.5vw, 1.3rem);
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+}
+
+.ar-entry-section__primary small {
+  margin-top: 0.28rem;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.ar-entry-section__arrow {
+  padding-right: 0.35rem;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.ar-entry-section__skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1rem;
+  color: #b8440a;
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+}
+
+.ar-entry-section__skip span {
+  font-size: 1.15rem;
+}
+
+.ar-entry-section__scroll-note {
+  position: absolute;
+  z-index: 1;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  margin: 0;
+  color: rgba(133, 53, 11, 0.65);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+body.is-river-page .ar-entry-section {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .ar-entry-section {
+    padding-inline: 1rem;
+  }
+
+  .ar-entry-section h2 {
+    font-size: clamp(3.15rem, 15vw, 5.3rem);
+    line-height: 1.02;
+  }
+
+  .ar-entry-section__description {
+    max-width: 22rem;
+  }
+
+  .ar-entry-section__primary {
+    width: min(100%, 23rem);
+    min-height: 5.15rem;
+    gap: 0.8rem;
+  }
+
+  .ar-entry-section__button-mark {
+    width: 3.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-entry-section__primary {
+    transition: none;
+  }
+}
+
+/* =========================
  * 河流页模式：
  * 幕布合拢进入河流后，把首屏/胶片段从滚动叙事中摘掉
  * ========================= */

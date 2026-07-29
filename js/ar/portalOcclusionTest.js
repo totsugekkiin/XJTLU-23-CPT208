@@ -450,9 +450,7 @@ export function registerPortalOcclusionTest() {
               radians(180),
             ),
           );
-        const sceneUp = new THREE.Vector3(0, 1, 0)
-          .applyQuaternion(cameraBaseRotation)
-          .normalize();
+        const sceneUp = new THREE.Vector3(0, -1, 0);
         const cameraRotation = new THREE.Quaternion()
           .setFromAxisAngle(sceneUp, radians(this.data.viewYaw))
           .multiply(cameraBaseRotation)

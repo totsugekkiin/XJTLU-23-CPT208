@@ -17,6 +17,13 @@
 
 #home-nav li { margin: 2rem 0; text-align: center; }
 
+#home-nav .nav-ar-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.25rem, 3vw, 3rem);
+}
+
 #home-nav a {
   font-size: 5rem;
   text-transform: uppercase;
@@ -49,6 +56,10 @@
 }
 
 #home-nav a:hover::after { opacity: 1; }
+
+#home-nav a.nav-item--ar {
+  font-size: clamp(2.5rem, 4.2vw, 4rem);
+}
 
 /* APP button: black circle + bold sans-serif GO */
 #home-nav a.app-go {
@@ -90,6 +101,11 @@
     margin: 0;
   }
 
+  #home-nav .nav-ar-group {
+    flex-direction: column;
+    gap: clamp(0.45rem, 1.8vh, 0.8rem);
+  }
+
   #home-nav a.nav-item:not(.app-go) {
     font-size: clamp(2rem, 8.5vw, 3.35rem);
     line-height: 1.08;
@@ -97,6 +113,10 @@
     padding: 0.12em 0.2em;
     max-width: 100%;
     box-sizing: border-box;
+  }
+
+  #home-nav a.nav-item.nav-item--ar {
+    font-size: clamp(1.75rem, 7.2vw, 2.8rem);
   }
 
   #home-nav a.nav-item:not(.app-go):hover {

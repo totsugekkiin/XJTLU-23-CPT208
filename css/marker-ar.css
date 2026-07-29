@@ -39,6 +39,39 @@ body {
   display: none;
 }
 
+.marker-scan-guide {
+  position: fixed;
+  z-index: 12;
+  top: 50%;
+  left: 50%;
+  display: none;
+  width: min(56vw, 330px);
+  aspect-ratio: 26 / 32;
+  transform: translate(-50%, -46%);
+  border: 2px dashed rgb(255 213 74 / 72%);
+  border-radius: 8px;
+  box-shadow: 0 0 0 999vmax rgb(0 0 0 / 8%);
+  pointer-events: none;
+}
+
+.marker-scan-guide.is-active {
+  display: block;
+}
+
+.marker-scan-guide span {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  width: max-content;
+  max-width: 82vw;
+  transform: translateX(-50%);
+  color: #ffe38a;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 2px 6px #000;
+}
+
 .camera-gate-card {
   width: min(88vw, 380px);
   padding: 24px;
@@ -129,6 +162,73 @@ body {
   box-shadow: 0 0 0 5px rgb(56 229 140 / 16%);
 }
 
+.dynasty-switcher {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  margin: 9px auto 0;
+  padding: 4px;
+  border: 1px solid rgb(231 208 151 / 34%);
+  border-radius: 999px;
+  color: #f7e8bd;
+  background:
+    linear-gradient(135deg, rgb(55 37 22 / 91%), rgb(20 18 15 / 91%));
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 28%),
+    inset 0 0 18px rgb(210 173 94 / 7%);
+  pointer-events: auto;
+  backdrop-filter: blur(12px);
+}
+
+.dynasty-switcher__label {
+  padding: 0 9px 0 10px;
+  color: rgb(247 232 189 / 68%);
+  font-family: "STKaiti", "KaiTi", "FangSong", serif;
+  font-size: 12px;
+  letter-spacing: 0.24em;
+}
+
+.dynasty-switcher button {
+  min-width: 58px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: rgb(255 250 232 / 72%);
+  background: transparent;
+  font: 700 13px/1 "STKaiti", "KaiTi", "PingFang SC", serif;
+  letter-spacing: 0.08em;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    transform 120ms ease;
+}
+
+.dynasty-switcher button[aria-pressed="true"] {
+  color: #fff8dc;
+  background:
+    linear-gradient(135deg, rgb(136 36 27 / 94%), rgb(91 19 17 / 94%));
+  box-shadow:
+    0 3px 10px rgb(0 0 0 / 28%),
+    inset 0 0 0 1px rgb(255 220 156 / 20%);
+}
+
+.dynasty-switcher button:active {
+  transform: scale(0.95);
+}
+
+.dynasty-switcher button:focus-visible {
+  outline: 2px solid #ffe19a;
+  outline-offset: 2px;
+}
+
+.dynasty-switcher button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .marker-test-actions {
   display: flex;
   flex-wrap: wrap;
@@ -167,6 +267,115 @@ body {
 .marker-test-actions button[aria-pressed="true"] {
   border-color: rgb(114 229 255 / 58%);
   background: rgb(14 61 72 / 86%);
+}
+
+.dynasty-transition {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.dynasty-transition__wash {
+  position: absolute;
+  inset: -8%;
+  background:
+    radial-gradient(circle at 24% 38%, rgb(115 74 34 / 18%), transparent 26%),
+    radial-gradient(circle at 72% 62%, rgb(36 25 18 / 15%), transparent 30%),
+    linear-gradient(102deg, #d9c89e, #efe4c6 46%, #c8b68a);
+  box-shadow: inset 0 0 120px rgb(52 35 18 / 28%);
+  clip-path: inset(0 100% 0 0);
+  transform: rotate(-1.2deg) scale(1.08);
+}
+
+.dynasty-transition__wash::after {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      7deg,
+      transparent 0 7px,
+      rgb(74 50 28 / 3%) 8px 9px
+    );
+  content: "";
+  mix-blend-mode: multiply;
+}
+
+.dynasty-transition__content {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: #2c2117;
+  font-family: "STKaiti", "KaiTi", "FangSong", serif;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.dynasty-transition__content span {
+  font-size: 12px;
+  letter-spacing: 0.44em;
+}
+
+.dynasty-transition__content strong {
+  font-size: clamp(28px, 8vw, 44px);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}
+
+.dynasty-transition__content i {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-top: 5px;
+  border: 2px solid #8f241d;
+  color: #8f241d;
+  font-size: 22px;
+  font-style: normal;
+  line-height: 1;
+  transform: rotate(-5deg);
+}
+
+.dynasty-transition.is-active {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.dynasty-transition.is-active .dynasty-transition__wash {
+  animation: dynasty-wash-in 480ms cubic-bezier(0.64, 0, 0.2, 1) forwards;
+}
+
+.dynasty-transition.is-active .dynasty-transition__content {
+  animation: dynasty-title-in 360ms ease 330ms forwards;
+}
+
+.dynasty-transition.is-revealing {
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+@keyframes dynasty-wash-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes dynasty-title-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .marker-test-legend {
@@ -237,9 +446,63 @@ a-scene canvas {
   opacity: 1;
 }
 
+.far-aperture-cv-overlay {
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+
+.far-aperture-cv-overlay.is-visible {
+  opacity: 1;
+}
+
+.far-aperture-cv-overlay polygon {
+  fill: none;
+  stroke: #30d5ff;
+  stroke-width: 3;
+  stroke-dasharray: 9 7;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 85%));
+  vector-effect: non-scaling-stroke;
+}
+
+.far-aperture-cv-overlay.is-locked polygon {
+  stroke: #42e8ff;
+  stroke-dasharray: none;
+}
+
 video {
   z-index: 0 !important;
   visibility: visible !important;
   opacity: 1 !important;
   object-fit: cover !important;
+}
+
+@media (max-width: 420px) {
+  .dynasty-switcher__label {
+    padding-right: 5px;
+    padding-left: 8px;
+  }
+
+  .dynasty-switcher button {
+    min-width: 52px;
+    padding: 0 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dynasty-switcher button,
+  .dynasty-transition,
+  .dynasty-transition__content,
+  .dynasty-transition__wash {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

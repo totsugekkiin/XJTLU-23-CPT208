@@ -105,7 +105,9 @@ export function ScrollRevealWords({
           entry?.isIntersecting === true && entry.intersectionRatio >= 0.035;
         if (shouldPin) {
           requestAnimationFrame(() => commitHandoff());
-        } else {
+        } else if (el.getBoundingClientRect().top > window.innerHeight) {
+          // 目标仍在视口下方，说明用户已向上返回文字段；恢复 fixed 居中。
+          // 目标从视口上方离开时则保持 handoff，避免文字重新覆盖后续页面。
           setHandoff(false);
           setHandoffBox(null);
         }

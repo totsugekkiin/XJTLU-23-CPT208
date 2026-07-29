@@ -15,11 +15,42 @@ const SDK_DEBUG_INTERVAL_MS = 250;
 const STABLE_LOCALIZATION_COUNT = 2;
 const MAP_SWITCH_CONFIRMATIONS = 3;
 const LOCALIZATION_GRACE_MS = 2200;
+const MARKER_LOST_GRACE_MS = 1800;
 const CAPTURE_WIDTH = 480;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 const CLIENT_IMMERSAL_TOKEN = import.meta.env.VITE_IMMERSAL_TOKEN ?? "";
+const IMMERSAL_API_BASE_URL = "https://api.immersal.com";
+const LAST_LOCALIZED_MAP_KEY = "changgate.immersal.last-map.v1";
+const MAP_PREFETCH_CONCURRENCY = 2;
+
+function createSharedImmersalCamera(video, stream) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", {
+    alpha: false,
+    desynchronized: true,
+    willReadFrequently: true,
+  });
+  const track = stream?.getVideoTracks?.()[0] ?? null;
+  const settings = track?.getSettings?.() ?? {};
+
+  return {
+    el: video,
+    cameraId: settings.deviceId ?? null,
+    cameraLabel: track?.label || "shared rear camera",
+    width: video.videoWidth,
+    height: video.videoHeight,
+    getImageData(scale = 1) {
+      const width = Math.max(1, Math.round(this.width * scale));
+      const height = Math.max(1, Math.round(this.height * scale));
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(video, 0, 0, width, height);
+      return context.getImageData(0, 0, width, height).data;
+    },
+  };
+}
 
 function degToRad(deg) {
   return (deg * Math.PI) / 180;
@@ -154,7 +185,13 @@ export function bootstrapArScene(rootEl) {
   const guide = rootEl.querySelector("#ar-guide");
   const guideTitle = rootEl.querySelector("#ar-guide-title");
   const guideDetail = rootEl.querySelector("#ar-guide-detail");
+  const guideProgress = rootEl.querySelector("#ar-guide-progress");
+  const guideProgressBar = rootEl.querySelector("#ar-guide-progress-bar");
+  const preload = rootEl.querySelector("#ar-preload");
   const preloadStatus = rootEl.querySelector("#ar-preload-status");
+  const preloadPercent = rootEl.querySelector("#ar-preload-percent");
+  const preloadProgress = rootEl.querySelector("#ar-preload-progress");
+  const preloadProgressBar = rootEl.querySelector("#ar-preload-progress-bar");
   const story = rootEl.querySelector("#ar-story");
   const storyClose = rootEl.querySelector("#ar-story-close");
   const debugEls = {
@@ -163,6 +200,8 @@ export function bootstrapArScene(rootEl) {
     camera: rootEl.querySelector("#ar-debug-camera"),
     webxr: rootEl.querySelector("#ar-debug-webxr"),
     immersal: rootEl.querySelector("#ar-debug-immersal"),
+    mode: rootEl.querySelector("#ar-debug-mode"),
+    marker: rootEl.querySelector("#ar-debug-marker"),
     counts: rootEl.querySelector("#ar-debug-counts"),
     latency: rootEl.querySelector("#ar-debug-latency"),
     error: rootEl.querySelector("#ar-debug-error"),
@@ -209,6 +248,7 @@ export function bootstrapArScene(rootEl) {
   let sdkFrameId = null;
   let sdkResizeHandler = null;
   let sdkMapHandles = {};
+  let sdkRemainingMapsPromise = null;
   let localizationMode = "rest";
   let localizing = false;
   let captureCanvas = null;
@@ -239,6 +279,19 @@ export function bootstrapArScene(rootEl) {
   let restRenderFrameId = null;
   let agentLastRendererPoseLogAt = 0;
   let lastLocalizationGyro = { x: 0, y: 0, z: 0, w: 1 };
+  let sdkModulePromise = null;
+  let assetWarmupTimer = null;
+  let markerRecognition = null;
+  let markerStartPromise = null;
+  let markerLostTimer = null;
+  let sharedImmersalCamera = null;
+  let recognitionMode = "scanning";
+  let disposed = false;
+  let rendererAssetReady = false;
+  let sdkAssetReady = false;
+  const prefetchedMapIds = new Set();
+  const mapDownloadPromises = new Map();
+  const mapDownloadControllers = new Map();
   const poseStabilizer = createVpsPoseStabilizer();
 
   const debugState = {
@@ -256,14 +309,158 @@ export function bootstrapArScene(rootEl) {
     lastError: "none",
     lastPose: null,
     lastImageBytes: 0,
+    recognitionMode,
+    marker: "not started",
     video: null,
     logs: [],
   };
+
+  function getPrioritizedMapIds() {
+    let lastMapId = null;
+    try {
+      lastMapId = Number(window.localStorage.getItem(LAST_LOCALIZED_MAP_KEY));
+    } catch {
+      lastMapId = null;
+    }
+    if (!Number.isFinite(lastMapId) || !activeMapIds.includes(lastMapId)) {
+      return [...activeMapIds];
+    }
+    return [lastMapId, ...activeMapIds.filter((mapId) => mapId !== lastMapId)];
+  }
+
+  function updatePreloadUi(message = "") {
+    if (!preload) return;
+    const mapRatio = activeMapIds.length > 0
+      ? prefetchedMapIds.size / activeMapIds.length
+      : 1;
+    const ready =
+      rendererAssetReady &&
+      sdkAssetReady &&
+      mapRatio >= 1;
+    const progress = ready
+      ? 100
+      : Math.min(
+          96,
+          5 +
+            (rendererAssetReady ? 30 : 0) +
+            (sdkAssetReady ? 20 : 0) +
+            Math.round(mapRatio * 45),
+        );
+    const defaultMessage = ready
+      ? "AR 定位资源已提前准备好"
+      : prefetchedMapIds.size > 0
+        ? `正在准备定位区域 ${prefetchedMapIds.size}/${activeMapIds.length}`
+        : sdkAssetReady
+          ? "正在提前下载定位地图…"
+          : rendererAssetReady
+            ? "竹简已就绪，正在准备定位引擎…"
+            : "正在准备 AR 资源…";
+
+    preload.dataset.state = ready ? "ready" : "loading";
+    preloadStatus.textContent = message || defaultMessage;
+    preloadPercent.textContent = `${progress}%`;
+    preloadProgress.setAttribute("aria-valuenow", String(progress));
+    preloadProgressBar.style.width = `${progress}%`;
+
+    if (!startBtn.disabled && !rootEl.classList.contains("is-ar-active")) {
+      startBtn.textContent = ready ? "立即开启 AR" : "开启 AR 探索";
+    }
+  }
+
+  function getImmersalSdkModule() {
+    if (!sdkModulePromise) {
+      const sdkUrl = new URL("/vendor/immersal/immersal.js", window.location.origin).href;
+      sdkModulePromise = import(/* @vite-ignore */ sdkUrl)
+        .then((module) => {
+          sdkAssetReady = true;
+          updatePreloadUi();
+          return module;
+        })
+        .catch((err) => {
+          sdkModulePromise = null;
+          updatePreloadUi("定位引擎将在开启后重试");
+          throw err;
+        });
+    }
+    return sdkModulePromise;
+  }
+
+  function prefetchMapData(mapId) {
+    if (mapDownloadPromises.has(mapId)) {
+      return mapDownloadPromises.get(mapId);
+    }
+
+    const controller = new AbortController();
+    mapDownloadControllers.set(mapId, controller);
+    const url =
+      `${IMMERSAL_API_BASE_URL}/map?token=${encodeURIComponent(CLIENT_IMMERSAL_TOKEN)}` +
+      `&id=${encodeURIComponent(mapId)}`;
+    const promise = fetch(url, {
+      signal: controller.signal,
+      cache: "default",
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`地图 ${mapId} 下载失败（${response.status}）`);
+        return response.arrayBuffer();
+      })
+      .then((data) => {
+        prefetchedMapIds.add(mapId);
+        mapDownloadControllers.delete(mapId);
+        updatePreloadUi();
+        return data;
+      })
+      .catch((err) => {
+        mapDownloadControllers.delete(mapId);
+        mapDownloadPromises.delete(mapId);
+        if (err?.name !== "AbortError" && !disposed) {
+          updatePreloadUi("网络较慢，定位地图将在开启后继续准备");
+        }
+        throw err;
+      });
+    mapDownloadPromises.set(mapId, promise);
+    return promise;
+  }
+
+  async function getPrefetchedMapData(mapId) {
+    const pending = mapDownloadPromises.get(mapId);
+    if (!pending) return null;
+    try {
+      return await pending;
+    } catch {
+      return null;
+    }
+  }
+
+  function warmImmersalAssets() {
+    if (!CLIENT_IMMERSAL_TOKEN || activeMapIds.length === 0 || disposed) return;
+    void getImmersalSdkModule().catch(() => {});
+
+    const queue = getPrioritizedMapIds();
+    let nextIndex = 0;
+    const worker = async () => {
+      while (!disposed && nextIndex < queue.length) {
+        const mapId = queue[nextIndex];
+        nextIndex += 1;
+        try {
+          await prefetchMapData(mapId);
+        } catch {
+          // Startup can retry the same map through the SDK's normal fetch path.
+        }
+      }
+    };
+    const workerCount = Math.min(MAP_PREFETCH_CONCURRENCY, queue.length);
+    for (let index = 0; index < workerCount; index += 1) void worker();
+  }
 
   function applyLocalizedMapId(mapId) {
     const id = Number(mapId);
     if (!Number.isFinite(id) || !activeMapIds.includes(id)) return;
     localizedMapId = id;
+    try {
+      window.localStorage.setItem(LAST_LOCALIZED_MAP_KEY, String(id));
+    } catch {
+      // Remembering the last successful area is an optional optimization.
+    }
     arRenderer?.setActiveMapId(id);
     debugState.localizedMapId = id;
     debugState.mapId = activeMapIds.length > 1 ? `${activeMapLabel} → ${id}` : String(id);
@@ -333,21 +530,6 @@ export function bootstrapArScene(rootEl) {
     return corrected;
   }
 
-  async function waitForDeviceGyro(timeoutMs = 3000) {
-    if (hasGyro) return;
-    await new Promise((resolve) => {
-      const deadline = performance.now() + timeoutMs;
-      const tick = () => {
-        if (hasGyro || performance.now() >= deadline) {
-          resolve();
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      tick();
-    });
-  }
-
   function syncSdkSolverType() {
     if (!sdkSession) return;
     sdkSession.solverType = hasGyro ? 1 : 0;
@@ -407,11 +589,143 @@ export function bootstrapArScene(rootEl) {
     return null;
   }
 
-  function setGuide(state, title, detail) {
+  function setGuide(state, title, detail, progress = null) {
     if (!guide) return;
     guide.dataset.state = state;
     if (title) guideTitle.textContent = title;
     if (detail) guideDetail.textContent = detail;
+    const hasProgress = Number.isFinite(progress);
+    guideProgress?.classList.toggle("is-visible", hasProgress);
+    if (guideProgressBar) {
+      guideProgressBar.style.width = hasProgress
+        ? `${Math.min(100, Math.max(0, progress))}%`
+        : "0%";
+    }
+  }
+
+  function setSdkRecognitionPaused(paused) {
+    if (!sdkSession) return;
+    const shouldRun = !paused;
+    if (sdkSession.continuousLocalization !== shouldRun) {
+      sdkSession.continuousLocalization = shouldRun;
+    }
+  }
+
+  function setRecognitionMode(nextMode, reason = "") {
+    if (!["scanning", "map", "marker"].includes(nextMode)) return false;
+    if (recognitionMode === nextMode) return true;
+    if (nextMode === "map" && recognitionMode === "marker") return false;
+
+    window.clearTimeout(markerLostTimer);
+    markerLostTimer = null;
+    recognitionMode = nextMode;
+    debugState.recognitionMode = nextMode;
+    rootEl.classList.toggle("is-marker-active", nextMode === "marker");
+    rootEl.classList.toggle("is-map-active", nextMode === "map");
+
+    if (nextMode === "marker") {
+      contentRevealed = false;
+      stableLocalizationCount = 0;
+      closeStory();
+      arRenderer?.setContentVisible(false);
+      arRenderer?.setEnabled?.(false);
+      setSdkRecognitionPaused(true);
+      setGuide(
+        "recognized",
+        "已识别纹理入口",
+        "保持纹理边框在画面中，移动手机查看门后的历史场景",
+      );
+    } else {
+      arRenderer?.setEnabled?.(true);
+      if (nextMode === "map") {
+        markerRecognition?.pause();
+      } else {
+        markerRecognition?.resume();
+        setGuide(
+          "scanning",
+          "正在识别现场",
+          "可对准建筑地图区域，也可将完整纹理边框放入画面",
+        );
+      }
+      setSdkRecognitionPaused(false);
+    }
+
+    setDebug(
+      {
+        recognitionMode: nextMode,
+        status:
+          nextMode === "marker"
+            ? "tracking (marker)"
+            : nextMode === "map"
+              ? "tracking (map)"
+              : "scanning (map + marker)",
+      },
+      `AR 模式切换为 ${nextMode}`,
+      reason || null,
+    );
+    return true;
+  }
+
+  function handleMarkerFound() {
+    if (disposed || recognitionMode === "map") return;
+    window.clearTimeout(markerLostTimer);
+    markerLostTimer = null;
+    setRecognitionMode("marker", "MindAR target found");
+    try {
+      navigator.vibrate?.(35);
+    } catch {
+      // Vibration is optional.
+    }
+  }
+
+  function handleMarkerLost() {
+    if (disposed || recognitionMode !== "marker") return;
+    window.clearTimeout(markerLostTimer);
+    markerLostTimer = window.setTimeout(() => {
+      markerLostTimer = null;
+      if (disposed || markerRecognition?.tracking) return;
+      setRecognitionMode("scanning", "MindAR target lost");
+    }, MARKER_LOST_GRACE_MS);
+    setGuide(
+      "lost",
+      "纹理暂时离开画面",
+      "重新对准纹理边框；若已离开该处，将继续搜索地图区域",
+    );
+  }
+
+  function startMarkerRecognition() {
+    if (markerStartPromise) return markerStartPromise;
+    markerStartPromise = import("./sharedMarkerRecognition.js")
+      .then(({ createSharedMarkerRecognition }) =>
+        createSharedMarkerRecognition({
+          rootEl,
+          video,
+          onFound: handleMarkerFound,
+          onLost: handleMarkerLost,
+          onStatus(status, error) {
+            debugState.marker = status;
+            if (error) {
+              logDebug("MindAR 纹理模式异常", error?.message || String(error));
+            } else {
+              updateDebugPanel();
+            }
+          },
+        }),
+      )
+      .then((session) => {
+        markerRecognition = session;
+        debugState.marker = "scanning";
+        if (recognitionMode === "map") session.pause();
+        updateDebugPanel();
+        return session;
+      })
+      .catch((error) => {
+        markerStartPromise = null;
+        debugState.marker = "unavailable";
+        logDebug("MindAR 纹理识别未启动，地图模式仍可使用", error?.message || String(error));
+        return null;
+      });
+    return markerStartPromise;
   }
 
   function openStory() {
@@ -427,6 +741,10 @@ export function bootstrapArScene(rootEl) {
   }
 
   function revealContent(mapId) {
+    if (recognitionMode === "marker") return;
+    if (!setRecognitionMode("map", `Immersal map ${mapId ?? "unknown"} confirmed`)) {
+      return;
+    }
     if (mapId != null) applyLocalizedMapId(mapId);
     if (!contentRevealed) {
       contentRevealed = true;
@@ -466,6 +784,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   function markLocalizationMiss() {
+    if (recognitionMode === "marker") return;
     stableLocalizationCount = 0;
     restCandidateMapId = null;
     restCandidateMapConfirmations = 0;
@@ -478,6 +797,9 @@ export function bootstrapArScene(rootEl) {
       arRenderer?.setContentVisible(false);
     }
     setGuide("lost", "暂时失去场景", "重新对准建筑，并缓慢左右移动");
+    if (recognitionMode === "map") {
+      setRecognitionMode("scanning", "Immersal map tracking lost");
+    }
   }
 
   function getRestModeRenderPose() {
@@ -534,13 +856,11 @@ export function bootstrapArScene(rootEl) {
       arRenderer.start();
       try {
         await arRenderer.ready;
-        if (preloadStatus) {
-          preloadStatus.textContent = "竹简已准备好";
-          preloadStatus.dataset.state = "ready";
-        }
+        rendererAssetReady = true;
+        updatePreloadUi();
         logDebug(`AR 模型已加载（${mapProfiles.length} 张地图，${totalAnchorCount} 个锚点）`);
       } catch (err) {
-        if (preloadStatus) preloadStatus.textContent = "竹简将在识别后继续加载";
+        updatePreloadUi("竹简将在识别后继续加载");
         logDebug("AR 模型加载失败", err?.message || String(err));
       }
     })();
@@ -574,6 +894,8 @@ export function bootstrapArScene(rootEl) {
     debugEls.camera.textContent = debugState.camera;
     debugEls.webxr.textContent = debugState.webxr;
     debugEls.immersal.textContent = debugState.immersal;
+    if (debugEls.mode) debugEls.mode.textContent = debugState.recognitionMode;
+    if (debugEls.marker) debugEls.marker.textContent = debugState.marker;
     debugEls.counts.textContent = `${debugState.success} / ${debugState.failure}`;
     debugEls.latency.textContent = debugState.latency;
     debugEls.error.textContent = debugState.lastError;
@@ -768,6 +1090,13 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function requestCameraPermission() {
+    if (
+      mediaStream?.active &&
+      video.srcObject === mediaStream &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    ) {
+      return mediaStream;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("当前浏览器不支持摄像头访问，请使用 Chrome 或 Safari。");
     }
@@ -787,6 +1116,8 @@ export function bootstrapArScene(rootEl) {
     video.setAttribute("playsinline", "true");
     video.setAttribute("webkit-playsinline", "true");
     await video.play();
+    rootEl.classList.add("is-unified-camera");
+    sharedImmersalCamera = createSharedImmersalCamera(video, mediaStream);
 
     const track = mediaStream.getVideoTracks()[0];
     const settings = track?.getSettings?.() ?? {};
@@ -802,6 +1133,7 @@ export function bootstrapArScene(rootEl) {
       "摄像头已打开",
       debugState.video,
     );
+    return mediaStream;
   }
 
   async function requestOrientationPermission() {
@@ -1009,7 +1341,7 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function localizeOnce(reason = "auto") {
-    if (localizing) return;
+    if (localizing || recognitionMode === "marker") return;
 
     localizing = true;
     const startedAt = performance.now();
@@ -1017,6 +1349,7 @@ export function bootstrapArScene(rootEl) {
 
     try {
       const localization = await requestImmersalLocalization(reason);
+      if (recognitionMode === "marker") return;
       const { result, data, elapsed, payload } = localization;
 
       if (result?.success) {
@@ -1172,7 +1505,12 @@ export function bootstrapArScene(rootEl) {
   }
 
   async function runSdkServerAssist(reason = "assist") {
-    if (!sdkSession || sdkServerAssistPending || typeof sdkSession.localizeServerAsync !== "function") return;
+    if (
+      !sdkSession ||
+      recognitionMode === "marker" ||
+      sdkServerAssistPending ||
+      typeof sdkSession.localizeServerAsync !== "function"
+    ) return;
     if (sdkSession.localization.localizing) return;
 
     sdkServerAssistPending = true;
@@ -1181,6 +1519,7 @@ export function bootstrapArScene(rootEl) {
 
     try {
       await sdkSession.localizeServerAsync();
+      if (recognitionMode === "marker") return;
       const tracked = getTrackedPoseSnapshot(performance.now());
       markLocalizationSuccess(tracked?.mapId ?? localizedMapId);
       if (tracked) {
@@ -1207,7 +1546,11 @@ export function bootstrapArScene(rootEl) {
     if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
     sdkDeviceWatchdogTimer = window.setTimeout(() => {
       sdkDeviceWatchdogTimer = null;
-      if (!sdkSession || sdkSession.localization.counter > 0) return;
+      if (
+        !sdkSession ||
+        recognitionMode === "marker" ||
+        sdkSession.localization.counter > 0
+      ) return;
       sdkServerAssistEnabled = true;
       logDebug(
         `设备端 ${SDK_DEVICE_WATCHDOG_MS / 1000}s 内未成功，启用 SDK server 辅助识别`,
@@ -1220,6 +1563,10 @@ export function bootstrapArScene(rootEl) {
   function startSdkFrameLoop() {
     const tick = (now) => {
       if (!sdkSession) return;
+      if (recognitionMode === "marker") {
+        sdkFrameId = requestAnimationFrame(tick);
+        return;
+      }
 
       syncSdkSolverType();
 
@@ -1262,6 +1609,51 @@ export function bootstrapArScene(rootEl) {
     restRenderFrameId = requestAnimationFrame(tick);
   }
 
+  async function loadSdkMap(session, mapId) {
+    const prefetchedData = await getPrefetchedMapData(mapId);
+    try {
+      return await session.loadMap(mapId, prefetchedData);
+    } finally {
+      // The SDK has copied the bytes into WASM memory, so release our warmup
+      // buffer instead of holding every map twice on memory-constrained phones.
+      mapDownloadPromises.delete(mapId);
+    }
+  }
+
+  async function loadRemainingSdkMaps(session, mapIds) {
+    const total = activeMapIds.length;
+    for (const mapId of mapIds) {
+      if (disposed || sdkSession !== session) return;
+      const readyCount = Object.keys(sdkMapHandles).length;
+      if (!contentRevealed && stableLocalizationCount === 0) {
+        setGuide(
+          "scanning",
+          "正在寻找阊门场景",
+          `定位已可用，正在补充附近区域 ${readyCount}/${total}`,
+          (readyCount / total) * 100,
+        );
+      }
+      try {
+        const handle = await loadSdkMap(session, mapId);
+        if (disposed || sdkSession !== session) {
+          void session.freeMap(handle).catch(() => {});
+          return;
+        }
+        sdkMapHandles[mapId] = handle;
+        logDebug(`定位区域 ${mapId} 已在后台就绪`, {
+          ready: Object.keys(sdkMapHandles).length,
+          total,
+        });
+      } catch (err) {
+        logDebug(`定位区域 ${mapId} 后台加载失败`, err?.message || String(err));
+      }
+    }
+
+    if (!disposed && sdkSession === session && !contentRevealed && stableLocalizationCount === 0) {
+      setGuide("scanning", "正在寻找阊门场景", "请对准建筑，缓慢左右移动手机");
+    }
+  }
+
   async function startImmersalSdkLocalization() {
     poseStabilizer.reset(activeMapIds.length === 1 ? activeMapIds[0] : null);
     if (!CLIENT_IMMERSAL_TOKEN) {
@@ -1269,19 +1661,23 @@ export function bootstrapArScene(rootEl) {
     }
 
     setDebug({ status: "sdk initializing", immersal: "loading sdk" }, "开始初始化 Immersal SDK");
+    setGuide("loading", "正在启动空间定位", "载入定位引擎…", 12);
 
     let session = null;
     try {
-      // Keep the SDK in public/vendor so its relative WASM imports continue to
-      // resolve, but turn it into a runtime URL so Vite does not try to
-      // transform a public asset during development.
-      const sdkUrl = new URL("/vendor/immersal/immersal.js", window.location.origin).href;
-      const { Immersal } = await import(/* @vite-ignore */ sdkUrl);
-      await waitForDeviceGyro();
+      // The module begins warming while the intro is visible. Reusing that
+      // promise avoids downloading and compiling the SDK after the user taps.
+      const { Immersal } = await getImmersalSdkModule();
+      setGuide("loading", "正在启动空间定位", "等待摄像头权限…", 24);
       const cameraWrap = rootEl.querySelector("#ar-camera-wrap") ?? rootEl;
+      if (!sharedImmersalCamera) {
+        throw new Error("Shared camera is not ready");
+      }
       session = await Immersal.Initialize(cameraWrap, {
         developerToken: CLIENT_IMMERSAL_TOKEN,
         mapIds: activeMapIds,
+        camera: sharedImmersalCamera,
+        ownsCamera: false,
         continuousLocalization: true,
         continuousInterval: SDK_DEVICE_LOCALIZE_INTERVAL_MS,
         solverType: hasGyro ? 1 : 0,
@@ -1290,9 +1686,11 @@ export function bootstrapArScene(rootEl) {
       });
 
       sdkSession = session;
+      if (recognitionMode === "marker") {
+        session.continuousLocalization = false;
+      }
       syncSdkSolverType();
       localizationMode = "sdk";
-      rootEl.classList.add("is-sdk-camera");
       arRenderer?.bringCanvasToFront();
       sdkResizeHandler = () => {
         lockedRendererVFov = null;
@@ -1301,16 +1699,35 @@ export function bootstrapArScene(rootEl) {
       session.addEventListener?.("resize", sdkResizeHandler);
       arRenderer?.resize();
 
-      setDebug({ status: "sdk loading map", immersal: "loading map" }, "正在下载并加载地图到设备…");
+      setDebug({ status: "sdk loading map", immersal: "loading map" }, "正在装载首个定位区域…");
       sdkMapHandles = {};
-      for (const mapId of activeMapIds) {
-        sdkMapHandles[mapId] = await session.loadMap(mapId);
+      const prioritizedMapIds = getPrioritizedMapIds();
+      const loadErrors = [];
+      let firstLoadedMapId = null;
+      for (let index = 0; index < prioritizedMapIds.length; index += 1) {
+        const mapId = prioritizedMapIds[index];
+        setGuide(
+          "loading",
+          "正在准备现场地图",
+          `装载定位区域 ${index + 1}/${prioritizedMapIds.length}`,
+          32 + ((index + 1) / prioritizedMapIds.length) * 48,
+        );
+        try {
+          sdkMapHandles[mapId] = await loadSdkMap(session, mapId);
+          firstLoadedMapId = mapId;
+          break;
+        } catch (err) {
+          loadErrors.push(`${mapId}: ${err?.message || String(err)}`);
+        }
+      }
+      if (firstLoadedMapId == null) {
+        throw new Error(`定位地图加载失败：${loadErrors.join("；")}`);
       }
 
       setDebug(
         {
           status: "sdk ready",
-          camera: `${session.camera.width}x${session.camera.height} (SDK camera)`,
+          camera: `${session.camera.width}x${session.camera.height} (shared camera)`,
           immersal: "device tracking",
           lastError: "none",
         },
@@ -1320,15 +1737,30 @@ export function bootstrapArScene(rootEl) {
           height: session.camera.height,
           mapIds: activeMapIds,
           mapHandles: sdkMapHandles,
+          firstLoadedMapId,
         },
       );
 
       startSdkFrameLoop();
       startSdkDeviceWatchdog();
+      setGuide(
+        "scanning",
+        "正在寻找阊门场景",
+        activeMapIds.length > 1
+          ? `定位已可用，正在补充附近区域 1/${activeMapIds.length}`
+          : "请对准建筑，缓慢左右移动手机",
+        activeMapIds.length > 1 ? 100 / activeMapIds.length : null,
+      );
+      const remainingMapIds = prioritizedMapIds.filter(
+        (mapId) => sdkMapHandles[mapId] == null,
+      );
+      sdkRemainingMapsPromise = loadRemainingSdkMaps(session, remainingMapIds);
+      void sdkRemainingMapsPromise;
     } catch (err) {
       session?.dispose?.();
       sdkSession = null;
       sdkMapHandles = {};
+      sdkRemainingMapsPromise = null;
       localizationMode = "rest";
       rootEl.classList.remove("is-sdk-camera");
       throw err;
@@ -1344,29 +1776,35 @@ export function bootstrapArScene(rootEl) {
     setDebug({ immersal: "REST loop running" }, "Immersal REST 定时识别循环已启动");
   }
 
-  async function checkImmersalConfig() {
+  function checkImmersalConfig() {
     if (!CLIENT_IMMERSAL_TOKEN) {
       throw new Error("未配置 VITE_IMMERSAL_TOKEN，请在环境变量中设置 Immersal developer token。");
-    }
-
-    let proxyFallbackReady = false;
-    try {
-      const response = await fetch("/api/immersal");
-      const data = await response.json().catch(() => null);
-      proxyFallbackReady = Boolean(response.ok && data?.hasToken);
-    } catch {
-      proxyFallbackReady = false;
     }
 
     setDebug(
       {
         immersal: `ready (maps ${activeMapLabel}, SDK device + SDK server)`,
       },
-      proxyFallbackReady
-        ? "Immersal 已配置：SDK 设备端优先，失败时用 SDK server 辅助；代理仅作 SDK 初始化失败兜底"
-        : "Immersal 已配置：SDK 设备端优先，失败时用 SDK server 辅助",
-      { mapIds: activeMapIds, hasToken: true, proxyFallbackReady },
+      "Immersal 已配置：SDK 设备端优先，失败时用 SDK server 辅助",
+      { mapIds: activeMapIds, hasToken: true },
     );
+
+    // The proxy is only a fallback. A serverless cold start here used to block
+    // the camera and maps even when the on-device SDK was healthy.
+    void fetch("/api/immersal")
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        const proxyFallbackReady = Boolean(response.ok && data?.hasToken);
+        logDebug(
+          proxyFallbackReady
+            ? "REST 代理兜底可用"
+            : "REST 代理兜底未就绪（不影响设备端定位）",
+          { proxyFallbackReady },
+        );
+      })
+      .catch(() => {
+        logDebug("REST 代理检查失败（不影响设备端定位）");
+      });
   }
 
   async function startExperience() {
@@ -1388,24 +1826,35 @@ export function bootstrapArScene(rootEl) {
       // start-button click as the active gesture when it shows the prompt.
       const orientationPermissionPromise = requestOrientationPermission();
       await orientationPermissionPromise;
-      await checkImmersalConfig();
-      await checkWebXrSupport();
+      await requestCameraPermission();
+      checkImmersalConfig();
+      void checkWebXrSupport();
       updateZoomUi();
 
       overlay.classList.add("is-hidden");
       guide?.classList.remove("is-hidden");
-      setGuide("scanning", "正在寻找阊门场景", "请对准建筑，缓慢左右移动手机");
+      setGuide("loading", "正在开启现场相机", "定位资源会在后台继续准备", 8);
       if (debugMode) {
         controls?.classList.remove("is-hidden");
         hint?.classList.remove("is-hidden");
         debugPanel?.classList.remove("is-hidden");
       }
       rootEl.classList.add("is-ar-active");
+      void startMarkerRecognition();
 
-      await initArRenderer();
+      // The model is not required to open the camera or begin localization.
+      // Keeping it in parallel removes a hard wait for first-time visitors.
+      void initArRenderer();
 
       try {
         await startImmersalSdkLocalization();
+        if (recognitionMode === "scanning") {
+          setGuide(
+            "scanning",
+            "正在识别现场",
+            "可对准建筑地图区域，也可将完整纹理边框放入画面",
+          );
+        }
         setDebug({ status: "running (sdk)" }, "Immersal SDK 连续定位已启动");
       } catch (sdkErr) {
         console.warn("[Immersal] SDK fallback to REST", sdkErr);
@@ -1414,8 +1863,19 @@ export function bootstrapArScene(rootEl) {
           "SDK 初始化失败，回退 REST 定时定位",
           sdkErr?.message || String(sdkErr),
         );
+        setGuide("loading", "正在切换兼容模式", "重新连接现场相机…", 58);
         await requestCameraPermission();
         startLocalizationLoop();
+        queueMicrotask(() => {
+          if (recognitionMode === "scanning") {
+            setGuide(
+              "scanning",
+              "正在识别现场",
+              "可对准建筑地图区域，也可将完整纹理边框放入画面",
+            );
+          }
+        });
+        setGuide("scanning", "正在寻找阊门场景", "请对准建筑，缓慢左右移动手机");
         setDebug({ status: "running (rest)" }, "Immersal REST 测试已启动");
       }
     } catch (err) {
@@ -1458,6 +1918,7 @@ export function bootstrapArScene(rootEl) {
   });
 
   localizeNowBtn?.addEventListener("click", async () => {
+    if (recognitionMode === "marker") return;
     if (sdkSession) {
       setDebug({ status: "sdk localizing (manual)", immersal: "device requesting" });
       syncSdkSolverType();
@@ -1522,10 +1983,18 @@ export function bootstrapArScene(rootEl) {
   storyClose?.addEventListener("click", closeStory);
   startBtn.addEventListener("click", startExperience);
   setDebug({ mapId: activeMapLabel, activeMapIds });
-  initArRenderer();
+  updatePreloadUi();
+  void initArRenderer();
+  assetWarmupTimer = window.setTimeout(warmImmersalAssets, 80);
 
   return () => {
+    disposed = true;
+    if (assetWarmupTimer) window.clearTimeout(assetWarmupTimer);
+    for (const controller of mapDownloadControllers.values()) controller.abort();
+    mapDownloadControllers.clear();
+    mapDownloadPromises.clear();
     if (localizeTimer) window.clearInterval(localizeTimer);
+    if (markerLostTimer) window.clearTimeout(markerLostTimer);
     if (sdkDeviceWatchdogTimer) window.clearTimeout(sdkDeviceWatchdogTimer);
     if (sdkFrameId) cancelAnimationFrame(sdkFrameId);
     if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
@@ -1535,6 +2004,9 @@ export function bootstrapArScene(rootEl) {
     if (mapSelect && mapSelectChangeHandler) {
       mapSelect.removeEventListener("change", mapSelectChangeHandler);
     }
+    markerRecognition?.dispose();
+    markerRecognition = null;
+    markerStartPromise = null;
     arRenderer?.dispose();
     for (const handle of Object.values(sdkMapHandles)) {
       if (handle != null) {
@@ -1544,7 +2016,16 @@ export function bootstrapArScene(rootEl) {
       }
     }
     sdkSession?.dispose?.();
-    rootEl.classList.remove("is-sdk-camera");
+    sdkSession = null;
+    sharedImmersalCamera = null;
+    sdkRemainingMapsPromise = null;
+    rootEl.classList.remove(
+      "is-sdk-camera",
+      "is-unified-camera",
+      "is-marker-active",
+      "is-map-active",
+      "is-marker-tracking",
+    );
     if (orientationHandler) {
       window.removeEventListener("deviceorientation", orientationHandler, true);
     }
