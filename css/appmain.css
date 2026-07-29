@@ -1751,6 +1751,10 @@ body {
   height: 400vh;
 }
 
+body.experience-variant--text .cm-mask-transition__scroll {
+  height: 650vh;
+}
+
 .cm-mask-transition__sticky {
   position: sticky;
   top: 0;
@@ -2006,6 +2010,70 @@ body {
   font-family: "Helvetica Neue", Arial, sans-serif;
 }
 
+.cm-filmstrip__item--text-detail {
+  background:
+    linear-gradient(135deg, rgba(227, 18, 33, 0.12), transparent 46%),
+    #0a0a0a;
+}
+
+.cm-filmstrip__text-panel {
+  position: relative;
+  height: clamp(190px, calc(240px * var(--pc-scale)), 320px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  padding: clamp(1.1rem, calc(1.6rem * var(--pc-scale)), 2rem);
+  overflow: hidden;
+  border: 1px solid rgba(227, 18, 33, 0.6);
+  border-radius: 4px;
+  color: #fff;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    #151515;
+  background-size: 32px 32px;
+}
+
+.cm-filmstrip__text-index {
+  position: absolute;
+  top: -0.2em;
+  right: -0.03em;
+  color: rgba(227, 18, 33, 0.17);
+  font-size: clamp(8rem, calc(12rem * var(--pc-scale)), 15rem);
+  font-weight: 950;
+  line-height: 0.9;
+  letter-spacing: -0.1em;
+}
+
+.cm-filmstrip__text-kicker {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0.55rem;
+  color: #e31221;
+  font-size: clamp(0.7rem, calc(0.78rem * var(--pc-scale)), 0.95rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.cm-filmstrip__text-panel strong {
+  position: relative;
+  z-index: 1;
+  font-size: clamp(2rem, calc(3rem * var(--pc-scale)), 4rem);
+  font-weight: 950;
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.cm-filmstrip__item--text-detail .cm-filmstrip__info h3 {
+  color: #e31221;
+}
+
+.cm-filmstrip__item--text-detail .cm-filmstrip__info p {
+  color: #c2c2c2;
+  line-height: 1.7;
+}
+
 .cm-mask-top {
   position: absolute;
   inset: 0;
@@ -2208,6 +2276,30 @@ body {
     0 1px 2px rgba(255, 255, 255, 0.85);
 }
 
+.river-island__supplement {
+  margin-top: 0.8rem;
+  padding-top: 0.72rem;
+  border-top: 1px solid rgba(12, 32, 52, 0.28);
+  color: rgba(30, 42, 58, 0.92);
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.9),
+    0 0 14px rgba(255, 255, 255, 0.65);
+}
+
+.river-island__supplement strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: "Songti SC", "STSong", "SimSun", serif;
+  font-size: 0.88rem;
+  letter-spacing: 0.08em;
+}
+
+.river-island__supplement p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
 .river-island__frame {
   position: relative;
   box-sizing: border-box;
@@ -2379,6 +2471,10 @@ body {
     height: 480vh;
   }
 
+  body.experience-variant--text .cm-mask-transition__scroll {
+    height: 780vh;
+  }
+
   .cm-mask-bottom {
     background-size: 18px 18px;
   }
@@ -2391,6 +2487,10 @@ body {
 
   .cm-filmstrip__item img {
     height: 220px;
+  }
+
+  .cm-filmstrip__text-panel {
+    height: 190px;
   }
 
   .cm-filmstrip__info h3 {

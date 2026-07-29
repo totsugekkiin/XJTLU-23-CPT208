@@ -47,16 +47,6 @@ const routeData = {
   },
 };
 
-function formatAmapErr(err) {
-  if (!err) return "未知错误";
-  if (typeof err === "string") return err;
-  const msg = err?.message ? String(err.message) : null;
-  const info = err?.info ? String(err.info) : null;
-  const infocode = err?.infocode ? String(err.infocode) : null;
-  const parts = [msg, info, infocode].filter(Boolean);
-  return parts.length ? parts.join(" / ") : "未知错误";
-}
-
 function appendCoordRing(ring, lng, lat) {
   const last = ring[ring.length - 1];
   if (last && last[0] === lng && last[1] === lat) return;
@@ -90,7 +80,12 @@ function flattenWalkStepsToRing(steps) {
  * 路线推荐区 - 布艺拼贴手机版 (Felt Patchwork Style)
  * 步行路径由高德 `AMap.Walking` 分段规划（途经点顺序固定）；Walking 不支持单次查询多途经点，故按段合并绘制。
  */
-export function RouteSection({ showBackButton = false, standalone = false, heightVh = 100 } = {}) {
+export function RouteSection({
+  showBackButton = false,
+  standalone = false,
+  heightVh = 100,
+  returnHref = "appMain.html",
+} = {}) {
   const sectionClass = standalone ? "felt-section felt-section--standalone" : "felt-section";
 
   const mapContainerRef = useRef(null);
@@ -147,7 +142,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
     if (!AMapNs || !walking || !map || !cfg) {
       console.warn("未找到路线配置或地图/步行服务未就绪", routeId);
-      setRouteTip("地图未就绪：请等待加载完成后再试（或刷新页面）");
+      setRouteTip("地图仍在加载，请稍后再试。");
       return;
     }
 
@@ -158,7 +153,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
     const pts = cfg.points || [];
     if (pts.length < 2) {
-      setRouteTip(`路线「${currentRouteName}」坐标不足，无法规划`);
+      setRouteTip(`路线「${currentRouteName}」暂时不可用`);
       return;
     }
 
@@ -214,7 +209,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         }
 
         if (mergedRing.length < 2) {
-          setRouteTip(`规划失败：${currentRouteName}（未得到有效步行路径）`);
+          setRouteTip(`暂时无法规划「${currentRouteName}」，请稍后再试。`);
           return;
         }
 
@@ -276,7 +271,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         );
       } catch (err) {
         console.error("[Walking] search failed:", err);
-        setRouteTip(`规划失败：${currentRouteName} · ${formatAmapErr(err)}`);
+        setRouteTip(`暂时无法规划「${currentRouteName}」，请稍后再试。`);
       }
     })();
   };
@@ -300,7 +295,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         });
       } catch (e) {
         console.error("[amap] loader failed:", e);
-        setRouteTip(`地图加载失败：${formatAmapErr(e)}（请检查网络或密钥配置）`);
+        setRouteTip("地图服务暂时不可用，请稍后重试。");
         return;
       }
 
@@ -318,7 +313,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         });
       } catch (e) {
         console.error("[amap] map init failed:", e);
-        setRouteTip(`地图初始化失败：${formatAmapErr(e)}（请刷新或更换浏览器）`);
+        setRouteTip("地图服务暂时不可用，请稍后重试。");
         return;
       }
 
@@ -338,7 +333,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         walking = new AMapNs.Walking({});
       } catch (e) {
         console.error("[amap] Walking init failed:", e);
-        setRouteTip(`步行导航插件初始化失败：${formatAmapErr(e)}`);
+        setRouteTip("步行导航暂时不可用，请稍后重试。");
         try {
           map.destroy();
         } catch {
@@ -797,7 +792,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
       `}</style>
 
       {showBackButton ? (
-        <button className="felt-back-btn patch stitch stitch-dark" type="button" onClick={() => (window.location.href = "appMain.html")}>
+        <button className="felt-back-btn patch stitch stitch-dark" type="button" onClick={() => (window.location.href = returnHref)}>
           ◄ 返回
         </button>
       ) : null}
@@ -825,16 +820,16 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
 
         <div className="felt-map-info">
           <span>📍 苏州 · 阊门区域</span>
-          <span style={{ color: "var(--felt-dark)" }}>{mapReady ? "地图已就绪" : "加载中..."}</span>
+          <span style={{ color: "var(--felt-dark)" }}>{mapReady ? "地图已就绪" : "正在载入…"}</span>
         </div>
 
         <div className="felt-map-canvas stitch stitch-dark">
-          <header className="felt-header felt-header--on-map" aria-label="Route Planner">
+          <header className="felt-header felt-header--on-map" aria-label="阊门漫步路线">
             <div className="felt-title-box">
               <h1 className="felt-main-title">
-                Route
+                Changmen
                 <br />
-                <span>Planner</span>
+                <span>Walks</span>
               </h1>
             </div>
           </header>
@@ -842,12 +837,12 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           <div id="map" ref={mapContainerRef} className="felt-map" aria-label="高德地图容器" />
 
           <p className="felt-map-attrib" aria-hidden="true">
-            图片来源于网络
+            地图服务：高德地图
           </p>
 
           <div className={`loading-cloth stitch ${mapReady ? "fade" : ""}`}>
             <div style={{ fontSize: "24px", animation: "clothSpin 3s linear infinite" }}>🧶</div>
-            <div style={{ fontWeight: "bold", marginTop: "8px", fontSize: "14px" }}>布艺拼贴中...</div>
+            <div style={{ fontWeight: "bold", marginTop: "8px", fontSize: "14px" }}>正在载入地图…</div>
           </div>
 
           <div className="felt-routeTip" aria-live="polite">
@@ -857,7 +852,7 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
         </div>
       </div>
 
-      <div className="felt-routes" aria-label="推荐路线（2 种风格）">
+      <div className="felt-routes" aria-label="两条阊门步行路线">
         <button
           className={`felt-card ${activeRouteId === "waterAlley" ? "is-active" : ""}`}
           type="button"
@@ -865,13 +860,13 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           data-route-id="waterAlley"
           onClick={() => drawRoute("waterAlley")}
         >
-          <div className="felt-card-label patch stitch">第1线</div>
+          <div className="felt-card-label patch stitch">路线一</div>
           <div className="felt-card-body patch stitch stitch-dark">
             <div className="felt-card-top">
               <div>
                 <div className="felt-card-title">经典水巷线</div>
                 <div className="felt-card-status" style={{ color: "var(--felt-green)" }}>
-                  RECOMMENDED
+                  白日慢行
                 </div>
               </div>
               <div className="felt-pin">✓</div>
@@ -893,13 +888,13 @@ export function RouteSection({ showBackButton = false, standalone = false, heigh
           data-route-id="nightTour"
           onClick={() => drawRoute("nightTour")}
         >
-          <div className="felt-card-label orange patch stitch">第2线</div>
+          <div className="felt-card-label orange patch stitch">路线二</div>
           <div className="felt-card-body patch stitch stitch-dark">
             <div className="felt-card-top">
               <div>
                 <div className="felt-card-title">夜游氛围线</div>
                 <div className="felt-card-status" style={{ color: "var(--felt-orange)" }}>
-                  HOT CHOICE
+                  夜间漫游
                 </div>
               </div>
               <div className="felt-pin orange">✓</div>

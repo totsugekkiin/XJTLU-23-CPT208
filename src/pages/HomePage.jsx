@@ -46,22 +46,19 @@ export function HomePage() {
 
       <nav className="screen" id="home-screen">
         <ul id="home-nav">
-          <li>
-            <a href="appMain.html" className="nav-item app-go">
-              GO
+          <li className="app-go-group" aria-label="选择参观方式">
+            <a href="appMain.html?variant=text" className="nav-item app-go">
+              <span className="app-go__word">GO</span>
+              <span className="app-go__label">历史漫游</span>
+            </a>
+            <a href="appMain.html?variant=ar" className="nav-item app-go">
+              <span className="app-go__word">GO</span>
+              <span className="app-go__label">实景导览</span>
             </a>
           </li>
           <li>
             <a href="#" id="btn-team" className="nav-item">
               [TEAM]
-            </a>
-          </li>
-          <li className="nav-ar-group" aria-label="AR 体验入口">
-            <a href="marker-ar.html" className="nav-item nav-item--ar" aria-label="打开 MindAR 纹样识别">
-              [MINDAR]
-            </a>
-            <a href="loc-ar.html" className="nav-item nav-item--ar" aria-label="打开地图与纹理统一 AR">
-              [AR]
             </a>
           </li>
           <li>

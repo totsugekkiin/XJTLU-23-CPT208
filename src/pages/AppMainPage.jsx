@@ -3,6 +3,14 @@ import { RouteSection } from "../components/RouteSection.jsx";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
+import {
+  CHANGMEN_HISTORY_CONTENTS,
+  CHANGMEN_INFO_CONTENTS,
+} from "../../js/content/changmenExperienceContent.js";
+import {
+  EXPERIENCE_VARIANT_AR,
+  resolveExperienceVariant,
+} from "../../js/appmain/experienceVariant.js";
 
 const AR_GATE_RESUME_KEY = "changmen.ar.resume-gate.v1";
 
@@ -27,12 +35,54 @@ function markArGateResume() {
   }
 }
 
+const HISTORY_CONTENT_BY_ID = Object.freeze(
+  Object.fromEntries(CHANGMEN_HISTORY_CONTENTS.map((content) => [content.id, content])),
+);
+
+function TextFilmstripCard({ contentId, index, year }) {
+  const content = HISTORY_CONTENT_BY_ID[contentId];
+  if (!content) return null;
+
+  return (
+    <div className="cm-filmstrip__item cm-filmstrip__item--text-detail">
+      <div className="cm-filmstrip__segment" />
+      <div className="cm-filmstrip__dot" />
+      <div className="cm-filmstrip__year">{year}</div>
+      <div className="cm-filmstrip__text-panel" aria-hidden="true">
+        <span className="cm-filmstrip__text-index">
+          {String(index).padStart(2, "0")}
+        </span>
+        <span className="cm-filmstrip__text-kicker">阊门纪事</span>
+        <strong>{content.label}</strong>
+      </div>
+      <div className="cm-filmstrip__info">
+        <h3>{content.description}</h3>
+        <p>{content.article}</p>
+      </div>
+    </div>
+  );
+}
+
 export function AppMainPage() {
   // 路线区段（含高德地图）首屏被 CSS display:none 隐藏。
   // 直接 mount 会让首屏就请求高德 SDK + 初始化 WebGL，浪费资源、加剧卡顿。
   // 这里改为只在用户实际进入“河流页”后再挂载，挂载后保留（避免反复初始化地图）。
   const [shouldMountRoute, setShouldMountRoute] = useState(false);
   const [resumeAtGate] = useState(hasGateResumeRequest);
+  const [experienceVariant] = useState(resolveExperienceVariant);
+  const isArVariant = experienceVariant === EXPERIENCE_VARIANT_AR;
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    document.body.dataset.experienceVariant = experienceVariant;
+    document.body.classList.add(`experience-variant--${experienceVariant}`);
+
+    return () => {
+      delete document.body.dataset.experienceVariant;
+      document.body.classList.remove(`experience-variant--${experienceVariant}`);
+    };
+  }, [experienceVariant]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -183,7 +233,7 @@ export function AppMainPage() {
           <div className="hero-card-stack" id="hero-card-stack">
             <section className="stack-card stack-card--primary" data-card-index="0">
               <h1 className="hero-card__title">阊门</h1>
-              <p className="hero-card__description">从城门到水巷，开启一段的古城探索。</p>
+              <p className="hero-card__description">从阊门入城，沿山塘河认识苏州的水陆格局。</p>
               <div className="hero-card__actions">
                 <span className="hero-card__go-text">GO</span>
               </div>
@@ -195,7 +245,7 @@ export function AppMainPage() {
 
             <section className="stack-card stack-card--blue" data-card-index="1">
               <div className="stack-card__head">
-                <h2 className="hero-card__title hero-card__title--sub">历史渊源</h2>
+                <h2 className="hero-card__title hero-card__title--sub">建城沿革</h2>
               </div>
               <div className="stack-card__stage">
                 <svg className="stack-card__svg svg-motif svg-motif--star" viewBox="0 0 220 160" aria-hidden="true" role="img">
@@ -208,13 +258,13 @@ export function AppMainPage() {
                 </svg>
               </div>
               <div className="stack-card__foot">
-                <p className="hero-card__description">作为苏州古城八大城门之一，阊门始建于春秋阖闾时期，见证了苏州两千五百多年的岁月变迁。</p>
+                <p className="hero-card__description">据传统文献记载，公元前514年伍子胥主持营建阖闾大城，阊门设在古城西北。</p>
               </div>
             </section>
 
             <section className="stack-card stack-card--cream" data-card-index="2">
               <div className="stack-card__head">
-                <h2 className="hero-card__title hero-card__title--sub">商业鼎盛</h2>
+                <h2 className="hero-card__title hero-card__title--sub">明清商贸</h2>
               </div>
               <div className="stack-card__stage">
                 <svg className="stack-card__svg svg-motif svg-motif--coin" viewBox="0 0 220 160" aria-hidden="true" role="img">
@@ -230,13 +280,13 @@ export function AppMainPage() {
                 </svg>
               </div>
               <div className="stack-card__foot">
-                <p className="hero-card__description">明清时期这里曾是全国水陆交通枢纽与顶级商业中心，历史上繁华程度被誉为天下财富聚集之所</p>
+                <p className="hero-card__description">明清时期，西中市、南濠与山塘在阊门内外相接，沿河分布商铺、会馆和货运码头。</p>
               </div>
             </section>
 
             <section className="stack-card stack-card--green" data-card-index="3">
               <div className="stack-card__head">
-                <h2 className="hero-card__title hero-card__title--sub">文化地标</h2>
+                <h2 className="hero-card__title hero-card__title--sub">街区文化</h2>
               </div>
               <div className="stack-card__stage">
                 <svg className="stack-card__svg svg-motif svg-motif--lotus" viewBox="0 0 220 160" aria-hidden="true" role="img">
@@ -287,21 +337,21 @@ export function AppMainPage() {
               </div>
               <div className="stack-card__foot">
                 <p className="hero-card__description">
-                  《红楼梦》称阊门一带为「最是红尘中一二等富贵风流之地」。这里不仅是曹雪芹笔下繁华的起点，更是江南烟火与古典气韵的交汇之处。
+                  《红楼梦》开篇以「最是红尘中一二等富贵风流之地」写阊门。周边至今保存街巷、园林、会馆与传统手艺。
                 </p>
               </div>
             </section>
 
             <section className="stack-card stack-card--indigo" data-card-index="4">
               <div className="stack-card__head">
-                <h2 className="hero-card__title hero-card__title--sub">艺术长卷</h2>
+                <h2 className="hero-card__title hero-card__title--sub">画中阊门</h2>
               </div>
               <div className="stack-card__stage">
                 <AncientScrollBrushAnimation />
               </div>
               <div className="stack-card__foot">
                 <p className="hero-card__description">
-                  它是《姑苏繁华图》中浓墨重彩的一笔。凝固在长卷上的水乡盛景，正等待你缓缓展开，探寻画中之城。
+                  1759年，徐扬完成《盛世滋生图》。长卷记录了阊门一带的河道、码头、店铺与往来人群，今通常称《姑苏繁华图》。
                 </p>
               </div>
             </section>
@@ -322,45 +372,47 @@ export function AppMainPage() {
       <ScrollRevealWords
         id="scroll-reveal-changmen"
         splitMode="char"
-        handoffTargetId="ar-entry-section"
-        text="剥开这四层初印象，阊门的底色藏在岁月深处。让我们沿着时间轴，重走这繁华阅尽的千年。"
+        handoffTargetId={isArVariant ? "ar-entry-section" : "cm-transition"}
+        text="阊门的变化不只发生在城门本身。继续下滑，查看从春秋建城到近现代保护的关键节点。"
       />
 
-      <section className="ar-entry-section" id="ar-entry-section" aria-labelledby="ar-entry-title">
-        <div className="ar-entry-section__orbit" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="ar-entry-section__content">
-          <p className="ar-entry-section__eyebrow">CHANGMEN · AR 现场体验</p>
-          <h2 id="ar-entry-title">让消失的阊门，<br />回到你的眼前。</h2>
-          <p className="ar-entry-section__description">
-            开启镜头，对准阊门建筑或现场纹理，在真实空间中寻找一卷跨越千年的城门记忆。
-          </p>
-          <div className="ar-entry-section__actions">
-            <a
-              className="ar-entry-section__primary"
-              href="loc-ar.html?from=app-main&return=gate"
-              onClick={markArGateResume}
-            >
-              <span className="ar-entry-section__button-mark" aria-hidden="true">AR</span>
-              <span>
-                <strong>进入 AR 浏览</strong>
-                <small>需要允许使用摄像头</small>
-              </span>
-              <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
-            </a>
-            <a className="ar-entry-section__skip" href="#cm-transition">
-              暂时跳过，继续浏览
-              <span aria-hidden="true">↓</span>
-            </a>
+      {isArVariant ? (
+        <section className="ar-entry-section" id="ar-entry-section" aria-labelledby="ar-entry-title">
+          <div className="ar-entry-section__orbit" aria-hidden="true">
+            <span />
+            <span />
+            <span />
           </div>
-        </div>
-        <p className="ar-entry-section__scroll-note" aria-hidden="true">继续下滑也可跳过 AR</p>
-      </section>
+          <div className="ar-entry-section__content">
+            <p className="ar-entry-section__eyebrow">CHANGMEN · 实景导览</p>
+            <h2 id="ar-entry-title">在现场查看<br />阊门历史。</h2>
+            <p className="ar-entry-section__description">
+              开启相机后，对准指定建筑区域或识别图案。识别成功后，历史场景与竹简会显示在对应位置。
+            </p>
+            <div className="ar-entry-section__actions">
+              <a
+                className="ar-entry-section__primary"
+                href="loc-ar.html?from=app-main&return=gate&variant=ar"
+                onClick={markArGateResume}
+              >
+                <span className="ar-entry-section__button-mark" aria-hidden="true">实景</span>
+                <span>
+                  <strong>开始实景导览</strong>
+                  <small>需要相机权限</small>
+                </span>
+                <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
+              </a>
+              <a className="ar-entry-section__skip" href="#cm-transition">
+                继续查看时间线
+                <span aria-hidden="true">↓</span>
+              </a>
+            </div>
+          </div>
+          <p className="ar-entry-section__scroll-note" aria-hidden="true">继续下滑查看时间线</p>
+        </section>
+      ) : null}
 
-      <section className="cm-mask-transition" id="cm-transition" aria-label="阊门挖洞转场">
+      <section className="cm-mask-transition" id="cm-transition" aria-label="阊门历史时间线">
         <div className="cm-mask-transition__scroll" id="cm-mask-scroll">
           <div className="cm-mask-transition__sticky">
             <div className="cm-mask-bottom" aria-hidden="true">
@@ -386,10 +438,24 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>阖闾建城 Helü&apos;s Capital</h3>
                       <p>
-                        伍子胥奉吴王阖闾之命建吴国都城。阊门为八大城门之一，因其方位朝向楚国，最初被命名为「破楚门」，象征吴国欲破楚的军事雄心。
+                        据文献记载，公元前514年，伍子胥奉吴王阖闾之命主持建城。阊门设在古城西北，是八座城门之一；「破楚门」是与吴楚战争相关的别称，并非它最初的正式名称。
                       </p>
                     </div>
                   </div>
+                  {!isArVariant ? (
+                    <TextFilmstripCard
+                      contentId="spring-autumn"
+                      index={1}
+                      year="公元前514年"
+                    />
+                  ) : null}
+                  {!isArVariant ? (
+                    <TextFilmstripCard
+                      contentId="tang"
+                      index={2}
+                      year="公元825年"
+                    />
+                  ) : null}
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
@@ -402,10 +468,17 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>南宋时期 Southern Song</h3>
                       <p>
-                        随着大运河的繁荣，阊门一带成为重要的水陆交通枢纽。在南宋《平江图》中，清晰地刻画了阊门水陆城门并列、水网密布的城市格局。
+                        1229年刻成的《平江图》记录了苏州城墙、河道和街巷。图中阊门设水、陆两门，分别连接城内河道与城外道路。
                       </p>
                     </div>
                   </div>
+                  {!isArVariant ? (
+                    <TextFilmstripCard
+                      contentId="southern-song"
+                      index={3}
+                      year="公元1229年"
+                    />
+                  ) : null}
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
@@ -418,7 +491,7 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>明代 Ming Dynasty</h3>
                       <p>
-                        苏州城墙得以重修。阊门外的南濠、七里山塘一带商业极度繁荣，成为丝绸、粮食等物资的集散中心，并在此孕育了中国最早的资本主义萌芽。
+                        明代苏州商贸活动逐渐向阊门集中。西中市、南濠和山塘相互连接，沿河形成商铺、会馆与码头密集的转运街市。
                       </p>
                     </div>
                   </div>
@@ -434,10 +507,17 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>清代康乾时期 Kangxi–Qianlong</h3>
                       <p>
-                        阊门的繁华达到历史顶峰，商贾云集，千帆竞发。曹雪芹在《红楼梦》中称其为「最是红尘中一二等富贵风流之地」，《姑苏繁华图》也对其进行了重彩描绘。
+                        清代阊门街市继续扩展。徐扬1759年完成的《盛世滋生图》详细画出这一带的河运、店铺和市民生活，今通常称《姑苏繁华图》。
                       </p>
                     </div>
                   </div>
+                  {!isArVariant ? (
+                    <TextFilmstripCard
+                      contentId="ming-qing"
+                      index={4}
+                      year="公元14世纪-18世纪"
+                    />
+                  ) : null}
                   <div className="cm-filmstrip__item">
                     <div className="cm-filmstrip__segment" />
                     <div className="cm-filmstrip__dot" />
@@ -446,7 +526,7 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>晚清时期 Late Qing</h3>
                       <p>
-                        太平天国运动波及苏州，清军与太平军在阊门激战。史称「庚申之劫」，阊门外繁华的商业街区和古建筑群在战火中遭到毁灭性破坏。
+                        1860年前后，战火波及阊门外的南濠、山塘等街市，大量商铺和建筑受损，原有商贸格局由此发生改变。
                       </p>
                     </div>
                   </div>
@@ -458,7 +538,7 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>民国时期 Republican China</h3>
                       <p>
-                        为适应近代交通发展，阊门部分城墙被拆除以修筑马路。火车站的建立使传统水运逐渐让位于铁路，西方建筑风格融入，城市开始近现代转型。
+                        民国时期，城墙拆改、道路建设和铁路交通改变了阊门内外的通行方式，街区中也出现了新的公共与商业建筑。
                       </p>
                     </div>
                   </div>
@@ -470,7 +550,7 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>20世纪中后期 Late 20th Century</h3>
                       <p>
-                        随着工业化推进和城市重心转移，水运彻底衰落。阊门逐渐褪去商业霸主地位，转变为以居住和传统手工业为主的老城区，沉淀下浓厚的市井烟火气。
+                        随着交通方式和城市功能变化，阊门不再承担主要货运集散职能，街区逐渐以居住、零售和传统手工业为主。
                       </p>
                     </div>
                   </div>
@@ -482,10 +562,17 @@ export function AppMainPage() {
                     <div className="cm-filmstrip__info">
                       <h3>当代 Contemporary</h3>
                       <p>
-                        苏州加大古城保护力度，2006年阊门城楼及水陆城门得以重建恢复。结合现代灯光与数字化展示技术，阊门重焕生机，成为重要的文化地标。
+                        2004年，阊门水城门遗址被发现；2006年完成保护与修复。现存遗址、城墙和周边街区共同展示古城西北部的水陆格局。
                       </p>
                     </div>
                   </div>
+                  {!isArVariant ? (
+                    <TextFilmstripCard
+                      contentId="modern"
+                      index={5}
+                      year="公元1863年至今"
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -531,16 +618,22 @@ export function AppMainPage() {
           <div className="river-island" data-island-index="0">
             <div className="river-island__shore">
               <div className="river-island__land">
-                <h3 className="river-island__title">白居易凿河十里：阊门与运河的相连</h3>
-                <p className="river-island__desc">大运河的主干道原本并不直接穿过阊门，是历代水利工程将阊门与运河主线死死绑定。最著名的史料记载来自唐代——《新唐书·白居易传》提及「自阊门至虎丘，凿河十里，夹岸修路」。唐宝历元年（825年），白居易任苏州刺史，不仅疏浚了城外航道，更开凿了连接阊门与大运河水网的山塘河，相当于大运河通往苏州古城区的「高速路匝道」。自此，运河上的客船、货船得以长驱直入，直抵阊门城下。</p>
+                <h3 className="river-island__title">唐代山塘：阊门通往虎丘的道路</h3>
+                <p className="river-island__desc">825年，白居易出任苏州刺史，组织修筑阊门至虎丘一带的堤路，改善陆路通行，堤路后来发展为山塘街。后世方志记有开凿山塘河的说法，但较早资料只明确记载修建堤路，因此究竟是新开河道还是整治原有水道，仍需区分说明。</p>
               </div>
             </div>
           </div>
           <div className="river-island" data-island-index="1">
             <div className="river-island__shore">
               <div className="river-island__land">
-                <h3 className="river-island__title">阊门介绍</h3>
-                <p className="river-island__desc">明清以来，阊门内外街市绵连、河街并行，米行、布庄、会馆林立，水路与陆路在此交汇，塑造了苏州「人家尽枕河」的市井肌理。</p>
+                <h3 className="river-island__title">历史文化：城门之外的街区</h3>
+                <p className="river-island__desc">明清以来，阊门内外河街并行，米行、布庄、会馆与码头沿水分布，货物可在船运和陆运之间直接转接。</p>
+                {!isArVariant ? (
+                  <div className="river-island__supplement">
+                    <strong>{CHANGMEN_INFO_CONTENTS.culture.title}</strong>
+                    <p>{CHANGMEN_INFO_CONTENTS.culture.article}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="river-island__frame">
                 <img className="river-island__img" src="images/river-changmen-old-street.png" alt="清末民初阊门外街景：商铺林立、人力车与行人穿行" />
@@ -550,8 +643,14 @@ export function AppMainPage() {
           <div className="river-island" data-island-index="2">
             <div className="river-island__shore">
               <div className="river-island__land">
-                <h3 className="river-island__title">阊门介绍</h3>
-                <p className="river-island__desc">今日阊门片区仍承古城格局：山塘起点、北码头与环古城河在此衔接，步行其间可感受水巷、石桥与老字号交织的江南日常。</p>
+                <h3 className="river-island__title">地理位置：古城西北的水陆节点</h3>
+                <p className="river-island__desc">阊门位于苏州古城西北。城内通往西中市、吴趋坊，城外连接北码头、山塘与外城河，是水路和陆路的交会位置。</p>
+                {!isArVariant ? (
+                  <div className="river-island__supplement">
+                    <strong>{CHANGMEN_INFO_CONTENTS.geography.title}</strong>
+                    <p>{CHANGMEN_INFO_CONTENTS.geography.article}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="river-island__frame">
                 <img className="river-island__img" src="images/river-changmen-aerial.png" alt="今日阊门片区航拍：山塘起点、北码头与环古城河水网交织的城市肌理" />
@@ -562,7 +661,7 @@ export function AppMainPage() {
           <div className="river-island river-island--large-viz river-island--viz-only" data-island-index="3">
             <div className="river-island__shore">
               <div className="river-island__viz-stack">
-                <p className="river-island__viz-intro">明清时期的阊门建筑图</p>
+                <p className="river-island__viz-intro">阊门城墙、河道与街市格局复原</p>
                 <div className="river-island__frame river-island__frame--credit">
                   <img
                     className="river-island__img river-island__img--color"
@@ -602,7 +701,12 @@ export function AppMainPage() {
       {/* 仅河流页模式显示（CSS）；胶片段滚动时不占位
           且仅当用户实际进入河流页后才挂载，避免首屏就初始化高德地图浪费 CPU/网络 */}
       <section className="route-after-river" id="route-section" aria-label="推荐路线">
-        {shouldMountRoute ? <RouteSection heightVh={100} /> : null}
+        {shouldMountRoute ? (
+          <RouteSection
+            heightVh={100}
+            returnHref={`appMain.html?variant=${experienceVariant}`}
+          />
+        ) : null}
       </section>
 
       <div id="pet-layer" className="pet-layer" aria-hidden="true">
@@ -637,7 +741,7 @@ export function AppMainPage() {
               id="pet-inputbar-input"
               type="text"
               inputMode="text"
-              placeholder="说点什么…"
+              placeholder="询问阊门历史、街巷或路线…"
               aria-label="输入消息"
             />
 
@@ -672,13 +776,8 @@ export function AppMainPage() {
               changmen
             </span>
             <div className="guide-menu__actions">
-              <a className="guide-menu__icon-btn" href="mailto:" aria-label="邮件联系（请在项目中替换为实际邮箱）">
-                <svg className="guide-menu__icon-svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-                  <path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" d="M4 6h16v12H4V6zm0 0 8 6 8-6" />
-                </svg>
-              </a>
               <button className="guide-menu__pill-cta" type="button" data-action="explore">
-                开始探索
+                重新开始
               </button>
               <button className="guide-menu__icon-btn guide-menu__icon-btn--close" id="guide-menu-close" type="button" aria-label="关闭菜单">
                 <svg className="guide-menu__icon-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
@@ -709,7 +808,7 @@ export function AppMainPage() {
                 推荐路线
               </button>
               <button className="guide-menu__link" type="button" data-action="pet">
-                智能伴游
+                黛玉伴游
               </button>
             </div>
           </div>

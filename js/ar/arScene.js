@@ -347,14 +347,14 @@ export function bootstrapArScene(rootEl) {
             Math.round(mapRatio * 45),
         );
     const defaultMessage = ready
-      ? "AR 定位资源已提前准备好"
+      ? "导览内容准备完成"
       : prefetchedMapIds.size > 0
         ? `正在准备定位区域 ${prefetchedMapIds.size}/${activeMapIds.length}`
         : sdkAssetReady
           ? "正在提前下载定位地图…"
           : rendererAssetReady
             ? "竹简已就绪，正在准备定位引擎…"
-            : "正在准备 AR 资源…";
+            : "正在准备导览内容…";
 
     preload.dataset.state = ready ? "ready" : "loading";
     preloadStatus.textContent = message || defaultMessage;
@@ -363,7 +363,7 @@ export function bootstrapArScene(rootEl) {
     preloadProgressBar.style.width = `${progress}%`;
 
     if (!startBtn.disabled && !rootEl.classList.contains("is-ar-active")) {
-      startBtn.textContent = ready ? "立即开启 AR" : "开启 AR 探索";
+      startBtn.textContent = "开始实景导览";
     }
   }
 
@@ -413,7 +413,7 @@ export function bootstrapArScene(rootEl) {
         mapDownloadControllers.delete(mapId);
         mapDownloadPromises.delete(mapId);
         if (err?.name !== "AbortError" && !disposed) {
-          updatePreloadUi("网络较慢，定位地图将在开启后继续准备");
+          updatePreloadUi("网络较慢，其余内容将在开始后继续载入");
         }
         throw err;
       });
@@ -714,8 +714,8 @@ export function bootstrapArScene(rootEl) {
               } else if (status === "portal-fallback") {
                 setGuide(
                   "loading",
-                  "正在切换兼容场景",
-                  "高斯场景暂不可用，正在载入实景模型",
+                  "正在载入备用场景",
+                  "当前场景暂时不可用，请稍候",
                 );
               } else if (
                 status === "portal-ready" ||
@@ -756,7 +756,7 @@ export function bootstrapArScene(rootEl) {
     if (!story || !contentRevealed) return;
     story.classList.remove("is-hidden");
     story.setAttribute("aria-hidden", "false");
-    setGuide("explore", "竹简已找到", "移动手机观察，或关闭介绍继续探索");
+    setGuide("explore", "竹简内容已展开", "移动手机查看细节，或关闭介绍返回现场");
   }
 
   function closeStory() {
@@ -773,7 +773,7 @@ export function bootstrapArScene(rootEl) {
     if (!contentRevealed) {
       contentRevealed = true;
       arRenderer?.setContentVisible(true, { restart: true });
-      setGuide("recognized", "发现阊门竹简", "轻触竹简，阅读这座城门的故事");
+      setGuide("recognized", "发现阊门竹简", "轻触竹简查看历史内容");
       try {
         navigator.vibrate?.(35);
       } catch {
@@ -1833,7 +1833,7 @@ export function bootstrapArScene(rootEl) {
   async function startExperience() {
     errorMsg.textContent = "";
     startBtn.disabled = true;
-    startBtn.textContent = "正在开启…";
+    startBtn.textContent = "正在开启相机…";
     closeStory();
     contentRevealed = false;
     stableLocalizationCount = 0;
@@ -1856,7 +1856,7 @@ export function bootstrapArScene(rootEl) {
 
       overlay.classList.add("is-hidden");
       guide?.classList.remove("is-hidden");
-      setGuide("loading", "正在开启现场相机", "定位资源会在后台继续准备", 8);
+      setGuide("loading", "正在开启现场相机", "识别内容会在后台继续载入", 8);
       if (debugMode) {
         controls?.classList.remove("is-hidden");
         hint?.classList.remove("is-hidden");
@@ -1886,7 +1886,7 @@ export function bootstrapArScene(rootEl) {
           "SDK 初始化失败，回退 REST 定时定位",
           sdkErr?.message || String(sdkErr),
         );
-        setGuide("loading", "正在切换兼容模式", "重新连接现场相机…", 58);
+        setGuide("loading", "正在重新连接", "请保持页面开启…", 58);
         await requestCameraPermission();
         startLocalizationLoop();
         queueMicrotask(() => {

@@ -7,17 +7,23 @@ import {
   getBambooNoticeContent,
 } from "../js/ar/bambooNotice.js";
 import { AR_MAP_PROFILES } from "../js/ar/arAnchors.js";
+import { CHANGMEN_HISTORY_CONTENTS } from "../js/content/changmenExperienceContent.js";
 
 test("provides five selectable nine-column bamboo notice contents", () => {
   assert.equal(BAMBOO_NOTICE_CONTENT_OPTIONS.length, 5);
 
   for (const content of BAMBOO_NOTICE_CONTENT_OPTIONS) {
     assert.equal(content.columns.length, 9, `${content.id} should contain nine columns`);
+    assert.ok(content.article.length >= 60, `${content.id} should contain a substantive article`);
     assert.ok(
       content.columns.every((column) => Array.from(column).length <= 12),
       `${content.id} contains a column longer than twelve characters`,
     );
   }
+});
+
+test("AR bamboo notices and the text version share one history source", () => {
+  assert.equal(BAMBOO_NOTICE_CONTENT_OPTIONS, CHANGMEN_HISTORY_CONTENTS);
 });
 
 test("falls back to the documented default content", () => {

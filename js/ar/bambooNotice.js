@@ -1,107 +1,17 @@
 import * as THREE from "three";
+import {
+  BAMBOO_NOTICE_CONTENT_OPTIONS,
+  BAMBOO_NOTICE_CONTENTS,
+  DEFAULT_BAMBOO_NOTICE_CONTENT_ID,
+  getBambooNoticeContent,
+} from "../content/changmenExperienceContent.js";
 
-function createBambooNoticeContent(id, label, description, columns) {
-  return Object.freeze({
-    id,
-    label,
-    description,
-    columns: Object.freeze([...columns]),
-  });
-}
-
-export const DEFAULT_BAMBOO_NOTICE_CONTENT_ID = "spring-autumn";
-
-export const BAMBOO_NOTICE_CONTENTS = Object.freeze({
-  "spring-autumn": createBambooNoticeContent(
-    "spring-autumn",
-    "春秋时期",
-    "阊门的建造、位置和城门功能",
-    [
-      "春秋时期",
-      "传统记载认为",
-      "阊门建于公元前514年",
-      "当时吴国营建阖闾大城",
-      "阊门位于古城西北部",
-      "这里同时设有水门和陆门",
-      "水陆两门控制人员船只进出",
-      "城门也承担城市防御",
-      "吴国攻楚时又称破楚门",
-    ],
-  ),
-  tang: createBambooNoticeContent(
-    "tang",
-    "唐代",
-    "白居易、虎丘堤路与山塘河史料争议",
-    [
-      "唐代",
-      "825年白居易任苏州刺史",
-      "他修建通往虎丘的堤路",
-      "这项工程减少道路积水",
-      "也方便船只和行人往来",
-      "这条路线后来成为山塘街",
-      "后来的地方志说他开河",
-      "但早期资料只记载修建堤路",
-      "是否新开山塘河仍有争议",
-    ],
-  ),
-  "southern-song": createBambooNoticeContent(
-    "southern-song",
-    "南宋时期",
-    "《平江图》中的水门、陆门及其用途",
-    [
-      "南宋时期",
-      "1229年平江图刻成石碑",
-      "图中记录当时的苏州布局",
-      "阊门同时设有水门和陆门",
-      "水门让船只通过城墙",
-      "陆门供人员和车辆通行",
-      "两种城门共同控制进出",
-      "城内水道通过水门出城",
-      "阊门兼有交通和防御功能",
-    ],
-  ),
-  "ming-qing": createBambooNoticeContent(
-    "ming-qing",
-    "明清时期",
-    "阊门商业区的发展与《姑苏繁华图》",
-    [
-      "明清时期",
-      "明代商业中心向阊门发展",
-      "街市连接西中市南濠和山塘",
-      "河边分布商铺会馆和码头",
-      "货物在这里装卸和转运",
-      "清代商业规模继续扩大",
-      "1759年徐扬完成长卷",
-      "画中详细记录阊门街市",
-      "这幅画现在称姑苏繁华图",
-    ],
-  ),
-  modern: createBambooNoticeContent(
-    "modern",
-    "晚清到现代",
-    "1860年后的破坏、改建、拆除与修复",
-    [
-      "晚清到现代",
-      "1860年太平军逼近苏州",
-      "江苏巡抚下令清军纵火",
-      "南濠和山塘等街市被烧毁",
-      "阊门商业区受到严重破坏",
-      "1934年改建成三孔城门",
-      "20世纪50年代被拆除",
-      "2004年发现水城门遗址",
-      "2006年完成保护修复",
-    ],
-  ),
-});
-
-export const BAMBOO_NOTICE_CONTENT_OPTIONS = Object.freeze(
-  Object.values(BAMBOO_NOTICE_CONTENTS),
-);
-
-export function getBambooNoticeContent(contentId = DEFAULT_BAMBOO_NOTICE_CONTENT_ID) {
-  return BAMBOO_NOTICE_CONTENTS[contentId]
-    ?? BAMBOO_NOTICE_CONTENTS[DEFAULT_BAMBOO_NOTICE_CONTENT_ID];
-}
+export {
+  BAMBOO_NOTICE_CONTENT_OPTIONS,
+  BAMBOO_NOTICE_CONTENTS,
+  DEFAULT_BAMBOO_NOTICE_CONTENT_ID,
+  getBambooNoticeContent,
+};
 
 const DEFAULT_COLUMNS = getBambooNoticeContent().columns;
 

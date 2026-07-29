@@ -17,6 +17,13 @@
 
 #home-nav li { margin: 2rem 0; text-align: center; }
 
+#home-nav .app-go-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.2rem, 3vw, 2.5rem);
+}
+
 #home-nav .nav-ar-group {
   display: flex;
   align-items: center;
@@ -63,27 +70,41 @@
 
 /* APP button: black circle + bold sans-serif GO */
 #home-nav a.app-go {
-  width: 117px;
-  height: 117px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.12rem;
   background: #000;
   color: #fff;
   font-family: Arial, Helvetica, sans-serif;
   font-weight: 900;
-  font-size: 3rem;
-  letter-spacing: 0.08em;
   -webkit-text-stroke: 0;
   text-transform: uppercase;
+}
+
+#home-nav .app-go__word {
+  font-size: 2.65rem;
+  line-height: 0.95;
+  letter-spacing: 0.08em;
+}
+
+#home-nav .app-go__label {
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 0.78rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  font-weight: 700;
 }
 
 #home-nav a.app-go:hover {
   background: #000;
   color: #fff;
-  transform: none;
-  box-shadow: none;
+  transform: translateY(-5px) rotate(2deg);
+  box-shadow: 8px 8px 0 #ff0033;
 }
 
 #home-nav a.app-go::after { display: none; }
@@ -104,6 +125,16 @@
   #home-nav .nav-ar-group {
     flex-direction: column;
     gap: clamp(0.45rem, 1.8vh, 0.8rem);
+  }
+
+  #home-nav .app-go-group {
+    flex-direction: row;
+    gap: clamp(0.8rem, 4vw, 1.4rem);
+  }
+
+  #home-nav a.app-go {
+    width: clamp(108px, 31vw, 124px);
+    height: clamp(108px, 31vw, 124px);
   }
 
   #home-nav a.nav-item:not(.app-go) {

@@ -54,7 +54,7 @@ export function createPetComicChat({
   let isActive = false;
   let raf = null;
   let keyboardOffsetPx = 0;
-  const activationPrompt = "……说吧。";
+  const activationPrompt = "想了解阊门的什么？";
   let dbgSyncN = 0;
 
   const syncPositions = () => {
@@ -201,10 +201,8 @@ export function createPetComicChat({
       const reply = await sendToAI(text);
       showAgent(reply);
     } catch (err) {
-      const msg =
-        (err && typeof err === "object" && "message" in err && typeof err.message === "string" && err.message.trim() ? err.message.trim() : null) ??
-        "发送失败，请稍后再试。";
-      showAgent(`（系统）${msg}`);
+      console.error("[pet-comic-chat] request failed", err);
+      showAgent("暂时无法回复，请稍后再试。");
     } finally {
       if (els.send) els.send.disabled = false;
       if (els.enter) els.enter.disabled = false;

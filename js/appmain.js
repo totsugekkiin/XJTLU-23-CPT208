@@ -11,8 +11,16 @@ import { createPetComicChat } from "./appmain/pet/petComicChat.js";
 import { setupScrollMaskZoom } from "./appmain/scrollMaskZoom.js";
 import { createCurtainRiverTransition } from "./appmain/curtainRiverTransition.js";
 import { createRiverScene } from "./appmain/riverScene.js";
+import {
+  createVariantHref,
+  resolveExperienceVariant,
+} from "./appmain/experienceVariant.js";
 
 export function bootstrapAppMain() {
+  const experienceVariant = resolveExperienceVariant();
+  const mapHref = createVariantHref("map.html", experienceVariant);
+  const appMainHref = createVariantHref("appMain.html", experienceVariant);
+
   // 屏蔽本地调试上报（127.0.0.1:7502）在生产/未启动服务时刷屏报错
   // 仅拦截 ingest 域名，不影响其它 fetch
   if (typeof window !== "undefined" && typeof window.fetch === "function" && !window.__INGEST_FETCH_PATCHED__) {
@@ -424,7 +432,7 @@ export function bootstrapAppMain() {
     if (nextOpen) {
       // 第一次打开时再设置 src，避免无意义加载
       if (!guideMapEls.frame.getAttribute("src")) {
-        guideMapEls.frame.setAttribute("src", "map.html");
+        guideMapEls.frame.setAttribute("src", mapHref);
       }
     }
   }
@@ -465,7 +473,7 @@ export function bootstrapAppMain() {
       if (document.body.classList.contains("is-river-page")) {
         document.getElementById("route-section")?.scrollIntoView({ behavior: smooth, block: "start" });
       } else {
-        window.location.href = "map.html";
+        window.location.href = mapHref;
       }
       return;
     }
@@ -490,7 +498,7 @@ export function bootstrapAppMain() {
 
     if (action === "explore") {
       setMenuOpen(false);
-      window.location.href = "appMain.html";
+      window.location.href = appMainHref;
       return;
     }
 
@@ -536,11 +544,11 @@ export function bootstrapAppMain() {
   let welcomeActive = false;
   let petInitCancelled = false;
   const welcomeText =
-    "欢迎来到阊门探索之旅，我是您的向导林黛玉。在游览过程中，您可以随时点击我进行对话与互动；若我不在当前页面，请点击左上角的圆形按钮，即可随时将我唤回屏幕。";
+    "我是黛玉。想了解阊门的历史、街巷或游览路线，可以随时问我。左上角的圆形按钮可以将我召回屏幕。";
 
   /** 进入路线推荐区时，让桌宠出现在屏幕中下偏右并讲解两条路线的区别 */
   const ROUTE_INTRO_TEXT =
-    "这里为您准备了两条游览路线：第一条「经典水巷线」从阊门出发，经七里山塘到荣阳楼，主打慢行赏桥巷与游船古韵，更适合白日里悠然踱步；第二条「夜游氛围线」从阊门绕至石路步行街、南浩街，再回到七里山塘夜景，灯火映水巷、市井伴小吃，更适合夜色里寻热闹烟火。";
+    "「经典水巷线」从阊门经七里山塘到荣阳楼，适合白日慢行；「夜游氛围线」经过石路步行街、南浩街和七里山塘，适合傍晚出发。";
   const ROUTE_DOCK_POINT = { xPercent: 0.78, yPercent: 0.72 };
   let routeIntroObserver = null;
   let routeIntroActive = false;

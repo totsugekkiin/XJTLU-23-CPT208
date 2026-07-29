@@ -3,7 +3,7 @@ import { AR_MAP_PROFILES } from "../../js/ar/arAnchors.js";
 
 export function ArPage() {
   const exitAr = () => {
-    const returnUrl = new URL("appMain.html?resume=gate", window.location.href);
+    const returnUrl = new URL("appMain.html?variant=ar&resume=gate", window.location.href);
     window.location.replace(returnUrl.href);
   };
 
@@ -51,14 +51,14 @@ export function ArPage() {
         <div id="ar-start-overlay">
           <div className="ar-start-mark" aria-hidden="true">簡</div>
           <div className="ar-start-copy">
-            <span>阊门历史现场</span>
-            <h1>寻找消失的城门记忆</h1>
-            <p>开启摄像头后，可对准阊门建筑或完整纹理边框。系统会自动选择地图定位或纹理入口，并显示对应的 AR 内容。</p>
+            <span>阊门 · 实景导览</span>
+            <h1>在现场查看阊门历史</h1>
+            <p>开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。</p>
           </div>
           <label className="ar-field ar-dev-only" htmlFor="ar-map-select">
-            测试地图
+            识别区域
             <select id="ar-map-select" defaultValue="all">
-              <option value="all">全部地图（自动识别）</option>
+              <option value="all">全部区域（自动识别）</option>
               {AR_MAP_PROFILES.map((profile) => (
                 <option key={profile.mapId} value={profile.mapId}>
                   {profile.label} ({profile.mapId})
@@ -67,25 +67,25 @@ export function ArPage() {
             </select>
           </label>
           <button id="ar-start-btn" type="button">
-            开启 AR 探索
+            开始实景导览
           </button>
           <div id="ar-preload" className="ar-preload" aria-live="polite">
             <div className="ar-preload__copy">
-              <span id="ar-preload-status">正在准备 AR 资源…</span>
+              <span id="ar-preload-status">正在准备导览内容…</span>
               <span id="ar-preload-percent">8%</span>
             </div>
             <div
               id="ar-preload-progress"
               className="ar-preload__track"
               role="progressbar"
-              aria-label="AR 资源准备进度"
+              aria-label="导览内容准备进度"
               aria-valuemin="0"
               aria-valuemax="100"
               aria-valuenow="8"
             >
               <span id="ar-preload-progress-bar" style={{ width: "8%" }} />
             </div>
-            <small>资源会在你阅读说明时提前准备，未完成也可以直接开启</small>
+            <small>内容会在阅读说明时载入，也可以直接开始</small>
           </div>
           <p id="ar-error-msg" />
         </div>
@@ -110,9 +110,9 @@ export function ArPage() {
         <aside id="ar-story" className="is-hidden" aria-hidden="true">
           <button id="ar-story-close" type="button" aria-label="关闭竹简介绍">×</button>
           <span className="ar-story__eyebrow">阊门 · 姑苏八门</span>
-          <h2>一卷竹简，一座城门</h2>
-          <p>阊门始建于公元前514年，原名破楚门。这里水陆相接、商旅云集，是古代苏州通往西北方向的重要门户。</p>
-          <p className="ar-story__hint">移动手机从不同角度观察竹简，回到现场空间继续探索。</p>
+          <h2>阖闾建城与阊门位置</h2>
+          <p>据传统文献记载，公元前514年，吴王阖闾命伍子胥主持建城。阊门设在古城西北，并以水门、陆门分别连接河道和道路。</p>
+          <p className="ar-story__hint">移动手机可查看竹简不同位置，关闭介绍后继续识别现场。</p>
         </aside>
 
         <div id="ar-controls" className="is-hidden ar-dev-only">
@@ -225,7 +225,7 @@ export function ArPage() {
           摆放工具
         </a>
         <button id="ar-exit" type="button" onClick={exitAr}>
-          退出 AR
+          退出实景导览
         </button>
       </nav>
     </div>
