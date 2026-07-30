@@ -53,6 +53,7 @@ let targetTracking = false;
 let pageDestroyed = false;
 let perspectiveState = null;
 let apertureCvState = null;
+let apertureCvSnapshot = null;
 let dynastySwitching = false;
 let portalLoadWaiter = null;
 let portalRendererGeneration = 0;
@@ -606,6 +607,7 @@ async function initializeGaussianPortal() {
       gaussianPortal.setOcclusion(occlusionEnabled);
       gaussianPortal.setDirection(depthDirection);
       gaussianPortal.setTracking(debugPortal || targetTracking);
+      gaussianPortal.restoreApertureCvState(apertureCvSnapshot);
       return gaussianPortal;
     })
     .catch((error) => {
@@ -702,6 +704,9 @@ async function switchPortalScene(sceneId) {
   await delay(reducedMotion ? 20 : 440);
 
   portalRendererGeneration += 1;
+  if (gaussianPortal) {
+    apertureCvSnapshot = gaussianPortal.captureApertureCvState();
+  }
   gaussianPortal?.destroy();
   gaussianPortal = null;
   gaussianPortalPromise = null;

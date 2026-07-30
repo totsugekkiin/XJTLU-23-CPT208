@@ -203,6 +203,7 @@ export async function createSharedMarkerRecognition({
   let portalPromise = null;
   let portalRendererGeneration = 0;
   let portalSwitching = false;
+  let apertureCvSnapshot = null;
 
   const applyFallbackConfig = (loadModel = false) => {
     const { view } = portalConfig;
@@ -318,6 +319,7 @@ export async function createSharedMarkerRecognition({
         renderer.setOcclusion(true);
         renderer.setDirection(-1);
         renderer.setTracking(tracking);
+        renderer.restoreApertureCvState(apertureCvSnapshot);
         return renderer;
       })
       .catch((error) => {
@@ -373,6 +375,9 @@ export async function createSharedMarkerRecognition({
     });
     try {
       portalRendererGeneration += 1;
+      if (portalRenderer) {
+        apertureCvSnapshot = portalRenderer.captureApertureCvState();
+      }
       portalRenderer?.destroy();
       portalRenderer = null;
       portalPromise = null;

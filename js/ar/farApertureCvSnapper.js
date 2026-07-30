@@ -22,6 +22,7 @@ const MAX_LOCKED_MEASUREMENT_JUMP = 0.065;
 const MAX_NORMALIZED_CORRECTION = 0.23;
 const LOCAL_SHAPE_CORRECTION_WEIGHT = 0.42;
 const OVERLAY_POINT_EPSILON = 0.8;
+const APERTURE_CV_SNAPSHOT_VERSION = 1;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -38,6 +39,51 @@ function copyPoint(target, source) {
 
 function cloneQuad(points) {
   return points.map(({ x, y }) => ({ x, y }));
+}
+
+function normalizeCorrectionList(value) {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const corrections = value.map((correction) => ({
+    x: Number(correction?.x),
+    y: Number(correction?.y),
+  }));
+  if (
+    corrections.some(
+      ({ x, y }) =>
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        Math.abs(x) > MAX_NORMALIZED_CORRECTION ||
+        Math.abs(y) > MAX_NORMALIZED_CORRECTION,
+    )
+  ) {
+    return null;
+  }
+  return corrections;
+}
+
+export function normalizeApertureCvSnapshot(snapshot) {
+  if (!snapshot || snapshot.version !== APERTURE_CV_SNAPSHOT_VERSION) {
+    return null;
+  }
+  const targetCorrections = normalizeCorrectionList(snapshot.targetCorrections);
+  const smoothedCorrections = normalizeCorrectionList(snapshot.smoothedCorrections);
+  if (!targetCorrections || !smoothedCorrections) return null;
+
+  const lockEstablished = Boolean(snapshot.lockEstablished);
+  const mode =
+    lockEstablished && snapshot.mode === "locked"
+      ? "locked"
+      : lockEstablished && snapshot.mode === "holding"
+        ? "holding"
+        : "fallback";
+  return {
+    version: APERTURE_CV_SNAPSHOT_VERSION,
+    mode,
+    confidence: clamp(Number(snapshot.confidence) || 0, 0, 1),
+    lockEstablished: mode !== "fallback",
+    targetCorrections,
+    smoothedCorrections,
+  };
 }
 
 function quadArea(points) {
@@ -751,6 +797,51 @@ export class FarApertureCvSnapper {
       point.y = Number.NaN;
     });
     this.setMode("fallback");
+  }
+
+  captureState() {
+    if (!this.enabled || !this.lockEstablished || this.mode === "fallback") {
+      return null;
+    }
+    return normalizeApertureCvSnapshot({
+      version: APERTURE_CV_SNAPSHOT_VERSION,
+      mode: this.mode,
+      confidence: this.confidence,
+      lockEstablished: this.lockEstablished,
+      targetCorrections: this.targetCorrections,
+      smoothedCorrections: this.smoothedCorrections,
+    });
+  }
+
+  restoreState(snapshot) {
+    if (!this.enabled || this.destroyed) return false;
+    const restored = normalizeApertureCvSnapshot(snapshot);
+    if (!restored || !restored.lockEstablished) return false;
+
+    restored.targetCorrections.forEach((correction, index) => {
+      copyPoint(this.targetCorrections[index], correction);
+    });
+    restored.smoothedCorrections.forEach((correction, index) => {
+      copyPoint(this.smoothedCorrections[index], correction);
+    });
+    this.lockEstablished = true;
+    this.measurements.length = 0;
+    if (restored.mode === "locked") {
+      this.measurements.push({
+        corrections: cloneQuad(restored.targetCorrections),
+        confidence: restored.confidence,
+      });
+    }
+    const now = performance.now();
+    this.lastProcessedAt = 0;
+    this.lastGoodAt = restored.mode === "locked" ? now : 0;
+    this.lastUpdateAt = now;
+    this.lastOverlayCorners.forEach((point) => {
+      point.x = Number.NaN;
+      point.y = Number.NaN;
+    });
+    this.setMode(restored.mode, restored.confidence);
+    return true;
   }
 
   setMode(mode, confidence = this.confidence) {

@@ -521,6 +521,19 @@ class GaussianPortalRenderer {
     return this.runtimeEye.z;
   }
 
+  captureApertureCvState() {
+    return this.apertureSnapper.captureState();
+  }
+
+  restoreApertureCvState(snapshot) {
+    const restored = this.apertureSnapper.restoreState(snapshot);
+    if (restored) {
+      this.lastTransform = "";
+      this.requestRender(true);
+    }
+    return restored;
+  }
+
   setTracking(tracking) {
     this.tracking = tracking;
     this.apertureSnapper.setTracking(tracking);
