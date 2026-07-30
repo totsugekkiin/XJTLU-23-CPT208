@@ -3,10 +3,7 @@ import { RouteSection } from "../components/RouteSection.jsx";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
-import {
-  CHANGMEN_HISTORY_CONTENTS,
-  CHANGMEN_INFO_CONTENTS,
-} from "../../js/content/changmenExperienceContent.js";
+import { CHANGMEN_HISTORY_CONTENTS } from "../../js/content/changmenExperienceContent.js";
 import {
   EXPERIENCE_VARIANT_AR,
   resolveExperienceVariant,
@@ -668,12 +665,6 @@ export function AppMainPage() {
               <div className="river-island__land">
                 <h3 className="river-island__title">历史文化：城门之外的街区</h3>
                 <p className="river-island__desc">明清以来，阊门内外河街并行，米行、布庄、会馆与码头沿水分布，货物可在船运和陆运之间直接转接。</p>
-                {!isArVariant ? (
-                  <div className="river-island__supplement">
-                    <strong>{CHANGMEN_INFO_CONTENTS.culture.title}</strong>
-                    <p>{CHANGMEN_INFO_CONTENTS.culture.article}</p>
-                  </div>
-                ) : null}
               </div>
               <div className="river-island__frame">
                 <img className="river-island__img" src="images/river-changmen-old-street.png" alt="清末民初阊门外街景：商铺林立、人力车与行人穿行" />
@@ -685,12 +676,6 @@ export function AppMainPage() {
               <div className="river-island__land">
                 <h3 className="river-island__title">地理位置：古城西北的水陆节点</h3>
                 <p className="river-island__desc">阊门位于苏州古城西北。城内通往西中市、吴趋坊，城外连接北码头、山塘与外城河，是水路和陆路的交会位置。</p>
-                {!isArVariant ? (
-                  <div className="river-island__supplement">
-                    <strong>{CHANGMEN_INFO_CONTENTS.geography.title}</strong>
-                    <p>{CHANGMEN_INFO_CONTENTS.geography.article}</p>
-                  </div>
-                ) : null}
               </div>
               <div className="river-island__frame">
                 <img className="river-island__img" src="images/river-changmen-aerial.png" alt="今日阊门片区航拍：山塘起点、北码头与环古城河水网交织的城市肌理" />
