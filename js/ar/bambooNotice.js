@@ -34,6 +34,12 @@ export const BAMBOO_NOTICE_COLUMN_POSITIONS = Object.freeze([
   0.2678,
 ]);
 
+export const BAMBOO_NOTICE_FINISH = Object.freeze({
+  colorMultiplier: 1.08,
+  emissiveColor: "#d8b77a",
+  emissiveIntensity: 0.16,
+});
+
 const DEFAULT_OPTIONS = {
   columns: DEFAULT_COLUMNS,
   color: "#241108",
@@ -99,6 +105,24 @@ function drawInkColumns(canvas, options) {
   context.restore();
 }
 
+export function applyBambooNoticeFinish(model) {
+  model.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    materials.forEach((material) => {
+      if (!material?.isMeshStandardMaterial && !material?.isMeshPhysicalMaterial) return;
+      material.color.setRGB(
+        BAMBOO_NOTICE_FINISH.colorMultiplier,
+        BAMBOO_NOTICE_FINISH.colorMultiplier,
+        BAMBOO_NOTICE_FINISH.colorMultiplier,
+      );
+      material.emissive.set(BAMBOO_NOTICE_FINISH.emissiveColor);
+      material.emissiveIntensity = BAMBOO_NOTICE_FINISH.emissiveIntensity;
+      material.needsUpdate = true;
+    });
+  });
+}
+
 export function createBambooNoticeTexture(userOptions = {}) {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   const canvas = document.createElement("canvas");
@@ -131,6 +155,7 @@ export function createBambooNoticeTexture(userOptions = {}) {
 
 export function attachBambooNoticeText(model, userOptions = {}) {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
+  applyBambooNoticeFinish(model);
   model.updateMatrixWorld(true);
 
   const bounds = new THREE.Box3().setFromObject(model);

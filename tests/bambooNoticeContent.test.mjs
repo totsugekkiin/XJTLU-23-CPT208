@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  applyBambooNoticeFinish,
+  BAMBOO_NOTICE_FINISH,
   BAMBOO_NOTICE_CONTENT_OPTIONS,
   DEFAULT_BAMBOO_NOTICE_CONTENT_ID,
   getBambooNoticeContent,
 } from "../js/ar/bambooNotice.js";
+import * as THREE from "three";
 import { AR_MAP_PROFILES } from "../js/ar/arAnchors.js";
 import { CHANGMEN_HISTORY_CONTENTS } from "../js/content/changmenExperienceContent.js";
 
@@ -54,4 +57,20 @@ test("all bamboo anchors shown on the field map have a valid position", () => {
     assert.ok(x >= 0 && x <= 606, `${anchor.id} map x is outside the field plan`);
     assert.ok(y >= 0 && y <= 234, `${anchor.id} map y is outside the field plan`);
   }
+});
+
+test("uses a lighter, softer finish for bamboo model materials", () => {
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const model = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+
+  applyBambooNoticeFinish(model);
+
+  assert.equal(material.color.r, BAMBOO_NOTICE_FINISH.colorMultiplier);
+  assert.equal(material.color.g, BAMBOO_NOTICE_FINISH.colorMultiplier);
+  assert.equal(material.color.b, BAMBOO_NOTICE_FINISH.colorMultiplier);
+  assert.equal(material.emissive.getHexString(), "d8b77a");
+  assert.equal(material.emissiveIntensity, BAMBOO_NOTICE_FINISH.emissiveIntensity);
+
+  material.dispose();
+  model.geometry.dispose();
 });
