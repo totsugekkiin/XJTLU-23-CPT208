@@ -5,10 +5,7 @@ import {
   resolveActiveMapIds,
 } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
-import {
-  evaluateLocalizationCounter,
-  isAcceptedLocalizationPose,
-} from "./localizationAcceptance.js";
+import { AR_BAMBOO_OBSERVED_EVENT } from "./bambooCollection.js";
 import { createVpsPoseStabilizer } from "./vpsPoseStabilizer.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
@@ -245,7 +242,11 @@ export function bootstrapArScene(rootEl) {
   }
   const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
   const requestedProfiles = getMapProfilesForIds(requestedMapIds);
-  const mapProfiles = requestedProfiles;
+  const mapProfiles = debugMode
+    ? requestedProfiles
+    : requestedProfiles.filter((profile) =>
+        profile.anchors.some((anchor) => anchor.type === "bamboo-notice"),
+      );
   const activeMapIds = mapProfiles.map((profile) => profile.mapId);
   const activeMapLabel = formatMapIdList(activeMapIds);
   const totalAnchorCount = mapProfiles.reduce((sum, profile) => sum + profile.anchors.length, 0);
@@ -929,20 +930,17 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function markLocalizationSuccess(mapId = localizedMapId, confirmationCredit = 1) {
+  function markLocalizationSuccess(mapId = localizedMapId) {
     lastSuccessfulLocalizeAt = performance.now();
     const normalizedMapId = Number(mapId);
     const hasMapId = Number.isFinite(normalizedMapId);
     const nextMapId = hasMapId ? normalizedMapId : localizedMapId;
-    const credit = Number.isFinite(Number(confirmationCredit))
-      ? Math.max(1, Math.floor(Number(confirmationCredit)))
-      : 1;
 
     if (nextMapId != null && stableLocalizationMapId === nextMapId) {
-      stableLocalizationCount += credit;
+      stableLocalizationCount += 1;
     } else {
       stableLocalizationMapId = nextMapId;
-      stableLocalizationCount = credit;
+      stableLocalizationCount = 1;
       if (contentRevealed) {
         contentRevealed = false;
         closeStory();
@@ -959,15 +957,12 @@ export function bootstrapArScene(rootEl) {
 
   function markLocalizationMiss() {
     if (recognitionMode === "marker") return;
+    stableLocalizationCount = 0;
     restCandidateMapId = null;
     restCandidateMapConfirmations = 0;
     if (!lastSuccessfulLocalizeAt || performance.now() - lastSuccessfulLocalizeAt <= LOCALIZATION_GRACE_MS) {
-      // A short miss is common while the user is walking or panning. Keep the
-      // accepted confirmation evidence inside the grace window; rejected pose
-      // jumps still contribute no evidence of their own.
       return;
     }
-    stableLocalizationCount = 0;
     if (contentRevealed) {
       contentRevealed = false;
       closeStory();
@@ -1028,6 +1023,9 @@ export function bootstrapArScene(rootEl) {
         getCameraViewport: () => sdkSession?.camera?.el ?? null,
         mapProfiles,
         onAnchorTap: openStory,
+        onAnchorVisible: (detail) => {
+          rootEl.dispatchEvent(new CustomEvent(AR_BAMBOO_OBSERVED_EVENT, { detail }));
+        },
       });
       if (localizedMapId != null) arRenderer.setActiveMapId(localizedMapId);
       arRenderer.start();
@@ -1550,6 +1548,7 @@ export function bootstrapArScene(rootEl) {
           );
           return;
         }
+        markLocalizationSuccess(rawPose.map);
         const pose = {
           ...rawPose,
           rotation: applyImmersalPoseCorrection(rawPose.rotation),
@@ -1572,26 +1571,6 @@ export function bootstrapArScene(rootEl) {
               poseFilter: { observation: poseObservation, ...stabilized.tracking },
             }
           : pose;
-        if (!poseObservation.accepted) {
-          markLocalizationMiss();
-          setDebug(
-            {
-              status: "pose awaiting confirmation",
-              immersal: "pose rejected",
-              latency: `${data.elapsedMs ?? elapsed}ms`,
-              lastError: `pose ${poseObservation.reason}`,
-              lastImageBytes: data.imageBytes ?? payload.imageBase64.length,
-              lastPose: renderPose,
-            },
-            "场景匹配成功，但位姿尚未通过稳定校验",
-            { result, poseObservation },
-          );
-          return;
-        }
-        markLocalizationSuccess(
-          rawPose.map,
-          poseObservation.confirmations ?? 1,
-        );
         applyLocalizedMapId(rawPose.map);
         lastMapPose = poseForRenderer(renderPose);
         updateArRendererPose(renderPose);
@@ -1644,44 +1623,26 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function consumeSdkLocalization(trackedPose) {
-    if (!sdkSession) return null;
-
-    const decision = evaluateLocalizationCounter({
-      lastCounter: sdkLastLocalizeCounter,
-      counter: sdkSession.localization.counter,
-      trackedPose,
-    });
-    if (!decision.isNew) return decision;
-
-    sdkLastLocalizeCounter = decision.lastCounter;
-    if (decision.accepted) {
-      markLocalizationSuccess(
-        decision.mapId ?? localizedMapId,
-        decision.confirmationCredit,
-      );
-    } else {
-      sdkFailureCount += 1;
-      markLocalizationMiss();
-    }
-    return decision;
-  }
-
-  function trackSdkLocalizeAttempts(trackedPose = null) {
-    if (!sdkSession) return null;
+  function trackSdkLocalizeAttempts() {
+    if (!sdkSession) return;
 
     const counter = sdkSession.localization.counter;
     const isLocalizing = sdkSession.localization.localizing;
-    const completedAttempt = sdkWasLocalizing && !isLocalizing;
-    const decision = consumeSdkLocalization(trackedPose);
 
-    if (completedAttempt && !decision?.isNew && counter <= sdkLastLocalizeCounter) {
-      sdkFailureCount += 1;
-      markLocalizationMiss();
+    if (sdkWasLocalizing && !isLocalizing) {
+      if (counter > sdkLastLocalizeCounter) {
+        sdkLastLocalizeCounter = counter;
+        markLocalizationSuccess(localizedMapId);
+      } else {
+        sdkFailureCount += 1;
+        markLocalizationMiss();
+      }
+    } else if (counter > sdkLastLocalizeCounter) {
+      sdkLastLocalizeCounter = counter;
+      markLocalizationSuccess(localizedMapId);
     }
 
     sdkWasLocalizing = isLocalizing;
-    return decision;
   }
 
   function updateSdkDebug(now) {
@@ -1734,28 +1695,21 @@ export function bootstrapArScene(rootEl) {
       await sdkSession.localizeServerAsync();
       if (recognitionMode === "marker") return;
       const tracked = getTrackedPoseSnapshot(performance.now());
-      const decision = consumeSdkLocalization(tracked);
-      if (tracked && decision?.accepted) {
+      markLocalizationSuccess(tracked?.mapId ?? localizedMapId);
+      if (tracked) {
         if (tracked.mapId != null) applyLocalizedMapId(tracked.mapId);
         lastMapPose = tracked;
         updateArRendererPose(tracked);
       }
-      logDebug(
-        decision?.accepted
-          ? "SDK server 辅助识别成功，VPS 位姿已更新"
-          : "SDK server 返回定位，但位姿尚未通过稳定校验",
-        {
-          reason,
-          elapsed: Math.round(performance.now() - startedAt),
-          poseDecision: decision?.reason ?? "missing-decision",
-        },
-      );
+      logDebug("SDK server 辅助识别成功，VPS 位姿已更新", {
+        reason,
+        elapsed: Math.round(performance.now() - startedAt),
+      });
     } catch (err) {
       sdkFailureCount += 1;
       markLocalizationMiss();
       logDebug("SDK server 辅助识别失败", err?.message || String(err));
     } finally {
-      sdkWasLocalizing = sdkSession?.localization.localizing ?? false;
       sdkServerAssistPending = false;
       sdkLastDebugAt = 0;
       updateSdkDebug(performance.now());
@@ -1800,17 +1754,16 @@ export function bootstrapArScene(rootEl) {
         sdkSession.localizeDevice(now);
       }
 
-      let trackedPose = null;
       if (sdkSession.localization.counter > 0) {
-        trackedPose = getTrackedPoseSnapshot(now);
-        if (trackedPose && isAcceptedLocalizationPose(trackedPose)) {
+        const trackedPose = getTrackedPoseSnapshot(now);
+        if (trackedPose) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
+          trackSdkLocalizeAttempts();
           updateArRendererPose(trackedPose);
         }
       } else if (lastMapPose) {
         updateArRendererPose(lastMapPose);
       }
-      trackSdkLocalizeAttempts(trackedPose);
 
       updateSdkDebug(now);
       sdkFrameId = requestAnimationFrame(tick);
@@ -2153,34 +2106,23 @@ export function bootstrapArScene(rootEl) {
       try {
         await sdkSession.localizeDeviceAsync();
         const trackedPose = getTrackedPoseSnapshot(performance.now());
-        const decision = consumeSdkLocalization(trackedPose);
-        sdkWasLocalizing = sdkSession.localization.localizing;
-        if (trackedPose && decision?.accepted) {
+        markLocalizationSuccess(trackedPose?.mapId ?? localizedMapId);
+        if (trackedPose) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
           updateArRendererPose(trackedPose);
         }
         setDebug(
           {
-            status: decision?.accepted
-              ? sdkServerAssistEnabled
-                ? "tracking (sdk-device+server)"
-                : "tracking (sdk-device)"
-              : "pose awaiting confirmation",
-            immersal: decision?.accepted ? "device recognized" : "device pose rejected",
+            status: sdkServerAssistEnabled ? "tracking (sdk-device+server)" : "tracking (sdk-device)",
+            immersal: "device recognized",
             success: sdkSession.localization.counter,
-            lastError: decision?.accepted ? "none" : `pose ${decision?.reason ?? "rejected"}`,
+            lastError: "none",
             lastPose: trackedPose ?? debugState.lastPose,
           },
-          decision?.accepted
-            ? "手动设备端识别成功"
-            : "手动设备端返回定位，但位姿尚未通过稳定校验",
-          {
-            localizeInfo: sdkSession.localizeInfo,
-            poseDecision: decision?.reason ?? "missing-decision",
-          },
+          "手动设备端识别成功",
+          sdkSession.localizeInfo,
         );
       } catch (err) {
-        sdkWasLocalizing = sdkSession?.localization.localizing ?? false;
         sdkFailureCount += 1;
         markLocalizationMiss();
         if (!sdkServerAssistEnabled) {

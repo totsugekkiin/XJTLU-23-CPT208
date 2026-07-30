@@ -52,7 +52,12 @@ function createPortalAnchor(anchor, mapId) {
  * 与摆放工具使用同一套地图坐标系，不做额外 scale 归一化。
  */
 export function createArRenderer(cameraWrap, options = {}) {
-  const { getCameraViewport = null, mapProfiles = [], onAnchorTap = null } = options;
+  const {
+    getCameraViewport = null,
+    mapProfiles = [],
+    onAnchorTap = null,
+    onAnchorVisible = null,
+  } = options;
   const canvas = document.createElement("canvas");
   canvas.id = "ar-three-canvas";
   cameraWrap.appendChild(canvas);
@@ -81,6 +86,11 @@ export function createArRenderer(cameraWrap, options = {}) {
   const gyroQuat = new THREE.Quaternion();
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  const projectionMatrix = new THREE.Matrix4();
+  const viewFrustum = new THREE.Frustum();
+  const anchorCenter = new THREE.Vector3();
+  const anchorClipPosition = new THREE.Vector3();
+  const observedAnchorKeys = new Set();
 
   let modelsReady = false;
   let hasPose = false;
@@ -121,6 +131,8 @@ export function createArRenderer(cameraWrap, options = {}) {
             const model = gltf.scene.clone(true);
             model.name = `anchor-${profile.mapId}-${anchor.id}`;
             model.userData.arMapId = profile.mapId;
+            model.userData.arAnchorType = anchor.type ?? "model";
+            model.userData.arContentId = anchor.content ?? null;
             if (anchor.type === "bamboo-notice") {
               const content = getBambooNoticeContent(anchor.content);
               attachBambooNoticeText(model, {
@@ -180,6 +192,7 @@ export function createArRenderer(cameraWrap, options = {}) {
     anchorCount = loadTasks.length;
     modelsReady = true;
     if (contentVisible && hasPose) setModelsVisible(true);
+    detectVisibleBambooAnchors();
   })();
 
   loadPromise.catch((err) => {
@@ -268,6 +281,40 @@ export function createArRenderer(cameraWrap, options = {}) {
     cameraWrap.appendChild(canvas);
   }
 
+  function detectVisibleBambooAnchors() {
+    if (!modelsReady || !hasPose || typeof onAnchorVisible !== "function") return;
+    camera.updateMatrixWorld(true);
+    scene.updateMatrixWorld(true);
+    projectionMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    viewFrustum.setFromProjectionMatrix(projectionMatrix);
+
+    scene.children.forEach((child) => {
+      if (child.userData?.arAnchorType !== "bamboo-notice") return;
+      if (activeMapId != null && child.userData.arMapId !== activeMapId) return;
+      const key = `${child.userData.arMapId}:${child.userData.arAnchorId}`;
+      if (observedAnchorKeys.has(key)) return;
+
+      const bounds = new THREE.Box3().setFromObject(child);
+      if (bounds.isEmpty()) return;
+      bounds.getCenter(anchorCenter);
+      if (!viewFrustum.containsPoint(anchorCenter)) return;
+      anchorClipPosition.copy(anchorCenter).project(camera);
+      if (
+        anchorClipPosition.z < -1 ||
+        anchorClipPosition.z > 1 ||
+        Math.abs(anchorClipPosition.x) > 1 ||
+        Math.abs(anchorClipPosition.y) > 1
+      ) return;
+
+      observedAnchorKeys.add(key);
+      onAnchorVisible({
+        mapId: child.userData.arMapId,
+        anchorId: child.userData.arAnchorId ?? null,
+        contentId: child.userData.arContentId ?? null,
+      });
+    });
+  }
+
   /**
    * @param {{ position: {x,y,z}, rotation: {x,y,z,w} }} pose
    * @param {{ x,y,z,w } | null} gyroQuatRaw Immersal gyroData（与官方示例一致，乘到 rotation 上）
@@ -314,6 +361,7 @@ export function createArRenderer(cameraWrap, options = {}) {
       camera.fov = vFov;
       camera.updateProjectionMatrix();
     }
+    detectVisibleBambooAnchors();
 
     const logNow = performance.now();
     if (logNow - agentLastCameraLogAt > 1000) {

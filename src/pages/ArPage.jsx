@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { COMBINED_MAP_IDS, STANDALONE_MAP_ID } from "../../js/ar/arAnchors.js";
+import { ArBambooBackpack } from "../components/ArBambooBackpack.jsx";
 import { ArBambooMap } from "../components/ArBambooMap.jsx";
 
 export function ArPage() {
@@ -57,6 +58,7 @@ export function ArPage() {
 
       <div id="ar-ui">
         <ArBambooMap />
+        <ArBambooBackpack />
 
         <div id="ar-start-overlay">
           <div className="ar-start-mark" aria-hidden="true">簡</div>
