@@ -496,6 +496,22 @@ export function AppMainPage() {
                       </p>
                     </div>
                   </div>
+                  <div className="cm-filmstrip__item">
+                    <div className="cm-filmstrip__segment" />
+                    <div className="cm-filmstrip__dot" />
+                    <div className="cm-filmstrip__year">古城八大城门</div>
+                    <img
+                      src="images/changmen-city-wall-gates-map.png"
+                      alt="阊门和古城墙位置示意图，标注苏州古城八大城门"
+                      style={{ objectFit: "contain", backgroundColor: "#0d0d0d" }}
+                    />
+                    <div className="cm-filmstrip__info">
+                      <h3>阊门和古城墙位置示意图（来源：苏州古城墙系列工程）</h3>
+                      <p>
+                        阊门是环绕瓮城的八大城门之一。八大城门分别为：阊门、平门、齐门、娄门、相门、葑门、盘门、胥门。
+                      </p>
+                    </div>
+                  </div>
                   {!isArVariant ? (
                     <TextFilmstripCard
                       contentId="southern-song"
