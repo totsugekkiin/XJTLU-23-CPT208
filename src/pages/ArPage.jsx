@@ -71,8 +71,11 @@ export function ArPage() {
                 : "开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。"}
             </p>
           </div>
-          <label className="ar-field ar-dev-only" htmlFor="ar-map-select">
-            识别区域
+          <label className="ar-field ar-map-mode-field" htmlFor="ar-map-select">
+            <span className="ar-map-mode-field__heading">
+              <b>定位地图</b>
+              <small>开始前选择扫描范围</small>
+            </span>
             <select id="ar-map-select" defaultValue="all">
               <option value="all">三地图组合（{COMBINED_MAP_IDS.join(" / ")}）</option>
               <option value={STANDALONE_MAP_ID}>单地图（{STANDALONE_MAP_ID}）</option>
