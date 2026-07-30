@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { AR_MAP_PROFILES } from "../../js/ar/arAnchors.js";
+import { ArBambooMap } from "../components/ArBambooMap.jsx";
 
 export function ArPage() {
   const immersalOnlyMode =
@@ -51,6 +52,8 @@ export function ArPage() {
       </div>
 
       <div id="ar-ui">
+        <ArBambooMap />
+
         <div id="ar-start-overlay">
           <div className="ar-start-mark" aria-hidden="true">簡</div>
           <div className="ar-start-copy">

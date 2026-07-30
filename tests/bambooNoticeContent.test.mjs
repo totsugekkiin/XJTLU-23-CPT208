@@ -42,3 +42,16 @@ test("all configured bamboo anchors reference known content", () => {
     assert.equal(getBambooNoticeContent(anchor.content).id, anchor.content);
   }
 });
+
+test("all bamboo anchors have a valid field-map position", () => {
+  const anchors = AR_MAP_PROFILES.flatMap((profile) => profile.anchors)
+    .filter((anchor) => anchor.type === "bamboo-notice");
+
+  assert.equal(anchors.length, 5);
+  for (const anchor of anchors) {
+    assert.equal(anchor.fieldMapPosition.length, 2);
+    const [x, y] = anchor.fieldMapPosition;
+    assert.ok(x >= 0 && x <= 606, `${anchor.id} map x is outside the field plan`);
+    assert.ok(y >= 0 && y <= 234, `${anchor.id} map y is outside the field plan`);
+  }
+});

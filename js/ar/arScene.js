@@ -468,6 +468,10 @@ export function bootstrapArScene(rootEl) {
     const id = Number(mapId);
     if (!Number.isFinite(id) || !activeMapIds.includes(id)) return;
     localizedMapId = id;
+    rootEl.dataset.activeMapId = String(id);
+    rootEl.dispatchEvent(new CustomEvent("ar:localized-map-change", {
+      detail: { mapId: id },
+    }));
     try {
       window.localStorage.setItem(LAST_LOCALIZED_MAP_KEY, String(id));
     } catch {

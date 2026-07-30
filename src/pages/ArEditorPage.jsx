@@ -256,6 +256,7 @@ export function ArEditorPage() {
 
       <nav className="ar-editor-nav">
         <a href={`loc-ar.html?map=${initialMapId}`}>← AR 测试</a>
+        <a href="map-point-editor.html">地图点位台</a>
         <a href="index.html">首页</a>
       </nav>
     </div>

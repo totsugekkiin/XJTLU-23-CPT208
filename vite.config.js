@@ -14,6 +14,7 @@ export default defineConfig({
         portfolio: resolve(__dirname, "portfolio.html"),
         locAr: resolve(__dirname, "loc-ar.html"),
         locArEditor: resolve(__dirname, "loc-ar-editor.html"),
+        mapPointEditor: resolve(__dirname, "map-point-editor.html"),
         markerAr: resolve(__dirname, "marker-ar.html"),
         markerTextureTests: resolve(__dirname, "marker-texture-tests.html"),
         portalModelEditor: resolve(__dirname, "portal-model-editor.html"),
