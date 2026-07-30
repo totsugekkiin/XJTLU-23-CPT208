@@ -5,6 +5,10 @@ import {
   resolveActiveMapIds,
 } from "./arAnchors.js";
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
+import {
+  evaluateLocalizationCounter,
+  isAcceptedLocalizationPose,
+} from "./localizationAcceptance.js";
 import { createVpsPoseStabilizer } from "./vpsPoseStabilizer.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
@@ -956,12 +960,15 @@ export function bootstrapArScene(rootEl) {
 
   function markLocalizationMiss() {
     if (recognitionMode === "marker") return;
-    stableLocalizationCount = 0;
     restCandidateMapId = null;
     restCandidateMapConfirmations = 0;
     if (!lastSuccessfulLocalizeAt || performance.now() - lastSuccessfulLocalizeAt <= LOCALIZATION_GRACE_MS) {
+      // Keep already-revealed content through a brief camera miss, but require
+      // pre-reveal confirmations to remain consecutive.
+      if (!contentRevealed) stableLocalizationCount = 0;
       return;
     }
+    stableLocalizationCount = 0;
     if (contentRevealed) {
       contentRevealed = false;
       closeStory();
@@ -1544,7 +1551,6 @@ export function bootstrapArScene(rootEl) {
           );
           return;
         }
-        markLocalizationSuccess(rawPose.map);
         const pose = {
           ...rawPose,
           rotation: applyImmersalPoseCorrection(rawPose.rotation),
@@ -1567,6 +1573,23 @@ export function bootstrapArScene(rootEl) {
               poseFilter: { observation: poseObservation, ...stabilized.tracking },
             }
           : pose;
+        if (!poseObservation.accepted) {
+          markLocalizationMiss();
+          setDebug(
+            {
+              status: "pose awaiting confirmation",
+              immersal: "pose rejected",
+              latency: `${data.elapsedMs ?? elapsed}ms`,
+              lastError: `pose ${poseObservation.reason}`,
+              lastImageBytes: data.imageBytes ?? payload.imageBase64.length,
+              lastPose: renderPose,
+            },
+            "场景匹配成功，但位姿尚未通过稳定校验",
+            { result, poseObservation },
+          );
+          return;
+        }
+        markLocalizationSuccess(rawPose.map);
         applyLocalizedMapId(rawPose.map);
         lastMapPose = poseForRenderer(renderPose);
         updateArRendererPose(renderPose);
@@ -1619,26 +1642,41 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function trackSdkLocalizeAttempts() {
-    if (!sdkSession) return;
+  function consumeSdkLocalization(trackedPose) {
+    if (!sdkSession) return null;
+
+    const decision = evaluateLocalizationCounter({
+      lastCounter: sdkLastLocalizeCounter,
+      counter: sdkSession.localization.counter,
+      trackedPose,
+    });
+    if (!decision.isNew) return decision;
+
+    sdkLastLocalizeCounter = decision.lastCounter;
+    if (decision.accepted) {
+      markLocalizationSuccess(decision.mapId ?? localizedMapId);
+    } else {
+      sdkFailureCount += 1;
+      markLocalizationMiss();
+    }
+    return decision;
+  }
+
+  function trackSdkLocalizeAttempts(trackedPose = null) {
+    if (!sdkSession) return null;
 
     const counter = sdkSession.localization.counter;
     const isLocalizing = sdkSession.localization.localizing;
+    const completedAttempt = sdkWasLocalizing && !isLocalizing;
+    const decision = consumeSdkLocalization(trackedPose);
 
-    if (sdkWasLocalizing && !isLocalizing) {
-      if (counter > sdkLastLocalizeCounter) {
-        sdkLastLocalizeCounter = counter;
-        markLocalizationSuccess(localizedMapId);
-      } else {
-        sdkFailureCount += 1;
-        markLocalizationMiss();
-      }
-    } else if (counter > sdkLastLocalizeCounter) {
-      sdkLastLocalizeCounter = counter;
-      markLocalizationSuccess(localizedMapId);
+    if (completedAttempt && !decision?.isNew && counter <= sdkLastLocalizeCounter) {
+      sdkFailureCount += 1;
+      markLocalizationMiss();
     }
 
     sdkWasLocalizing = isLocalizing;
+    return decision;
   }
 
   function updateSdkDebug(now) {
@@ -1691,21 +1729,28 @@ export function bootstrapArScene(rootEl) {
       await sdkSession.localizeServerAsync();
       if (recognitionMode === "marker") return;
       const tracked = getTrackedPoseSnapshot(performance.now());
-      markLocalizationSuccess(tracked?.mapId ?? localizedMapId);
-      if (tracked) {
+      const decision = consumeSdkLocalization(tracked);
+      if (tracked && decision?.accepted) {
         if (tracked.mapId != null) applyLocalizedMapId(tracked.mapId);
         lastMapPose = tracked;
         updateArRendererPose(tracked);
       }
-      logDebug("SDK server 辅助识别成功，VPS 位姿已更新", {
-        reason,
-        elapsed: Math.round(performance.now() - startedAt),
-      });
+      logDebug(
+        decision?.accepted
+          ? "SDK server 辅助识别成功，VPS 位姿已更新"
+          : "SDK server 返回定位，但位姿尚未通过稳定校验",
+        {
+          reason,
+          elapsed: Math.round(performance.now() - startedAt),
+          poseDecision: decision?.reason ?? "missing-decision",
+        },
+      );
     } catch (err) {
       sdkFailureCount += 1;
       markLocalizationMiss();
       logDebug("SDK server 辅助识别失败", err?.message || String(err));
     } finally {
+      sdkWasLocalizing = sdkSession?.localization.localizing ?? false;
       sdkServerAssistPending = false;
       sdkLastDebugAt = 0;
       updateSdkDebug(performance.now());
@@ -1750,16 +1795,17 @@ export function bootstrapArScene(rootEl) {
         sdkSession.localizeDevice(now);
       }
 
+      let trackedPose = null;
       if (sdkSession.localization.counter > 0) {
-        const trackedPose = getTrackedPoseSnapshot(now);
-        if (trackedPose) {
+        trackedPose = getTrackedPoseSnapshot(now);
+        if (trackedPose && isAcceptedLocalizationPose(trackedPose)) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
-          trackSdkLocalizeAttempts();
           updateArRendererPose(trackedPose);
         }
       } else if (lastMapPose) {
         updateArRendererPose(lastMapPose);
       }
+      trackSdkLocalizeAttempts(trackedPose);
 
       updateSdkDebug(now);
       sdkFrameId = requestAnimationFrame(tick);
@@ -2102,23 +2148,34 @@ export function bootstrapArScene(rootEl) {
       try {
         await sdkSession.localizeDeviceAsync();
         const trackedPose = getTrackedPoseSnapshot(performance.now());
-        markLocalizationSuccess(trackedPose?.mapId ?? localizedMapId);
-        if (trackedPose) {
+        const decision = consumeSdkLocalization(trackedPose);
+        sdkWasLocalizing = sdkSession.localization.localizing;
+        if (trackedPose && decision?.accepted) {
           if (trackedPose.mapId != null) applyLocalizedMapId(trackedPose.mapId);
           updateArRendererPose(trackedPose);
         }
         setDebug(
           {
-            status: sdkServerAssistEnabled ? "tracking (sdk-device+server)" : "tracking (sdk-device)",
-            immersal: "device recognized",
+            status: decision?.accepted
+              ? sdkServerAssistEnabled
+                ? "tracking (sdk-device+server)"
+                : "tracking (sdk-device)"
+              : "pose awaiting confirmation",
+            immersal: decision?.accepted ? "device recognized" : "device pose rejected",
             success: sdkSession.localization.counter,
-            lastError: "none",
+            lastError: decision?.accepted ? "none" : `pose ${decision?.reason ?? "rejected"}`,
             lastPose: trackedPose ?? debugState.lastPose,
           },
-          "手动设备端识别成功",
-          sdkSession.localizeInfo,
+          decision?.accepted
+            ? "手动设备端识别成功"
+            : "手动设备端返回定位，但位姿尚未通过稳定校验",
+          {
+            localizeInfo: sdkSession.localizeInfo,
+            poseDecision: decision?.reason ?? "missing-decision",
+          },
         );
       } catch (err) {
+        sdkWasLocalizing = sdkSession?.localization.localizing ?? false;
         sdkFailureCount += 1;
         markLocalizationMiss();
         if (!sdkServerAssistEnabled) {
