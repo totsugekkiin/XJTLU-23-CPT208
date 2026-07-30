@@ -1,10 +1,14 @@
 import React, { useEffect } from "react";
-import { AR_MAP_PROFILES } from "../../js/ar/arAnchors.js";
+import { COMBINED_MAP_IDS, STANDALONE_MAP_ID } from "../../js/ar/arAnchors.js";
 import { ArBambooMap } from "../components/ArBambooMap.jsx";
 
 export function ArPage() {
-  const immersalOnlyMode =
-    new URLSearchParams(window.location.search).get("recognition") === "immersal";
+  const searchParams = new URLSearchParams(window.location.search);
+  const immersalOnlyMode = searchParams.get("recognition") === "immersal";
+  const selectedMapId = searchParams.get("map");
+  const placementEditorHref = selectedMapId
+    ? `loc-ar-editor.html?map=${encodeURIComponent(selectedMapId)}`
+    : "loc-ar-editor.html";
 
   const exitAr = () => {
     const returnUrl = new URL("appMain.html?variant=ar&resume=gate", window.location.href);
@@ -68,12 +72,8 @@ export function ArPage() {
           <label className="ar-field ar-dev-only" htmlFor="ar-map-select">
             识别区域
             <select id="ar-map-select" defaultValue="all">
-              <option value="all">全部区域（自动识别）</option>
-              {AR_MAP_PROFILES.map((profile) => (
-                <option key={profile.mapId} value={profile.mapId}>
-                  {profile.label} ({profile.mapId})
-                </option>
-              ))}
+              <option value="all">三地图组合（{COMBINED_MAP_IDS.join(" / ")}）</option>
+              <option value={STANDALONE_MAP_ID}>单地图（{STANDALONE_MAP_ID}）</option>
             </select>
           </label>
           <button id="ar-start-btn" type="button">
@@ -263,7 +263,7 @@ export function ArPage() {
       </div>
 
       <nav id="ar-back-nav">
-        <a id="ar-back" className="ar-dev-only" href="loc-ar-editor.html">
+        <a id="ar-back" className="ar-dev-only" href={placementEditorHref}>
           摆放工具
         </a>
         <button id="ar-exit" type="button" onClick={exitAr}>

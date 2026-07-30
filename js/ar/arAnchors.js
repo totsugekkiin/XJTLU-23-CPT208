@@ -1,5 +1,11 @@
-/** 默认测试地图（单地图模式或未指定时使用） */
+/** 摆放控制台的默认编辑地图。 */
 export const DEFAULT_MAP_ID = 148753;
+
+/** 默认识别模式使用的三张连续区域地图。 */
+export const COMBINED_MAP_IDS = Object.freeze([148753, 149877, 149878]);
+
+/** 可单独用于识别和锚点标定的新地图。 */
+export const STANDALONE_MAP_ID = 149922;
 
 /**
  * 多地图 AR 配置：每张 Immersal 地图可有独立锚点
@@ -81,6 +87,62 @@ export const AR_MAP_PROFILES = [
       },
     ],
   },
+  {
+    mapId: STANDALONE_MAP_ID,
+    label: "单地图 149922",
+    anchors: [
+      {
+        id: "bamboo-notice",
+        label: "阊门竹简 1",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "ming-qing",
+        position: [4.528, -0.4336, -9.5093],
+        rotation: [0, -1.0643, 0],
+        scale: [1, 1, 1],
+      },
+      {
+        id: "bamboo-notice-2",
+        label: "阊门竹简 2",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "modern",
+        position: [1.7951, -0.4336, -13.6983],
+        rotation: [0, -1.0643, 0],
+        scale: [1, 1, 1],
+      },
+      {
+        id: "bamboo-notice-3",
+        label: "阊门竹简 3",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "southern-song",
+        position: [5.1921, -0.4336, -2.8023],
+        rotation: [3.1416, -1.301, 3.1416],
+        scale: [1, 1, 1],
+      },
+      {
+        id: "bamboo-notice-4",
+        label: "阊门竹简 4",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "tang",
+        position: [4.4102, -0.4336, 0.2182],
+        rotation: [3.1416, -1.301, 3.1416],
+        scale: [1, 1, 1],
+      },
+      {
+        id: "bamboo-notice-5",
+        label: "阊门竹简 5",
+        type: "bamboo-notice",
+        url: "/models/bamboo-notice-ar.glb",
+        content: "spring-autumn",
+        position: [-1.0005, -0.4336, 0.9781],
+        rotation: [0, 1.4301, 0],
+        scale: [1, 1, 1],
+      },
+    ],
+  },
 ];
 
 export function getAllMapIds() {
@@ -132,7 +194,7 @@ export function resolveActiveMapIds(options = {}) {
     if (Number.isFinite(id)) return [id];
   }
 
-  return getAllMapIds();
+  return [...COMBINED_MAP_IDS];
 }
 
 export function formatMapIdList(mapIds) {

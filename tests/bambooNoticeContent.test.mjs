@@ -43,9 +43,9 @@ test("all configured bamboo anchors reference known content", () => {
   }
 });
 
-test("all bamboo anchors have a valid field-map position", () => {
+test("all bamboo anchors shown on the field map have a valid position", () => {
   const anchors = AR_MAP_PROFILES.flatMap((profile) => profile.anchors)
-    .filter((anchor) => anchor.type === "bamboo-notice");
+    .filter((anchor) => anchor.type === "bamboo-notice" && anchor.fieldMapPosition);
 
   assert.equal(anchors.length, 5);
   for (const anchor of anchors) {

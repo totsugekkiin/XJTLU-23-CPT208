@@ -7,7 +7,11 @@ import {
   EXPERIENCE_VARIANT_TEXT,
   resolveExperienceVariant,
 } from "../js/appmain/experienceVariant.js";
-import { AR_MAP_PROFILES } from "../js/ar/arAnchors.js";
+import {
+  AR_MAP_PROFILES,
+  COMBINED_MAP_IDS,
+  STANDALONE_MAP_ID,
+} from "../js/ar/arAnchors.js";
 import { CHANGMEN_HISTORY_CONTENTS } from "../js/content/changmenExperienceContent.js";
 
 test("resolves the two explicit experience variants", () => {
@@ -32,14 +36,17 @@ test("preserves the chosen variant when building internal links", () => {
 });
 
 test("keeps AR bamboo notices aligned with the shared non-AR history content", () => {
-  const arBambooContentIds = AR_MAP_PROFILES
-    .flatMap((profile) => profile.anchors)
-    .filter((anchor) => anchor.type === "bamboo-notice")
-    .map((anchor) => anchor.content)
-    .sort();
   const sharedHistoryContentIds = CHANGMEN_HISTORY_CONTENTS
     .map((content) => content.id)
     .sort();
 
-  assert.deepEqual(arBambooContentIds, sharedHistoryContentIds);
+  const contentIdsForMaps = (mapIds) => AR_MAP_PROFILES
+    .filter((profile) => mapIds.includes(profile.mapId))
+    .flatMap((profile) => profile.anchors)
+    .filter((anchor) => anchor.type === "bamboo-notice")
+    .map((anchor) => anchor.content)
+    .sort();
+
+  assert.deepEqual(contentIdsForMaps(COMBINED_MAP_IDS), sharedHistoryContentIds);
+  assert.deepEqual(contentIdsForMaps([STANDALONE_MAP_ID]), sharedHistoryContentIds);
 });

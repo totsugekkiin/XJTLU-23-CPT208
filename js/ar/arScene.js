@@ -245,11 +245,7 @@ export function bootstrapArScene(rootEl) {
   }
   const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
   const requestedProfiles = getMapProfilesForIds(requestedMapIds);
-  const mapProfiles = debugMode
-    ? requestedProfiles
-    : requestedProfiles.filter((profile) =>
-        profile.anchors.some((anchor) => anchor.type === "bamboo-notice"),
-      );
+  const mapProfiles = requestedProfiles;
   const activeMapIds = mapProfiles.map((profile) => profile.mapId);
   const activeMapLabel = formatMapIdList(activeMapIds);
   const totalAnchorCount = mapProfiles.reduce((sum, profile) => sum + profile.anchors.length, 0);
@@ -933,17 +929,20 @@ export function bootstrapArScene(rootEl) {
     }
   }
 
-  function markLocalizationSuccess(mapId = localizedMapId) {
+  function markLocalizationSuccess(mapId = localizedMapId, confirmationCredit = 1) {
     lastSuccessfulLocalizeAt = performance.now();
     const normalizedMapId = Number(mapId);
     const hasMapId = Number.isFinite(normalizedMapId);
     const nextMapId = hasMapId ? normalizedMapId : localizedMapId;
+    const credit = Number.isFinite(Number(confirmationCredit))
+      ? Math.max(1, Math.floor(Number(confirmationCredit)))
+      : 1;
 
     if (nextMapId != null && stableLocalizationMapId === nextMapId) {
-      stableLocalizationCount += 1;
+      stableLocalizationCount += credit;
     } else {
       stableLocalizationMapId = nextMapId;
-      stableLocalizationCount = 1;
+      stableLocalizationCount = credit;
       if (contentRevealed) {
         contentRevealed = false;
         closeStory();
@@ -963,9 +962,9 @@ export function bootstrapArScene(rootEl) {
     restCandidateMapId = null;
     restCandidateMapConfirmations = 0;
     if (!lastSuccessfulLocalizeAt || performance.now() - lastSuccessfulLocalizeAt <= LOCALIZATION_GRACE_MS) {
-      // Keep already-revealed content through a brief camera miss, but require
-      // pre-reveal confirmations to remain consecutive.
-      if (!contentRevealed) stableLocalizationCount = 0;
+      // A short miss is common while the user is walking or panning. Keep the
+      // accepted confirmation evidence inside the grace window; rejected pose
+      // jumps still contribute no evidence of their own.
       return;
     }
     stableLocalizationCount = 0;
@@ -1589,7 +1588,10 @@ export function bootstrapArScene(rootEl) {
           );
           return;
         }
-        markLocalizationSuccess(rawPose.map);
+        markLocalizationSuccess(
+          rawPose.map,
+          poseObservation.confirmations ?? 1,
+        );
         applyLocalizedMapId(rawPose.map);
         lastMapPose = poseForRenderer(renderPose);
         updateArRendererPose(renderPose);
@@ -1654,7 +1656,10 @@ export function bootstrapArScene(rootEl) {
 
     sdkLastLocalizeCounter = decision.lastCounter;
     if (decision.accepted) {
-      markLocalizationSuccess(decision.mapId ?? localizedMapId);
+      markLocalizationSuccess(
+        decision.mapId ?? localizedMapId,
+        decision.confirmationCredit,
+      );
     } else {
       sdkFailureCount += 1;
       markLocalizationMiss();

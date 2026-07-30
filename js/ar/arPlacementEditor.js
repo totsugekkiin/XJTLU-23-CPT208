@@ -3,7 +3,13 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { AR_MAP_PROFILES, DEFAULT_MAP_ID, resolveActiveMapIds } from "./arAnchors.js";
+import {
+  AR_MAP_PROFILES,
+  COMBINED_MAP_IDS,
+  DEFAULT_MAP_ID,
+  STANDALONE_MAP_ID,
+  resolveActiveMapIds,
+} from "./arAnchors.js";
 import {
   attachBambooNoticeText,
   BAMBOO_NOTICE_CONTENT_OPTIONS,
@@ -47,6 +53,9 @@ function anchorToState(anchor) {
     content: type === "bamboo-notice"
       ? getBambooNoticeContent(anchor.content).id
       : anchor.content ?? null,
+    fieldMapPosition: Array.isArray(anchor.fieldMapPosition)
+      ? [...anchor.fieldMapPosition]
+      : null,
     position: [...(anchor.position ?? [0, 0, 0])],
     rotation: [...(anchor.rotation ?? [0, 0, 0])],
     scale: [...(anchor.scale ?? [1, 1, 1])],
@@ -62,9 +71,12 @@ function formatAnchorExport(anchor) {
     : "";
   const urlLine = anchor.url ? `\n        url: ${JSON.stringify(anchor.url)},` : "";
   const contentLine = anchor.content ? `\n        content: ${JSON.stringify(anchor.content)},` : "";
+  const fieldMapLine = Array.isArray(anchor.fieldMapPosition)
+    ? `\n        fieldMapPosition: [${anchor.fieldMapPosition.map(formatNum).join(", ")}],`
+    : "";
   return `      {
         id: ${JSON.stringify(anchor.id)},
-        label: ${JSON.stringify(anchor.label)},${typeLine}${urlLine}${contentLine}
+        label: ${JSON.stringify(anchor.label)},${typeLine}${urlLine}${contentLine}${fieldMapLine}
         position: [${pos.join(", ")}],
         rotation: [${rot.join(", ")}],
         scale: [${scl.join(", ")}],
@@ -88,8 +100,14 @@ ${anchorsBlock}
 
   const defaultMapId = profiles[0]?.mapId ?? DEFAULT_MAP_ID;
 
-  return `/** 默认测试地图（单地图模式或未指定时使用） */
+  return `/** 摆放控制台的默认编辑地图。 */
 export const DEFAULT_MAP_ID = ${defaultMapId};
+
+/** 默认识别模式使用的三张连续区域地图。 */
+export const COMBINED_MAP_IDS = Object.freeze([${COMBINED_MAP_IDS.join(", ")}]);
+
+/** 可单独用于识别和锚点标定的新地图。 */
+export const STANDALONE_MAP_ID = ${STANDALONE_MAP_ID};
 
 /**
  * 多地图 AR 配置：每张 Immersal 地图可有独立锚点
@@ -150,7 +168,7 @@ export function resolveActiveMapIds(options = {}) {
     if (Number.isFinite(id)) return [id];
   }
 
-  return getAllMapIds();
+  return [...COMBINED_MAP_IDS];
 }
 
 export function formatMapIdList(mapIds) {
@@ -366,6 +384,9 @@ export function bootstrapArPlacementEditor(rootEl) {
         label: anchor.label,
         url: anchor.url,
         content: anchor.content,
+        fieldMapPosition: Array.isArray(anchor.fieldMapPosition)
+          ? [...anchor.fieldMapPosition]
+          : null,
         position: [...anchor.position],
         rotation: [...anchor.rotation],
         scale: [...anchor.scale],
@@ -1130,6 +1151,9 @@ export function bootstrapArPlacementEditor(rootEl) {
         label: state.label,
         url: state.url,
         content: state.content,
+        fieldMapPosition: state.fieldMapPosition
+          ? state.fieldMapPosition.map(formatNum)
+          : null,
         position: state.position.map(formatNum),
         rotation: state.rotation.map(formatNum),
         scale: state.scale.map(formatNum),
@@ -1177,6 +1201,7 @@ export function bootstrapArPlacementEditor(rootEl) {
               label: item.label ?? item.id ?? `锚点 ${anchorIndex + 1}`,
               url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
               content: item.content,
+              fieldMapPosition: item.fieldMapPosition,
               position: item.position,
               rotation: item.rotation,
               scale: item.scale,
@@ -1200,6 +1225,7 @@ export function bootstrapArPlacementEditor(rootEl) {
         label: item.label ?? item.id ?? `锚点 ${index + 1}`,
         url: item.url ?? AR_MAP_PROFILES[0]?.anchors[0]?.url ?? "",
         content: item.content,
+        fieldMapPosition: item.fieldMapPosition,
         position: item.position,
         rotation: item.rotation,
         scale: item.scale,

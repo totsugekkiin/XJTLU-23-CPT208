@@ -22,6 +22,7 @@ export function evaluateLocalizationCounter({
     return {
       isNew: false,
       accepted: false,
+      confirmationCredit: 0,
       lastCounter: previous,
       mapId: null,
       reason: "stale-counter",
@@ -29,9 +30,19 @@ export function evaluateLocalizationCounter({
   }
 
   const observation = trackedPose?.poseFilter?.observation ?? null;
+  const accepted = isAcceptedLocalizationPose(trackedPose);
+  const observedConfirmations = Number(observation?.confirmations);
   return {
     isNew: true,
-    accepted: isAcceptedLocalizationPose(trackedPose),
+    accepted,
+    // A confirmed jump has already survived the stabilizer's own 2–3 sample
+    // consistency gate. Requiring another full UI confirmation cycle made
+    // reacquisition unnecessarily slow, so reuse that evidence here.
+    confirmationCredit: accepted && Number.isFinite(observedConfirmations)
+      ? Math.max(1, Math.floor(observedConfirmations))
+      : accepted
+        ? 1
+        : 0,
     lastCounter: current,
     mapId: trackedPose?.mapId ?? null,
     reason: observation?.reason ?? (trackedPose ? "accepted-pose" : "missing-pose"),
