@@ -147,6 +147,18 @@ body {
   pointer-events: auto;
 }
 
+/* The collection viewer keeps the live camera, but hides every other AR layer. */
+#ar-app.is-bamboo-viewer-open #ar-ui > :not(.ar-backpack),
+#ar-app.is-bamboo-viewer-open #ar-back-nav,
+#ar-app.is-bamboo-viewer-open #ar-dynasty-transition,
+#ar-app.is-bamboo-viewer-open #ar-marker-scene,
+#ar-app.is-bamboo-viewer-open #ar-three-canvas,
+#ar-app.is-bamboo-viewer-open .gaussian-portal-clip {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Collapsible bamboo-slip field map */
 .ar-bamboo-map {
   position: absolute;

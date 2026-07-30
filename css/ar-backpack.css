@@ -8,6 +8,15 @@
   font-family: "STKaiti", "KaiTi", "PingFang SC", serif;
 }
 
+.ar-backpack.has-active-viewer {
+  z-index: 40;
+}
+
+.ar-backpack.has-active-viewer > .ar-backpack__toggle,
+.ar-backpack.has-active-viewer > .ar-backpack__toast {
+  display: none;
+}
+
 .ar-backpack__toggle {
   display: inline-flex;
   align-items: center;
@@ -79,24 +88,21 @@
   border-bottom: 1px solid rgba(233, 203, 148, 0.15);
 }
 
-.ar-backpack__panel > header span,
-.ar-bamboo-viewer > header span {
+.ar-backpack__panel > header span {
   display: block;
   color: rgba(230, 193, 124, 0.7);
   font: 600 0.58rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.12em;
 }
 
-.ar-backpack__panel h2,
-.ar-bamboo-viewer h2 {
+.ar-backpack__panel h2 {
   margin: 0.28rem 0 0;
   font-size: 1.18rem;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
 
-.ar-backpack__panel > header button,
-.ar-bamboo-viewer > header button {
+.ar-backpack__panel > header button {
   width: 2rem;
   height: 2rem;
   border: 1px solid rgba(232, 205, 151, 0.28);
@@ -253,14 +259,13 @@
 
 .ar-bamboo-viewer {
   position: fixed;
-  z-index: 40;
+  z-index: 1;
   inset: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.7rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+  display: block;
+  padding: 0;
   box-sizing: border-box;
   color: #f7e8c8;
-  background: radial-gradient(circle at 50% 48%, rgba(84, 57, 33, 0.08), rgba(7, 6, 5, 0.42));
+  background: transparent;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -273,41 +278,36 @@
   pointer-events: auto;
 }
 
-.ar-bamboo-viewer > header {
-  position: relative;
+.ar-bamboo-viewer__close {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  right: max(0.75rem, env(safe-area-inset-right));
   z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  width: min(34rem, 100%);
-  padding: 0.75rem 0.85rem;
-  border: 1px solid rgba(231, 198, 135, 0.28);
-  border-radius: 0.85rem;
-  box-sizing: border-box;
-  background: rgba(25, 18, 12, 0.66);
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(232, 205, 151, 0.55);
+  border-radius: 50%;
+  color: #fff4dc;
+  background: rgba(24, 17, 11, 0.72);
+  box-shadow: 0 0.65rem 1.8rem rgba(0, 0, 0, 0.35);
+  font: 300 1.65rem/1 system-ui, sans-serif;
+  cursor: pointer;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-.ar-bamboo-viewer > header p {
-  margin: 0.25rem 2rem 0 0;
-  color: rgba(246, 231, 202, 0.64);
-  font-size: 0.66rem;
+.ar-bamboo-viewer__close:focus-visible {
+  outline: 2px solid #ffe0a0;
+  outline-offset: 3px;
 }
 
 .ar-bamboo-viewer__stage {
-  position: relative;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.ar-bamboo-viewer__stage::before {
   position: absolute;
-  inset: 11% 5%;
-  border: 1px solid rgba(235, 202, 139, 0.12);
-  border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(229, 192, 123, 0.13), transparent 66%);
-  content: "";
+  inset: 0;
+  overflow: hidden;
 }
 
 .ar-bamboo-viewer__stage canvas {
@@ -327,116 +327,18 @@
   color: rgba(247, 232, 201, 0.8);
   background: rgba(22, 16, 11, 0.72);
   font-size: 0.67rem;
-  opacity: 1;
+  opacity: 0;
   transform: translate(-50%, -50%);
   transition: opacity 180ms ease;
 }
 
-.ar-bamboo-viewer__loading.is-ready,
-.ar-bamboo-viewer__loading.is-idle {
-  opacity: 0;
-}
-
-.ar-bamboo-viewer > footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.65rem;
-  padding: 0.55rem 0.8rem;
-  color: rgba(242, 224, 191, 0.62);
-  font: 600 0.59rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.08em;
-}
-
-.ar-bamboo-viewer > footer i {
-  width: 0.22rem;
-  height: 0.22rem;
-  border-radius: 50%;
-  background: #d8b46d;
-}
-
-.ar-bamboo-viewer__rotate-prompt {
-  position: absolute;
-  z-index: 3;
-  right: 50%;
-  bottom: max(2.8rem, calc(env(safe-area-inset-bottom) + 2.8rem));
-  display: none;
-  align-items: center;
-  gap: 0.65rem;
-  min-width: 13.5rem;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid rgba(236, 202, 136, 0.5);
-  border-radius: 0.8rem;
-  background: rgba(28, 20, 13, 0.88);
-  box-shadow: 0 1rem 2.4rem rgba(0, 0, 0, 0.38);
-  transform: translateX(50%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.ar-bamboo-viewer__rotate-prompt svg {
-  width: 2.2rem;
-  height: 2.2rem;
-  fill: none;
-  stroke: #e5c17a;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  animation: ar-phone-turn 1.8s ease-in-out infinite;
-}
-
-.ar-bamboo-viewer__rotate-prompt strong,
-.ar-bamboo-viewer__rotate-prompt small {
-  display: block;
-}
-
-.ar-bamboo-viewer__rotate-prompt strong {
-  margin-bottom: 0.2rem;
-  font-size: 0.78rem;
-}
-
-.ar-bamboo-viewer__rotate-prompt small {
-  color: rgba(246, 231, 202, 0.62);
-  font-size: 0.62rem;
+.ar-bamboo-viewer__loading.is-error {
+  opacity: 1;
 }
 
 @keyframes ar-backpack-open {
   from { opacity: 0; transform: translateY(-0.45rem) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes ar-phone-turn {
-  0%, 100% { transform: rotate(0deg); }
-  45%, 65% { transform: rotate(90deg); }
-}
-
-@media (orientation: portrait) {
-  .ar-bamboo-viewer__rotate-prompt {
-    display: flex;
-  }
-}
-
-@media (orientation: landscape) {
-  .ar-bamboo-viewer {
-    grid-template-columns: minmax(12rem, 22rem) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-    column-gap: 0.5rem;
-  }
-
-  .ar-bamboo-viewer > header {
-    grid-row: 1 / 3;
-    align-self: center;
-  }
-
-  .ar-bamboo-viewer__stage {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .ar-bamboo-viewer > footer {
-    grid-column: 2;
-    grid-row: 2;
-  }
 }
 
 @media (max-width: 480px) {
@@ -452,8 +354,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ar-backpack__panel,
   .ar-backpack__toast,
-  .ar-bamboo-viewer,
-  .ar-bamboo-viewer__rotate-prompt svg {
+  .ar-bamboo-viewer {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
