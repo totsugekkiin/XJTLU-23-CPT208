@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   BAMBOO_NOTICE_CONTENT_OPTIONS,
   getBambooNoticeContent,
@@ -9,6 +9,10 @@ import {
   readBambooCollection,
   saveBambooCollection,
 } from "../../js/ar/bambooCollection.js";
+import {
+  getAdjacentBambooContentId,
+  getHorizontalSwipeStep,
+} from "../../js/ar/bambooSwipeNavigation.js";
 
 function BackpackIcon() {
   return (
@@ -30,15 +34,64 @@ export function ArBambooBackpack() {
   const viewerRef = useRef(null);
   const collectionRef = useRef(collection);
   const announcementTimerRef = useRef(null);
+  const swipeStartRef = useRef(null);
 
   const collectedContentIds = useMemo(
     () => new Set(collection.map((entry) => entry.contentId)),
     [collection],
   );
-  const collectedContents = BAMBOO_NOTICE_CONTENT_OPTIONS.filter((content) =>
-    collectedContentIds.has(content.id),
+  const collectedContents = useMemo(
+    () => BAMBOO_NOTICE_CONTENT_OPTIONS.filter((content) =>
+      collectedContentIds.has(content.id),
+    ),
+    [collectedContentIds],
   );
   const activeContent = activeContentId ? getBambooNoticeContent(activeContentId) : null;
+  const activeContentIndex = collectedContents.findIndex(({ id }) => id === activeContentId);
+
+  const showAdjacentContent = useCallback((step) => {
+    if (collectedContents.length < 2) return;
+    const contentIds = collectedContents.map(({ id }) => id);
+    setActiveContentId((currentId) =>
+      getAdjacentBambooContentId(contentIds, currentId, step),
+    );
+  }, [collectedContents]);
+
+  const onSwipeStart = (event) => {
+    if (!event.isPrimary || collectedContents.length < 2) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    swipeStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const onSwipeEnd = (event) => {
+    const start = swipeStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    swipeStartRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+    const step = getHorizontalSwipeStep(start, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (!step) return;
+
+    event.preventDefault();
+    showAdjacentContent(step);
+    try {
+      navigator.vibrate?.(12);
+    } catch {
+      // Vibration is optional.
+    }
+  };
+
+  const cancelSwipe = () => {
+    swipeStartRef.current = null;
+  };
 
   useEffect(() => {
     const rootEl = document.getElementById("ar-app");
@@ -101,13 +154,23 @@ export function ArBambooBackpack() {
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key !== "Escape") return;
-      if (activeContentId) setActiveContentId(null);
-      else setIsOpen(false);
+      if (event.key === "Escape") {
+        if (activeContentId) setActiveContentId(null);
+        else setIsOpen(false);
+        return;
+      }
+      if (!activeContentId || collectedContents.length < 2) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showAdjacentContent(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showAdjacentContent(1);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeContentId]);
+  }, [activeContentId, collectedContents.length, showAdjacentContent]);
 
   useLayoutEffect(() => {
     const rootEl = document.getElementById("ar-app");
@@ -199,11 +262,23 @@ export function ArBambooBackpack() {
         >
           ×
         </button>
-        <div className="ar-bamboo-viewer__stage">
+        <div
+          className="ar-bamboo-viewer__stage"
+          onPointerDown={onSwipeStart}
+          onPointerUp={onSwipeEnd}
+          onPointerCancel={cancelSwipe}
+          onLostPointerCapture={cancelSwipe}
+        >
           <canvas ref={canvasRef} aria-label="始终正面展示的三维竹简模型" />
           <div className={`ar-bamboo-viewer__loading is-${viewerState}`} role="status">
             {viewerState === "error" ? "模型加载失败" : "正在展开竹简…"}
           </div>
+          {collectedContents.length > 1 && (
+            <div className="ar-bamboo-viewer__pager" role="status" aria-live="polite">
+              <span>← 左右滑动切换 →</span>
+              <b>{activeContentIndex + 1}/{collectedContents.length}</b>
+            </div>
+          )}
         </div>
       </section>
     </aside>

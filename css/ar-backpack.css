@@ -308,6 +308,15 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  cursor: grab;
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ar-bamboo-viewer__stage:active {
+  cursor: grabbing;
 }
 
 .ar-bamboo-viewer__stage canvas {
@@ -334,6 +343,34 @@
 
 .ar-bamboo-viewer__loading.is-error {
   opacity: 1;
+}
+
+.ar-bamboo-viewer__pager {
+  position: absolute;
+  right: 50%;
+  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 1rem));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.72rem;
+  border: 1px solid rgba(232, 205, 151, 0.36);
+  border-radius: 999px;
+  color: rgba(255, 241, 210, 0.82);
+  background: rgba(24, 17, 11, 0.66);
+  box-shadow: 0 0.55rem 1.6rem rgba(0, 0, 0, 0.24);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  transform: translateX(50%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ar-bamboo-viewer__pager b {
+  color: #f1cb83;
+  font: 700 0.62rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
 }
 
 @keyframes ar-backpack-open {
