@@ -153,12 +153,34 @@ export function createBambooNoticeTexture(userOptions = {}) {
   };
 }
 
+function getModelLocalBounds(model) {
+  model.updateMatrixWorld(true);
+
+  const bounds = new THREE.Box3();
+  const inverseModelMatrix = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const relativeMatrix = new THREE.Matrix4();
+
+  model.traverse((node) => {
+    if (!node.isMesh || !node.geometry) return;
+    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+    if (!node.geometry.boundingBox) return;
+
+    relativeMatrix.multiplyMatrices(inverseModelMatrix, node.matrixWorld);
+    bounds.union(node.geometry.boundingBox.clone().applyMatrix4(relativeMatrix));
+  });
+
+  return bounds;
+}
+
 export function attachBambooNoticeText(model, userOptions = {}) {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   applyBambooNoticeFinish(model);
-  model.updateMatrixWorld(true);
 
-  const bounds = new THREE.Box3().setFromObject(model);
+  // The text mesh becomes a child of `model`, so its geometry and position must
+  // be derived in that same local coordinate system. Box3.setFromObject() uses
+  // world coordinates, which double-applies an already translated model (as in
+  // the backpack viewer) and pushes the ink below the bamboo slips.
+  const bounds = getModelLocalBounds(model);
   const size = bounds.getSize(new THREE.Vector3());
   const center = bounds.getCenter(new THREE.Vector3());
   const ink = createBambooNoticeTexture(options);

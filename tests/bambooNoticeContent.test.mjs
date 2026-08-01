@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   applyBambooNoticeFinish,
+  attachBambooNoticeText,
   BAMBOO_NOTICE_FINISH,
   BAMBOO_NOTICE_CONTENT_OPTIONS,
   DEFAULT_BAMBOO_NOTICE_CONTENT_ID,
@@ -73,4 +74,47 @@ test("uses a lighter, softer finish for bamboo model materials", () => {
 
   material.dispose();
   model.geometry.dispose();
+});
+
+test("places notice text in model-local coordinates after the model is transformed", () => {
+  const context = {
+    clearRect() {},
+    save() {},
+    restore() {},
+    strokeText() {},
+    fillText() {},
+  };
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    createElement() {
+      return { width: 0, height: 0, getContext: () => context };
+    },
+  };
+
+  const model = new THREE.Group();
+  model.position.set(10, -6, 4);
+  model.rotation.set(0.2, -0.1, 0.3);
+  model.scale.set(2, 1.5, 0.5);
+
+  const bamboo = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 2, 0.2),
+    new THREE.MeshBasicMaterial(),
+  );
+  bamboo.position.set(1, 2, 3);
+  model.add(bamboo);
+
+  try {
+    const notice = attachBambooNoticeText(model);
+
+    assert.ok(notice.mesh.position.distanceTo(new THREE.Vector3(1, 2, 3.106)) < 1e-8);
+    assert.ok(Math.abs(notice.mesh.geometry.parameters.width - 3.16) < 1e-9);
+    assert.ok(Math.abs(notice.mesh.geometry.parameters.height - 1.5) < 1e-9);
+
+    notice.dispose();
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    bamboo.geometry.dispose();
+    bamboo.material.dispose();
+  }
 });
