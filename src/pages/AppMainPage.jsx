@@ -1,5 +1,4 @@
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { RouteSection } from "../components/RouteSection.jsx";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
@@ -61,10 +60,6 @@ function TextFilmstripCard({ contentId, index, year }) {
 }
 
 export function AppMainPage() {
-  // 路线区段（含高德地图）首屏被 CSS display:none 隐藏。
-  // 直接 mount 会让首屏就请求高德 SDK + 初始化 WebGL，浪费资源、加剧卡顿。
-  // 这里改为只在用户实际进入“河流页”后再挂载，挂载后保留（避免反复初始化地图）。
-  const [shouldMountRoute, setShouldMountRoute] = useState(false);
   const [resumeAtGate] = useState(hasGateResumeRequest);
   const [experienceVariant] = useState(resolveExperienceVariant);
   const isArVariant = experienceVariant === EXPERIENCE_VARIANT_AR;
@@ -80,27 +75,6 @@ export function AppMainPage() {
       document.body.classList.remove(`experience-variant--${experienceVariant}`);
     };
   }, [experienceVariant]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    if (document.body.classList.contains("is-river-page")) {
-      setShouldMountRoute(true);
-      return;
-    }
-    if (typeof MutationObserver === "undefined") {
-      // 兜底：若无 MutationObserver，过段时间再挂载
-      const t = window.setTimeout(() => setShouldMountRoute(true), 4000);
-      return () => window.clearTimeout(t);
-    }
-    const obs = new MutationObserver(() => {
-      if (document.body.classList.contains("is-river-page")) {
-        setShouldMountRoute(true);
-        obs.disconnect();
-      }
-    });
-    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
 
   useLayoutEffect(() => {
     const previousScrollRestoration = window.history.scrollRestoration;
@@ -399,30 +373,6 @@ export function AppMainPage() {
                 </span>
                 <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
               </a>
-              <div className="ar-entry-section__tests" aria-label="AR 单项测试入口">
-                <span className="ar-entry-section__tests-label">单项测试</span>
-                <div className="ar-entry-section__test-links">
-                  <a href="marker-ar.html?from=app-main" onClick={markArGateResume}>
-                    <span aria-hidden="true">M</span>
-                    <span>
-                      <strong>MindAR 测试</strong>
-                      <small>图像标记追踪</small>
-                    </span>
-                    <i aria-hidden="true">↗</i>
-                  </a>
-                  <a
-                    href="loc-ar.html?dev&recognition=immersal&from=app-main&return=gate&variant=ar"
-                    onClick={markArGateResume}
-                  >
-                    <span aria-hidden="true">I</span>
-                    <span>
-                      <strong>Immersal 测试</strong>
-                      <small>空间地图定位</small>
-                    </span>
-                    <i aria-hidden="true">↗</i>
-                  </a>
-                </div>
-              </div>
               <a className="ar-entry-section__skip" href="#cm-transition">
                 继续查看时间线
                 <span aria-hidden="true">↓</span>
@@ -723,17 +673,6 @@ export function AppMainPage() {
         </div>
       </div>
 
-      {/* 仅河流页模式显示（CSS）；胶片段滚动时不占位
-          且仅当用户实际进入河流页后才挂载，避免首屏就初始化高德地图浪费 CPU/网络 */}
-      <section className="route-after-river" id="route-section" aria-label="推荐路线">
-        {shouldMountRoute ? (
-          <RouteSection
-            heightVh={100}
-            returnHref={`appMain.html?variant=${experienceVariant}`}
-          />
-        ) : null}
-      </section>
-
       <div id="pet-layer" className="pet-layer" aria-hidden="true">
         <div id="pet-hitzone" className="pet-hitzone" role="button" aria-label="可拖拽的桌面宠物" tabIndex={-1} />
 
@@ -829,9 +768,6 @@ export function AppMainPage() {
               </button>
             </div>
             <div className="guide-menu__col">
-              <button className="guide-menu__link" type="button" data-action="route">
-                推荐路线
-              </button>
               <button className="guide-menu__link" type="button" data-action="pet">
                 黛玉伴游
               </button>

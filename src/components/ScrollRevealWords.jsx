@@ -88,12 +88,18 @@ export function ScrollRevealWords({
       const inner = innerRef.current;
       const target = containerRef.current;
       if (!inner || !target) return;
-      const ir = inner.getBoundingClientRect();
+      const pin = inner.parentElement;
+      if (!pin) return;
+
+      // Use the untransformed layout box here. getBoundingClientRect() includes
+      // the decorative rotation, so reapplying that transformed rectangle to
+      // the absolute handoff position shifts the text twice on narrow screens.
+      const pr = pin.getBoundingClientRect();
       const tr = target.getBoundingClientRect();
       setHandoffBox({
-        top: ir.top - tr.top,
-        left: ir.left - tr.left,
-        width: ir.width,
+        top: pr.top + inner.offsetTop - tr.top,
+        left: pr.left + inner.offsetLeft - tr.left,
+        width: inner.offsetWidth,
       });
       setHandoff(true);
     };

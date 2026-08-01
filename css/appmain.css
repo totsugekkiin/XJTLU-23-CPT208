@@ -1848,13 +1848,16 @@ body.experience-variant--text .cm-mask-transition__scroll {
   position: sticky;
   top: 0;
   width: 100vw;
+  /* 100vh 在部分长屏手机上不包含动态展开后的底部区域。 */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 .cm-mask-bottom {
   position: absolute;
   inset: 0;
+  min-height: 100%;
   background-color: #050505;
   z-index: 1;
   background-image: radial-gradient(circle, #262626 1px, transparent 1px);
@@ -2166,6 +2169,7 @@ body.experience-variant--text .cm-mask-transition__scroll {
 .cm-mask-top {
   position: absolute;
   inset: 0;
+  min-height: 100%;
   z-index: 4;
   transform-origin: center center;
   will-change: transform, opacity;
@@ -2176,6 +2180,7 @@ body.experience-variant--text .cm-mask-transition__scroll {
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 100%;
 }
 
 /* =========================================================

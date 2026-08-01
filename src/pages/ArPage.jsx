@@ -61,7 +61,7 @@ export function ArPage() {
         <ArBambooBackpack />
 
         <div id="ar-start-overlay">
-          <div className="ar-start-mark" aria-hidden="true">簡</div>
+          <div className="ar-start-mark" aria-hidden="true">阊</div>
           <div className="ar-start-copy">
             <span>{immersalOnlyMode ? "IMMERSAL · 单项测试" : "阊门 · 实景导览"}</span>
             <h1>{immersalOnlyMode ? "空间地图定位测试" : "在现场查看阊门历史"}</h1>
