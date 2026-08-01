@@ -9,12 +9,8 @@ import {
   resolveActiveMapIds,
 } from "../js/ar/arAnchors.js";
 
-test("default selection keeps the original three-map combination", () => {
-  assert.deepEqual(resolveActiveMapIds({ search: "", selectedValue: "all" }), [
-    148753,
-    149877,
-    149878,
-  ]);
+test("default selection uses the standalone map", () => {
+  assert.deepEqual(resolveActiveMapIds({ search: "" }), [149922]);
   assert.deepEqual(COMBINED_MAP_IDS, [148753, 149877, 149878]);
 });
 

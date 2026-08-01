@@ -89,7 +89,7 @@ export const AR_MAP_PROFILES = [
   },
   {
     mapId: STANDALONE_MAP_ID,
-    label: "单地图 149922",
+    label: "阊门现场",
     anchors: [
       {
         id: "bamboo-notice",
@@ -194,7 +194,7 @@ export function resolveActiveMapIds(options = {}) {
     if (Number.isFinite(id)) return [id];
   }
 
-  return [...COMBINED_MAP_IDS];
+  return [STANDALONE_MAP_ID];
 }
 
 export function formatMapIdList(mapIds) {

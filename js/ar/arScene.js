@@ -219,28 +219,7 @@ export function bootstrapArScene(rootEl) {
     pose: rootEl.querySelector("#ar-debug-pose"),
   };
 
-  const mapSelect = rootEl.querySelector("#ar-map-select");
-  let mapSelectChangeHandler = null;
-  if (mapSelect) {
-    if (params.has("map")) {
-      mapSelect.value = params.get("map");
-    } else {
-      mapSelect.value = "all";
-    }
-
-    mapSelectChangeHandler = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("maps");
-      if (mapSelect.value === "all") {
-        url.searchParams.delete("map");
-      } else {
-        url.searchParams.set("map", mapSelect.value);
-      }
-      window.location.assign(url.toString());
-    };
-    mapSelect.addEventListener("change", mapSelectChangeHandler);
-  }
-  const requestedMapIds = resolveActiveMapIds({ selectedValue: mapSelect?.value ?? "all" });
+  const requestedMapIds = resolveActiveMapIds();
   const requestedProfiles = getMapProfilesForIds(requestedMapIds);
   const mapProfiles = debugMode
     ? requestedProfiles
@@ -2189,9 +2168,6 @@ export function bootstrapArScene(rootEl) {
     if (restRenderFrameId) cancelAnimationFrame(restRenderFrameId);
     if (sdkResizeHandler) {
       sdkSession?.removeEventListener?.("resize", sdkResizeHandler);
-    }
-    if (mapSelect && mapSelectChangeHandler) {
-      mapSelect.removeEventListener("change", mapSelectChangeHandler);
     }
     dynastyClickHandlers.forEach((handler, button) => {
       button.removeEventListener("click", handler);

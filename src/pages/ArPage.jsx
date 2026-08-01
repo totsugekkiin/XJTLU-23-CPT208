@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { COMBINED_MAP_IDS, STANDALONE_MAP_ID } from "../../js/ar/arAnchors.js";
+import { STANDALONE_MAP_ID } from "../../js/ar/arAnchors.js";
 import { ArBambooBackpack } from "../components/ArBambooBackpack.jsx";
 import { ArBambooMap } from "../components/ArBambooMap.jsx";
 
@@ -9,7 +9,7 @@ export function ArPage() {
   const selectedMapId = searchParams.get("map");
   const placementEditorHref = selectedMapId
     ? `loc-ar-editor.html?map=${encodeURIComponent(selectedMapId)}`
-    : "loc-ar-editor.html";
+    : `loc-ar-editor.html?map=${STANDALONE_MAP_ID}`;
 
   const exitAr = () => {
     const returnUrl = new URL("appMain.html?variant=ar&resume=gate", window.location.href);
@@ -71,16 +71,6 @@ export function ArPage() {
                 : "开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。"}
             </p>
           </div>
-          <label className="ar-field ar-map-mode-field" htmlFor="ar-map-select">
-            <span className="ar-map-mode-field__heading">
-              <b>定位地图</b>
-              <small>开始前选择扫描范围</small>
-            </span>
-            <select id="ar-map-select" defaultValue="all">
-              <option value="all">三地图组合（{COMBINED_MAP_IDS.join(" / ")}）</option>
-              <option value={STANDALONE_MAP_ID}>单地图（{STANDALONE_MAP_ID}）</option>
-            </select>
-          </label>
           <button id="ar-start-btn" type="button">
             {immersalOnlyMode ? "开始 Immersal 测试" : "开始实景导览"}
           </button>
@@ -179,7 +169,7 @@ export function ArPage() {
         </div>
 
         <div id="ar-hint" className="is-hidden ar-dev-only">
-          <p>对准已选地图覆盖区域。定位成功后会显示该地图对应的 AR 模型；多地图模式下以识别结果为准。</p>
+          <p>对准建筑区域并缓慢移动手机。定位成功后会显示对应的 AR 内容。</p>
           <button id="ar-hint-toggle" type="button" aria-expanded="true" aria-label="最小化提示信息">
             -
           </button>
