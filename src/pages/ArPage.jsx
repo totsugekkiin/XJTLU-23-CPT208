@@ -65,11 +65,9 @@ export function ArPage() {
           <div className="ar-start-copy">
             <span>{immersalOnlyMode ? "IMMERSAL · 单项测试" : "阊门 · 实景导览"}</span>
             <h1>{immersalOnlyMode ? "空间地图定位测试" : "在现场查看阊门历史"}</h1>
-            <p>
-              {immersalOnlyMode
-                ? "开启相机后，对准已扫描的建筑区域并缓慢移动手机。本模式仅运行 Immersal 空间定位，不启动 MindAR 图像追踪。"
-                : "开启相机后，将建筑区域或识别图案完整置入画面。识别成功后，历史场景和竹简会出现在对应位置。"}
-            </p>
+            {immersalOnlyMode ? (
+              <p>开启相机后，对准已扫描的建筑区域并缓慢移动手机。本模式仅运行 Immersal 空间定位，不启动 MindAR 图像追踪。</p>
+            ) : null}
           </div>
           <button id="ar-start-btn" type="button">
             {immersalOnlyMode ? "开始 Immersal 测试" : "开始实景导览"}
@@ -90,7 +88,6 @@ export function ArPage() {
             >
               <span id="ar-preload-progress-bar" style={{ width: "8%" }} />
             </div>
-            <small>内容会在阅读说明时载入，也可以直接开始</small>
           </div>
           <p id="ar-error-msg" />
         </div>

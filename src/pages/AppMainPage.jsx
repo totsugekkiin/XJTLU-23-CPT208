@@ -357,9 +357,6 @@ export function AppMainPage() {
           <div className="ar-entry-section__content">
             <p className="ar-entry-section__eyebrow">CHANGMEN · 实景导览</p>
             <h2 id="ar-entry-title">在现场查看<br />阊门历史。</h2>
-            <p className="ar-entry-section__description">
-              开启相机后，对准指定建筑区域或识别图案。识别成功后，历史场景与竹简会显示在对应位置。
-            </p>
             <div className="ar-entry-section__actions">
               <a
                 className="ar-entry-section__primary"

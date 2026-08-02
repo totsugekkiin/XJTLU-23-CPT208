@@ -240,7 +240,6 @@ export function ArBambooBackpack() {
               <p>让竹简在取景框中出现一瞬间，即可自动收入。</p>
             </div>
           )}
-          <footer>扫到即收藏 · 不需要持续对准</footer>
         </section>
       )}
 
