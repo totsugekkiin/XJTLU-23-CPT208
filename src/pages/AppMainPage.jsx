@@ -722,6 +722,43 @@ export function AppMainPage() {
         </div>
       </div>
 
+      <section
+        className="spotlight-guide"
+        id="spotlight-guide"
+        aria-hidden="true"
+        aria-label="页面功能引导"
+      >
+        <div className="spotlight-guide__shade spotlight-guide__shade--top" id="spotlight-guide-shade-top" aria-hidden="true" />
+        <div className="spotlight-guide__shade spotlight-guide__shade--left" id="spotlight-guide-shade-left" aria-hidden="true" />
+        <div className="spotlight-guide__shade spotlight-guide__shade--right" id="spotlight-guide-shade-right" aria-hidden="true" />
+        <div className="spotlight-guide__shade spotlight-guide__shade--bottom" id="spotlight-guide-shade-bottom" aria-hidden="true" />
+        <div className="spotlight-guide__ring" id="spotlight-guide-ring" aria-hidden="true" />
+
+        <div
+          className="spotlight-guide__card"
+          id="spotlight-guide-card"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="spotlight-guide-title"
+          aria-describedby="spotlight-guide-description"
+        >
+          <div className="spotlight-guide__meta">
+            <span className="spotlight-guide__progress" id="spotlight-guide-progress">1 / 4</span>
+            <button className="spotlight-guide__skip" id="spotlight-guide-skip" type="button">
+              跳过
+            </button>
+          </div>
+          <h2 className="spotlight-guide__title" id="spotlight-guide-title">黛玉伴游</h2>
+          <p className="spotlight-guide__description" id="spotlight-guide-description" />
+          <div className="spotlight-guide__actions">
+            <span className="spotlight-guide__hint" aria-hidden="true">功能引导</span>
+            <button className="spotlight-guide__next" id="spotlight-guide-next" type="button">
+              下一步
+            </button>
+          </div>
+        </div>
+      </section>
+
       <nav className="guide-menu" id="guide-menu" aria-label="互动导览选项" aria-hidden="true">
         <div className="guide-menu__backdrop" aria-hidden="true" />
         <div
@@ -767,6 +804,9 @@ export function AppMainPage() {
             <div className="guide-menu__col">
               <button className="guide-menu__link" type="button" data-action="pet">
                 黛玉伴游
+              </button>
+              <button className="guide-menu__link" type="button" data-action="spotlight">
+                查看功能引导
               </button>
             </div>
           </div>

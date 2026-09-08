@@ -8,6 +8,10 @@ import { setupHeroTopbar } from "./appmain/heroTopbar.js";
 import { applyPerCardCssVariables, applyRootCssVariables } from "./appmain/styleVars.js";
 import { createDesktopPet, startPetTexturePreload } from "./appmain/pet/index.js";
 import { createPetComicChat } from "./appmain/pet/petComicChat.js";
+import {
+  createSpotlightGuide,
+  isSpotlightReplayRequested,
+} from "./appmain/spotlightGuide.js";
 import { setupScrollMaskZoom } from "./appmain/scrollMaskZoom.js";
 import { createCurtainRiverTransition } from "./appmain/curtainRiverTransition.js";
 import { createRiverScene } from "./appmain/riverScene.js";
@@ -20,6 +24,14 @@ export function bootstrapAppMain() {
   const experienceVariant = resolveExperienceVariant();
   const mapHref = createVariantHref("map.html", experienceVariant);
   const appMainHref = createVariantHref("appMain.html", experienceVariant);
+  const spotlightReplayHref = createVariantHref("appMain.html", experienceVariant, { spotlight: 1 });
+  const spotlightReplayRequested = isSpotlightReplayRequested();
+
+  if (spotlightReplayRequested) {
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("spotlight");
+    window.history.replaceState(window.history.state, "", cleanUrl);
+  }
 
   // 屏蔽本地调试上报（127.0.0.1:7502）在生产/未启动服务时刷屏报错
   // 仅拦截 ingest 域名，不影响其它 fetch
@@ -417,6 +429,7 @@ export function bootstrapAppMain() {
     frame: document.getElementById("guide-map-frame"),
     close: document.getElementById("guide-map-close"),
   };
+  let spotlightGuide = null;
 
   function setMenuOpen(nextOpen) {
     if (!chatEls.menu || !chatEls.menuPanel) return;
@@ -496,6 +509,21 @@ export function bootstrapAppMain() {
       return;
     }
 
+    if (action === "spotlight") {
+      setMenuOpen(false);
+      const canReplayHere =
+        !document.body.classList.contains("is-river-page")
+        && Math.max(0, window.scrollY || 0) <= 8
+        && spotlightGuide;
+      if (canReplayHere) {
+        comic?.close?.();
+        spotlightGuide.start({ force: true });
+      } else {
+        window.location.href = spotlightReplayHref;
+      }
+      return;
+    }
+
     if (action === "explore") {
       setMenuOpen(false);
       window.location.href = appMainHref;
@@ -538,13 +566,8 @@ export function bootstrapAppMain() {
   let pet = null;
   let comic = null;
   let onDockClick = null;
-  let welcomeStartTimer = null;
-  let welcomeTimer = null;
-  let onWelcomeScroll = null;
-  let welcomeActive = false;
+  let spotlightStartTimer = null;
   let petInitCancelled = false;
-  const welcomeText =
-    "我是黛玉。想了解阊门的历史、街巷或游览路线，可以随时问我。左上角的圆形按钮可以将我召回屏幕。";
 
   /** 进入路线推荐区时，让桌宠出现在屏幕中下偏右并讲解两条路线的区别 */
   const ROUTE_INTRO_TEXT =
@@ -617,21 +640,15 @@ export function bootstrapAppMain() {
   }
 
   function cancelWelcome({ closeBubble = false } = {}) {
-    if (welcomeStartTimer !== null) {
-      window.clearTimeout(welcomeStartTimer);
-      welcomeStartTimer = null;
-    }
-    if (welcomeTimer !== null) {
-      window.clearTimeout(welcomeTimer);
-      welcomeTimer = null;
-    }
-    if (onWelcomeScroll) {
-      window.removeEventListener("scroll", onWelcomeScroll);
-      onWelcomeScroll = null;
+    if (spotlightStartTimer !== null) {
+      window.clearTimeout(spotlightStartTimer);
+      spotlightStartTimer = null;
     }
     pet?.stopWave?.({ returnState: pet?.states?.IDLE });
-    if (closeBubble && welcomeActive) comic?.close?.();
-    welcomeActive = false;
+    if (closeBubble) {
+      spotlightGuide?.skip?.();
+      comic?.close?.();
+    }
   }
 
   if (petHost && petHitzone) {
@@ -662,6 +679,17 @@ export function bootstrapAppMain() {
       context.heroPetDockBtn?.addEventListener("click", onDockClick);
 
       comic = createPetComicChat({ pet, sendToAI, prefersReducedMotion });
+      spotlightGuide = createSpotlightGuide({
+        prefersReducedMotion,
+        onStepChange() {
+          comic?.close?.();
+          setMenuOpen(false);
+        },
+        onEnd() {
+          pet?.stopWave?.({ returnState: pet?.states?.IDLE });
+          setMenuOpen(false);
+        },
+      });
 
       // 若桌宠/对话框就绪前用户已经滚到了路线段，则补发一次入场动作
       if (routeIntroActive && routeIntroPendingEnter) {
@@ -669,31 +697,21 @@ export function bootstrapAppMain() {
       }
 
       const startWelcome = () => {
-        welcomeStartTimer = null;
+        spotlightStartTimer = null;
         if (!canStartWelcome()) return;
-        cancelWelcome({ closeBubble: true });
-        welcomeActive = true;
-        pet?.wave?.({ durationMs: 7000, returnState: pet?.states?.IDLE });
-        comic?.say?.(welcomeText);
-
-        onWelcomeScroll = () => {
-          cancelWelcome({ closeBubble: true });
-        };
-        window.addEventListener("scroll", onWelcomeScroll, { passive: true, once: true });
-
-        welcomeTimer = window.setTimeout(() => {
-          cancelWelcome({ closeBubble: true });
-        }, 7000);
+        comic?.close?.();
+        const didStart = spotlightGuide?.start?.({ force: spotlightReplayRequested });
+        if (didStart) pet?.wave?.({ durationMs: 1400, returnState: pet?.states?.IDLE });
       };
 
       if (globalThis.__CHANGMEN_PRELOADER_DONE__) {
-        welcomeStartTimer = window.setTimeout(startWelcome, 120);
+        spotlightStartTimer = window.setTimeout(startWelcome, 120);
       } else {
         window.addEventListener(
           "changmen-preloader-done",
           () => {
             if (!canStartWelcome()) return;
-            welcomeStartTimer = window.setTimeout(startWelcome, 120);
+            spotlightStartTimer = window.setTimeout(startWelcome, 120);
           },
           { once: true }
         );
@@ -712,6 +730,7 @@ export function bootstrapAppMain() {
       document.removeEventListener("click", onDocumentClickCapture, true);
       context.heroPill?.removeEventListener("click", onHeroPillClick);
       cancelWelcome({ closeBubble: false });
+      spotlightGuide?.destroy?.();
       chatEls.menuClose?.removeEventListener("click", onMenuCloseClick);
       guideMapEls.close?.removeEventListener("click", onGuideMapCloseClick);
       guideMapEls.root?.removeEventListener("click", onGuideMapBackdropClick);

@@ -3523,3 +3523,259 @@ body.experience-variant--text .cm-mask-transition__scroll {
     --pc-scale: 0.92;
   }
 }
+
+/* =========================================================
+ * First-visit spotlight guide
+ * --------------------------------------------------------- */
+
+.spotlight-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  color: var(--cm-ink);
+  font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+  transition: opacity 180ms ease, visibility 0s linear 180ms;
+}
+
+.spotlight-guide.is-active {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 180ms ease, visibility 0s linear 0s;
+}
+
+.spotlight-guide__shade {
+  position: fixed;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  background: rgba(8, 16, 24, 0.68);
+  pointer-events: auto;
+  touch-action: none;
+  transition: left 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.spotlight-guide__ring {
+  position: fixed;
+  z-index: 1;
+  pointer-events: none;
+  border: 3px solid var(--cm-coral);
+  box-shadow:
+    0 0 0 5px rgba(240, 90, 63, 0.2),
+    0 0 30px 10px rgba(240, 90, 63, 0.42),
+    inset 0 0 22px rgba(255, 253, 248, 0.24);
+  animation: spotlight-guide-pulse 1.8s ease-in-out infinite;
+  transition: left 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 240ms ease;
+}
+
+@keyframes spotlight-guide-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px rgba(240, 90, 63, 0.16),
+      0 0 24px 8px rgba(240, 90, 63, 0.34),
+      inset 0 0 18px rgba(255, 253, 248, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(240, 90, 63, 0.24),
+      0 0 38px 14px rgba(240, 90, 63, 0.52),
+      inset 0 0 26px rgba(255, 253, 248, 0.28);
+  }
+}
+
+.spotlight-guide__card {
+  position: fixed;
+  z-index: 3;
+  width: min(340px, calc(100vw - 32px));
+  margin: 0;
+  padding: 18px;
+  pointer-events: auto;
+  background: var(--cm-paper-bright);
+  border: 2px solid var(--cm-ink);
+  border-radius: 22px;
+  box-shadow: 8px 10px 0 rgba(23, 50, 71, 0.28);
+  transform-origin: center;
+  animation: spotlight-guide-card-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.spotlight-guide__card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  background: var(--cm-paper-bright);
+  border: solid var(--cm-ink);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.spotlight-guide__card[data-placement="below"]::after {
+  top: -10px;
+  border-width: 2px 0 0 2px;
+}
+
+.spotlight-guide__card[data-placement="above"]::after {
+  bottom: -10px;
+  border-width: 0 2px 2px 0;
+}
+
+.spotlight-guide__card[data-placement="right"]::after {
+  top: 50%;
+  left: -10px;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.spotlight-guide__card[data-placement="left"]::after {
+  top: 50%;
+  right: -10px;
+  left: auto;
+  border-width: 2px 2px 0 0;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+@keyframes spotlight-guide-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.spotlight-guide__meta,
+.spotlight-guide__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.spotlight-guide__progress {
+  color: var(--cm-blue);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.spotlight-guide__skip {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cm-muted);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.spotlight-guide__skip:hover,
+.spotlight-guide__skip:focus-visible {
+  background: rgba(23, 50, 71, 0.08);
+  color: var(--cm-ink);
+}
+
+.spotlight-guide__title {
+  margin: 10px 0 8px;
+  color: var(--cm-coral);
+  font-size: clamp(1.35rem, 5vw, 1.65rem);
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+
+.spotlight-guide__description {
+  margin: 0 0 18px;
+  color: var(--cm-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.62;
+}
+
+.spotlight-guide__hint {
+  color: var(--cm-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.spotlight-guide__next {
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: #c94732;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(240, 90, 63, 0.3);
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.spotlight-guide__next:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.spotlight-guide__next:active {
+  transform: translateY(0);
+}
+
+.spotlight-guide__skip:focus-visible,
+.spotlight-guide__next:focus-visible {
+  outline: 3px solid rgba(40, 103, 199, 0.42);
+  outline-offset: 3px;
+}
+
+[data-spotlight-emphasis="true"] {
+  filter: brightness(1.16) drop-shadow(0 0 12px rgba(244, 201, 93, 0.9));
+}
+
+.hero-card__scroll-hint[data-spotlight-emphasis="true"] {
+  opacity: 1 !important;
+  filter: brightness(1.45) drop-shadow(0 0 12px rgba(244, 201, 93, 0.95));
+}
+
+.spotlight-guide.is-target-missing .spotlight-guide__ring {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .spotlight-guide__card {
+    padding: 16px;
+    border-radius: 18px;
+    box-shadow: 5px 7px 0 rgba(23, 50, 71, 0.25);
+  }
+
+  .spotlight-guide__description {
+    margin-bottom: 14px;
+    line-height: 1.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-guide,
+  .spotlight-guide__shade,
+  .spotlight-guide__ring,
+  .spotlight-guide__card,
+  .spotlight-guide__next {
+    animation: none !important;
+    transition: none !important;
+  }
+}
