@@ -18,7 +18,8 @@
 #home-nav li { margin: 2rem 0; text-align: center; }
 
 #home-nav .app-go-group {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
   align-items: center;
   justify-content: center;
   gap: clamp(1.2rem, 3vw, 2.5rem);
@@ -68,6 +69,20 @@
   font-size: clamp(2.5rem, 4.2vw, 4rem);
 }
 
+#home-nav .nav-item__dev-badge {
+  display: inline-block;
+  margin-left: 0.55em;
+  padding: 0.28em 0.48em;
+  border: 2px solid currentColor;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 0.22em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  vertical-align: middle;
+  -webkit-text-stroke: 0;
+}
+
 /* APP button: black circle + bold sans-serif GO */
 #home-nav a.app-go {
   width: 132px;
@@ -108,6 +123,20 @@
 }
 
 #home-nav a.app-go::after { display: none; }
+
+#home-nav a.nav-item.nav-item--reading {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding: 0.45rem 0.75rem;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  -webkit-text-stroke: 0;
+}
+
+#home-nav .app-go-group { row-gap: 0.55rem; }
 
 /* 手机：TEAM 略小于桌面但仍易读；用 flex+gap 拉开纵向间距 */
 @media (max-width: 640px) {

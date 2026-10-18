@@ -2,7 +2,10 @@ import React, { useEffect, useLayoutEffect, useState } from "react";
 import { ScrollRevealWords } from "../components/ScrollRevealWords.jsx";
 import { ChangmenGatePreloader } from "../components/ChangmenGatePreloader.jsx";
 import { AncientScrollBrushAnimation } from "../components/AncientScrollBrushAnimation.jsx";
+import { ArInkRevealTestOverlay } from "../components/ArInkRevealTestOverlay.jsx";
 import { CHANGMEN_HISTORY_CONTENTS } from "../../js/content/changmenExperienceContent.js";
+// TEST VERSION: remove this import and the marked GO handler to disable the experiment.
+import { beginInkRevealTestNavigation } from "../../js/ar/inkRevealTest.js";
 import {
   EXPERIENCE_VARIANT_AR,
   resolveExperienceVariant,
@@ -172,6 +175,8 @@ export function AppMainPage() {
 
   return (
     <>
+      {/* TEST VERSION: isolated paper-to-reality transition overlay. */}
+      <ArInkRevealTestOverlay />
       {!resumeAtGate && <ChangmenGatePreloader />}
       <section className="hero" id="hero">
         <div className="cloud-field" aria-hidden="true">
@@ -355,28 +360,22 @@ export function AppMainPage() {
             <span />
           </div>
           <div className="ar-entry-section__content">
-            <p className="ar-entry-section__eyebrow">CHANGMEN · 实景导览</p>
             <h2 id="ar-entry-title">在现场查看<br />阊门历史。</h2>
             <div className="ar-entry-section__actions">
               <a
                 className="ar-entry-section__primary"
-                href="loc-ar.html?from=app-main&return=gate&variant=ar"
-                onClick={markArGateResume}
+                href="loc-ar.html?from=app-main&return=gate&variant=ar&ink-reveal-test=1"
+                onClick={(event) => {
+                  markArGateResume();
+                  // TEST VERSION: pre-authorize camera/sensors beneath the paper cover.
+                  void beginInkRevealTestNavigation(event);
+                }}
+                aria-label="开始实景导览，需要相机权限"
               >
-                <span className="ar-entry-section__button-mark" aria-hidden="true">实景</span>
-                <span>
-                  <strong>开始实景导览</strong>
-                  <small>需要相机权限</small>
-                </span>
-                <span className="ar-entry-section__arrow" aria-hidden="true">↗</span>
-              </a>
-              <a className="ar-entry-section__skip" href="#cm-transition">
-                继续查看时间线
-                <span aria-hidden="true">↓</span>
+                GO
               </a>
             </div>
           </div>
-          <p className="ar-entry-section__scroll-note" aria-hidden="true">继续下滑查看时间线</p>
         </section>
       ) : null}
 
@@ -598,7 +597,7 @@ export function AppMainPage() {
       <div className="river-stage" id="river-stage" aria-hidden="true">
         <canvas id="river-canvas" />
 
-        <div className="river-island-layer" id="river-island-layer" aria-hidden="true">
+        <div className="river-island-layer" id="river-island-layer">
           <div className="river-island" data-island-index="0">
             <div className="river-island__shore">
               <div className="river-island__land">
@@ -644,6 +643,9 @@ export function AppMainPage() {
                     复原图，由@古城阳面 制作
                   </p>
                 </div>
+                <a className="river-island__reading-link" href="reading.html" tabIndex={-1}>
+                  相关资料 <span aria-hidden="true">↗</span>
+                </a>
               </div>
             </div>
           </div>
@@ -800,6 +802,9 @@ export function AppMainPage() {
               <button className="guide-menu__link" type="button" data-action="hero">
                 回到首屏
               </button>
+              <a className="guide-menu__link" href="reading.html">
+                历史资料
+              </a>
             </div>
             <div className="guide-menu__col">
               <button className="guide-menu__link" type="button" data-action="pet">

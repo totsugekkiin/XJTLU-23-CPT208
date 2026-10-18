@@ -49,11 +49,14 @@ export function HomePage() {
           <li className="app-go-group" aria-label="选择参观方式">
             <a href="appMain.html?variant=text" className="nav-item app-go">
               <span className="app-go__word">GO</span>
-              <span className="app-go__label">历史漫游</span>
+              <span className="app-go__label">图文导览</span>
             </a>
             <a href="appMain.html?variant=ar" className="nav-item app-go">
               <span className="app-go__word">GO</span>
-              <span className="app-go__label">实景导览</span>
+              <span className="app-go__label">AR实景导览</span>
+            </a>
+            <a href="reading.html" className="nav-item nav-item--reading">
+              历史资料 <span aria-hidden="true">↗</span>
             </a>
           </li>
           <li>
@@ -68,6 +71,7 @@ export function HomePage() {
               aria-label="打开 MindAR 图像标记追踪测试"
             >
               [MINDAR]
+              <span className="nav-item__dev-badge">开发用</span>
             </a>
             <a
               href="loc-ar.html?dev&recognition=immersal&from=home"
@@ -75,6 +79,7 @@ export function HomePage() {
               aria-label="打开 Immersal 空间地图定位测试"
             >
               [IMMERSAL]
+              <span className="nav-item__dev-badge">开发用</span>
             </a>
           </li>
           <li>

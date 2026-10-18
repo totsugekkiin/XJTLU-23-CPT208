@@ -31,6 +31,7 @@ export function ArBambooBackpack() {
   const [announcement, setAnnouncement] = useState("");
   const [viewerState, setViewerState] = useState("idle");
   const canvasRef = useRef(null);
+  const panelRef = useRef(null);
   const viewerRef = useRef(null);
   const collectionRef = useRef(collection);
   const announcementTimerRef = useRef(null);
@@ -92,6 +93,10 @@ export function ArBambooBackpack() {
   const cancelSwipe = () => {
     swipeStartRef.current = null;
   };
+
+  useLayoutEffect(() => {
+    if (isOpen && !panelRef.current?.open) panelRef.current?.showModal();
+  }, [isOpen]);
 
   useEffect(() => {
     const rootEl = document.getElementById("ar-app");
@@ -194,6 +199,7 @@ export function ArBambooBackpack() {
         className="ar-backpack__toggle"
         aria-expanded={isOpen}
         aria-controls="ar-backpack-panel"
+        aria-label={`竹简背包，已收集 ${collection.length} 个`}
         onClick={() => setIsOpen((open) => !open)}
       >
         <BackpackIcon />
@@ -204,11 +210,23 @@ export function ArBambooBackpack() {
       </button>
 
       {isOpen && (
-        <section id="ar-backpack-panel" className="ar-backpack__panel" aria-label="竹简背包">
+        <dialog
+          ref={panelRef}
+          id="ar-backpack-panel"
+          className="ar-backpack__panel"
+          aria-labelledby="ar-backpack-title"
+          onCancel={() => setIsOpen(false)}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            if (event.clientX < rect.left || event.clientX > rect.right ||
+                event.clientY < rect.top || event.clientY > rect.bottom) setIsOpen(false);
+          }}
+        >
           <header>
             <div>
               <span>CHANGMEN COLLECTION</span>
-              <h2>竹简背包</h2>
+              <h2 id="ar-backpack-title">竹简背包</h2>
             </div>
             <button type="button" aria-label="收起竹简背包" onClick={() => setIsOpen(false)}>×</button>
           </header>
@@ -240,7 +258,7 @@ export function ArBambooBackpack() {
               <p>让竹简在取景框中出现一瞬间，即可自动收入。</p>
             </div>
           )}
-        </section>
+        </dialog>
       )}
 
       <div className={`ar-backpack__toast${announcement ? " is-visible" : ""}`} role="status">

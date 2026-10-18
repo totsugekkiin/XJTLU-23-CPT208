@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, "index.html"),
+        reading: resolve(__dirname, "reading.html"),
         appMain: resolve(__dirname, "appMain.html"),
         map: resolve(__dirname, "map.html"),
         portfolio: resolve(__dirname, "portfolio.html"),

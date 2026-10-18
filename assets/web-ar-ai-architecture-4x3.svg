@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="890" height="380" viewBox="0 0 890 380">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#516B84"/>
+    </marker>
+    <style>
+      .panel { fill:#FFFFFF; stroke:#9AA6B2; stroke-width:1.8; }
+      .box { fill:#FFFFFF; stroke:#516B84; stroke-width:2; }
+      .line { fill:none; stroke:#516B84; stroke-width:2.2; marker-end:url(#arrow); }
+      .title { font:700 18px Arial, sans-serif; fill:#171717; }
+      .body { font:400 14px Arial, sans-serif; fill:#252525; }
+      .group { font:700 20px Arial, sans-serif; fill:#2E475F; }
+      .edge { font:500 12px Arial, sans-serif; fill:#333333; }
+      .plus { font:700 25px Arial, sans-serif; fill:#516B84; }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="888" height="378" rx="7" fill="#FFFFFF" stroke="#E2E2E2" stroke-width="2"/>
+
+  <!-- Highly compact deployment column -->
+  <rect class="box" x="24" y="20" width="205" height="58" rx="9"/>
+  <text x="126.5" y="45" text-anchor="middle" class="title">Vercel Deployment</text>
+  <text x="126.5" y="66" text-anchor="middle" class="body">Web Application</text>
+
+  <rect class="box" x="24" y="106" width="205" height="64" rx="9"/>
+  <text x="126.5" y="145" text-anchor="middle" class="title">Mobile Browser</text>
+
+  <!-- Highly compact AR architecture panel -->
+  <rect class="panel" x="250" y="14" width="620" height="156" rx="12"/>
+  <text x="274" y="42" class="group">AR</text>
+
+  <rect class="box" x="300" y="52" width="190" height="74" rx="9"/>
+  <text x="395" y="81" text-anchor="middle" class="title">Localization</text>
+  <text x="395" y="105" text-anchor="middle" class="body">Immersal · MindAR</text>
+
+  <text x="515" y="99" text-anchor="middle" class="plus">+</text>
+
+  <rect class="box" x="540" y="40" width="260" height="96" rx="9"/>
+  <text x="670" y="70" text-anchor="middle" class="title">AR Rendering</text>
+  <text x="670" y="95" text-anchor="middle" class="body">Three.js · PlayCanvas</text>
+  <text x="670" y="117" text-anchor="middle" class="body">Crop &amp; Mask</text>
+
+  <!-- Highly compact AI architecture panel -->
+  <rect class="panel" x="250" y="202" width="620" height="156" rx="12"/>
+  <text x="274" y="230" class="group">AI</text>
+
+  <rect class="box" x="290" y="239" width="250" height="90" rx="9"/>
+  <text x="415" y="270" text-anchor="middle" class="title">Serverless AI Service</text>
+  <text x="415" y="294" text-anchor="middle" class="body">Prompt Construction</text>
+  <text x="415" y="315" text-anchor="middle" class="body">API Orchestration</text>
+
+  <path d="M540 284 L630 284" fill="none" stroke="#516B84" stroke-width="2.2" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <rect x="543" y="240" width="84" height="34" rx="6" fill="#FFFFFF" stroke="#D7DDE3"/>
+  <text x="585" y="254" text-anchor="middle" style="font:500 11px Arial, sans-serif; fill:#333333;">Prompt /</text>
+  <text x="585" y="267" text-anchor="middle" style="font:500 11px Arial, sans-serif; fill:#333333;">Generated Text</text>
+
+  <rect class="box" x="630" y="243" width="210" height="82" rx="9"/>
+  <text x="735" y="274" text-anchor="middle" class="title">GLM-4-Flash API</text>
+  <text x="735" y="300" text-anchor="middle" class="body">Response Generation</text>
+
+  <!-- Minimal connectors and labels -->
+  <!-- Clean entry ports prevent incoming connectors from crossing panel strokes -->
+  <rect x="247" y="116" width="7" height="14" fill="#FFFFFF"/>
+  <rect x="247" y="278" width="7" height="13" fill="#FFFFFF"/>
+
+  <path class="line" d="M126.5 78 L126.5 106"/>
+  <rect x="142" y="82" width="104" height="22" rx="6" fill="#FFFFFF" stroke="#D7DDE3"/>
+  <text x="194" y="97" text-anchor="middle" class="edge">Web resources</text>
+
+  <path class="line" d="M229 138 L294 89"/>
+  <rect x="235" y="143" width="80" height="22" rx="6" fill="#FFFFFF" stroke="#D7DDE3"/>
+  <text x="275" y="158" text-anchor="middle" class="edge">AR runtime</text>
+
+  <path class="line" d="M126.5 170 L126.5 284 L284 284"/>
+  <rect x="127" y="251" width="120" height="24" rx="6" fill="#FFFFFF" stroke="#D7DDE3"/>
+  <text x="187" y="267" text-anchor="middle" class="edge">Question / response</text>
+</svg>

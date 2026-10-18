@@ -70,7 +70,7 @@ export function ArBambooMap() {
         onClick={() => setIsOpen((open) => !open)}
       >
         <MapFoldIcon />
-        <span>竹简地图</span>
+        <span>地图</span>
       </button>
 
       {isOpen && (

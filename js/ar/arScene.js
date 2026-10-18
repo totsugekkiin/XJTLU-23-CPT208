@@ -7,6 +7,13 @@ import {
 import { agentDebugLog, getAgentDebugLogs } from "./agentDebugLog.js";
 import { AR_BAMBOO_OBSERVED_EVENT } from "./bambooCollection.js";
 import { createVpsPoseStabilizer } from "./vpsPoseStabilizer.js";
+// TEST VERSION: isolated paper-to-reality transition. Remove this import and
+// the marked integration points below to restore the original AR startup.
+import {
+  consumeInkRevealAutoStartRequest,
+  createInkRevealTestController,
+  INK_REVEAL_TEST_ENABLED,
+} from "./inkRevealTest.js";
 
 const LOCALIZE_INTERVAL_MS = 800;
 const SDK_DEVICE_LOCALIZE_INTERVAL_MS = 16;
@@ -166,9 +173,16 @@ export function bootstrapArScene(rootEl) {
   const params = new URLSearchParams(window.location.search);
   const debugMode = params.has("debug") || params.has("dev");
   const immersalOnlyMode = params.get("recognition") === "immersal";
+  // TEST VERSION: URL-scoped so ordinary AR entry points retain old behavior.
+  const inkRevealTestEnabled =
+    INK_REVEAL_TEST_ENABLED && params.get("ink-reveal-test") === "1";
+  const inkRevealAutoStart = inkRevealTestEnabled && consumeInkRevealAutoStartRequest();
   rootEl.classList.toggle("is-debug-mode", debugMode);
   rootEl.classList.toggle("is-immersal-only", immersalOnlyMode);
   const video = rootEl.querySelector("#ar-camera");
+  const inkRevealTest = inkRevealTestEnabled
+    ? createInkRevealTestController(rootEl, video)
+    : null;
   const overlay = rootEl.querySelector("#ar-start-overlay");
   const startBtn = rootEl.querySelector("#ar-start-btn");
   const errorMsg = rootEl.querySelector("#ar-error-msg");
@@ -595,6 +609,10 @@ export function bootstrapArScene(rootEl) {
     if (!guide) return;
     if (recognitionMode === "marker" && channel !== "marker") return;
     guide.dataset.state = state;
+    if (state === "scanning" && !immersalOnlyMode) {
+      title = "扫描周边遗址特征";
+      detail = "将城墙区域或整理过的地面纳入画面";
+    }
     if (title) guideTitle.textContent = title;
     if (detail) guideDetail.textContent = detail;
     const hasProgress = Number.isFinite(progress);
@@ -1964,6 +1982,8 @@ export function bootstrapArScene(rootEl) {
     errorMsg.textContent = "";
     startBtn.disabled = true;
     startBtn.textContent = "正在开启相机…";
+    // TEST VERSION: cover permission/startup latency with the paper layer.
+    inkRevealTest?.prepare("正在唤醒实景…");
     closeStory();
     contentRevealed = false;
     stableLocalizationCount = 0;
@@ -1985,14 +2005,19 @@ export function bootstrapArScene(rootEl) {
       updateZoomUi();
 
       overlay.classList.add("is-hidden");
-      guide?.classList.remove("is-hidden");
       setGuide("loading", "正在开启现场相机", "识别内容会在后台继续载入", 8);
+      rootEl.classList.add("is-ar-active");
+
+      // TEST VERSION: the live camera is already underneath. Only after its
+      // first frame exists do we dissolve the opaque paper canvas.
+      await inkRevealTest?.reveal();
+
+      guide?.classList.remove("is-hidden");
       if (debugMode) {
         controls?.classList.remove("is-hidden");
         hint?.classList.remove("is-hidden");
         debugPanel?.classList.remove("is-hidden");
       }
-      rootEl.classList.add("is-ar-active");
       if (immersalOnlyMode) {
         setDebug({ marker: "disabled (Immersal-only)" }, "MindAR 已在 Immersal 单项测试中停用");
       } else {
@@ -2040,6 +2065,8 @@ export function bootstrapArScene(rootEl) {
       }
     } catch (err) {
       console.error("[Immersal]", err);
+      // TEST VERSION: never trap an error message underneath the paper layer.
+      inkRevealTest?.cancel();
       showError(err.message || "启动失败，请检查权限设置后重试。");
     }
   }
@@ -2155,8 +2182,17 @@ export function bootstrapArScene(rootEl) {
   void initArRenderer();
   assetWarmupTimer = window.setTimeout(warmImmersalAssets, 80);
 
+  // TEST VERSION: permissions were granted by the GO click on appMain, so the
+  // destination page can continue without presenting a second start button.
+  if (inkRevealAutoStart) {
+    queueMicrotask(() => {
+      if (!disposed) void startExperience();
+    });
+  }
+
   return () => {
     disposed = true;
+    inkRevealTest?.dispose();
     if (assetWarmupTimer) window.clearTimeout(assetWarmupTimer);
     for (const controller of mapDownloadControllers.values()) controller.abort();
     mapDownloadControllers.clear();

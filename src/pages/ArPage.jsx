@@ -2,10 +2,20 @@ import React, { useEffect } from "react";
 import { STANDALONE_MAP_ID } from "../../js/ar/arAnchors.js";
 import { ArBambooBackpack } from "../components/ArBambooBackpack.jsx";
 import { ArBambooMap } from "../components/ArBambooMap.jsx";
+import { ArInkRevealTestOverlay } from "../components/ArInkRevealTestOverlay.jsx";
+import { ArVisitorScenery, ArGateOutline } from "../components/ArVisitorScenery.jsx";
+// TEST VERSION: non-consuming read keeps the paper visible across navigation.
+import {
+  hasInkRevealAutoStartRequest,
+  INK_REVEAL_TEST_ENABLED,
+} from "../../js/ar/inkRevealTest.js";
 
 export function ArPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const immersalOnlyMode = searchParams.get("recognition") === "immersal";
+  const inkRevealTestEnabled =
+    INK_REVEAL_TEST_ENABLED && searchParams.get("ink-reveal-test") === "1";
+  const inkRevealAutoStart = inkRevealTestEnabled && hasInkRevealAutoStartRequest();
   const selectedMapId = searchParams.get("map");
   const placementEditorHref = selectedMapId
     ? `loc-ar-editor.html?map=${encodeURIComponent(selectedMapId)}`
@@ -37,6 +47,8 @@ export function ArPage() {
 
   return (
     <div id="ar-app" data-ar-mode="loc-ar">
+      {/* TEST VERSION: paper layer starts active only after a successful GO preflight. */}
+      <ArInkRevealTestOverlay active={inkRevealAutoStart} />
       <div id="ar-camera-wrap">
         <video id="ar-camera" autoPlay muted playsInline />
         <a-scene
@@ -57,6 +69,7 @@ export function ArPage() {
       </div>
 
       <div id="ar-ui">
+        <ArVisitorScenery />
         <ArBambooMap />
         <ArBambooBackpack />
 
@@ -117,14 +130,17 @@ export function ArPage() {
             <span className="ar-reticle__scan" />
           </div>
           <div className="ar-guide__status">
-            <span className="ar-guide__indicator" aria-hidden="true" />
+            <span className="ar-guide__indicator" aria-hidden="true">
+              <svg viewBox="0 0 32 32"><path d="M4 12V4h8M20 4h8v8M28 20v8h-8M12 28H4v-8" /></svg>
+            </span>
             <span>
-              <strong id="ar-guide-title">正在识别现场</strong>
-              <small id="ar-guide-detail">对准建筑区域，或将完整纹理边框放入画面</small>
+              <strong id="ar-guide-title">扫描周边遗址特征</strong>
+              <small id="ar-guide-detail">将城墙区域或整理过的地面纳入画面</small>
               <span id="ar-guide-progress" className="ar-guide__progress" aria-hidden="true">
                 <i id="ar-guide-progress-bar" />
               </span>
             </span>
+            <ArGateOutline />
           </div>
         </section>
 
@@ -258,8 +274,10 @@ export function ArPage() {
         <a id="ar-back" className="ar-dev-only" href={placementEditorHref}>
           摆放工具
         </a>
-        <button id="ar-exit" type="button" onClick={exitAr}>
-          退出实景导览
+        <button id="ar-exit" type="button" aria-label="关闭 AR，返回浏览页" onClick={exitAr}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
         </button>
       </nav>
     </div>

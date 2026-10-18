@@ -361,11 +361,15 @@ export function createRiverScene({
         }
         const shouldActivate = Math.abs(screenY - centerScreenY) < activateRadius;
         el.classList.toggle("is-active", shouldActivate);
+        const readingLink = el.querySelector(".river-island__reading-link");
+        if (readingLink) readingLink.tabIndex = shouldActivate ? 0 : -1;
       } else {
         el.style.removeProperty("--river-cx");
         el.style.removeProperty("--river-hw");
         if (el.classList.contains("is-active")) el.classList.remove("is-active");
         if (el.classList.contains("is-visible")) el.classList.remove("is-visible");
+        const readingLink = el.querySelector(".river-island__reading-link");
+        if (readingLink) readingLink.tabIndex = -1;
       }
     }
   }
@@ -376,6 +380,8 @@ export function createRiverScene({
       const el = islandEls[i];
       el.classList.remove("is-active");
       el.classList.remove("is-visible");
+      const readingLink = el.querySelector(".river-island__reading-link");
+      if (readingLink) readingLink.tabIndex = -1;
       el.style.opacity = "";
       el.style.transformOrigin = "";
       el.style.removeProperty("--river-cx");
